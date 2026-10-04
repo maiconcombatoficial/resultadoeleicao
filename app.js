@@ -4,9 +4,9 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610042247'
-import { chanceDe, NIVEIS } from './chances.js?v=202610042247'
-import { corPartido, corTexto } from './cores.js?v=202610042247'
+import { calcularVagas } from './vagas.js?v=202610042309'
+import { chanceDe, NIVEIS } from './chances.js?v=202610042309'
+import { corPartido, corTexto } from './cores.js?v=202610042309'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -76,7 +76,7 @@ function codigoEleicao(aba, turno) {
 function urlResultado(aba, abr, turno, mun) {
   const ele = codigoEleicao(aba, turno)
   const c = String(aba.cargo).padStart(4, '0')
-  const local = mun ? `${abr}${String(mun.cd).padStart(5, '0')}` : abr
+  const local = mun ? `${abr}${String(mun.cd).padStart(5, '0')}${mun.zona ? `-z${String(mun.zona).padStart(4, '0')}` : ''}` : abr
   return `${BASE}/${CICLO}/${ele}/dados/${abr}/${local}-c${c}-e${ele.padStart(6, '0')}-u.json`
 }
 
@@ -229,9 +229,10 @@ const MUNICIPIOS_DEMO = [
   ['80390', 'Biguaçu'], ['82511', 'Santo Amaro da Imperatriz'], ['81353', 'Governador Celso Ramos'],
   ['80152', 'Antônio Carlos'], ['80055', 'Águas Mornas'], ['82392', 'São Pedro de Alcântara'],
   ['82678', 'Tijucas'], ['81302', 'Garopaba'], ['82155', 'Paulo Lopes'], ['82171', 'Rancho Queimado'],
-].map(([cd, nm, capital]) => ({ cd, nm, capital: !!capital }))
+].map(([cd, nm, capital]) => ({ cd, nm, capital: !!capital, zonas: capital ? ['0012', '0013', '0100', '0101'] : cd === '81795' ? ['0019', '0095', '0096'] : [String(10 + (Number(cd) % 90)).padStart(4, '0')] }))
 
 const municipiosCache = new Map()
+const municipiosProntos = new Map() // eleição → lista já carregada (para uso síncrono)
 // Lista de municípios de SC publicada pelo TSE (código TSE de 5 dígitos + nome). Não muda durante a eleição.
 async function municipios(aba) {
   if (DEMO) return MUNICIPIOS_DEMO
@@ -243,9 +244,10 @@ async function municipios(aba) {
         const uf = (json.abr || []).find((a) => String(a.cd).toLowerCase() === UF)
         return (uf?.mu || [])
           .filter((m) => m.cd && m.nm)
-          .map((m) => ({ cd: String(m.cd), nm: nomeBonito(m.nm), capital: /^s$/i.test(String(m.c || '')) }))
+          .map((m) => ({ cd: String(m.cd), nm: nomeBonito(m.nm), capital: /^s$/i.test(String(m.c || '')), zonas: (m.z || []).map((z) => String(z).padStart(4, '0')) }))
           .sort((a, b) => a.nm.localeCompare(b.nm, 'pt-BR'))
       })
+    p.then((lista) => municipiosProntos.set(ele, lista)).catch(() => {})
     p.catch(() => municipiosCache.delete(ele))
     municipiosCache.set(ele, p)
   }
@@ -271,11 +273,11 @@ function aleatorio(semente) {
 }
 
 function demo(aba, abr, mun = null) {
-  const r = aleatorio(`${aba.id}|${abr}|${mun?.cd || ''}`)
+  const r = aleatorio(`${aba.id}|${abr}|${mun?.cd || ''}|${mun?.zona || ''}`)
   const ciclo = 10 * 60_000
   const ritmo = mun ? 0.6 + 0.8 * aleatorio(`ritmo|${mun.cd}`)() : 1 // cada município apura num ritmo
   const p = Math.min(1, ((Date.now() % ciclo) / ciclo) * 1.15 * ritmo)
-  const eleitorado = mun ? 40_000 + Math.round(r() * 400_000) : abr === 'br' ? 158_000_000 : 5_600_000
+  const eleitorado = mun?.zona ? 20_000 + Math.round(r() * 120_000) : mun ? 40_000 + Math.round(r() * 400_000) : abr === 'br' ? 158_000_000 : 5_600_000
   const secoesTot = mun ? Math.round(eleitorado / 330) : abr === 'br' ? 472_000 : 16_900
   const vagas = { 1: 1, 3: 1, 5: 2, 6: 16, 7: 40 }[aba.cargo]
   const qtd = { 1: 9, 3: 7, 5: 10, 6: 180, 7: 400 }[aba.cargo]
@@ -420,8 +422,21 @@ function munAtual() {
 
 function nomeLocal(d) {
   const mun = munAtual()
-  if (mun) return `${mun.nm} (SC)`
+  if (mun) return `${mun.nm} (SC)${mun.zona ? ` · ${Number(mun.zona)}ª zona` : ''}`
   return NOMES_ABR[d.abrangencia] || d.abrangencia.toUpperCase()
+}
+
+function zonasDe(mun) {
+  if (!mun) return []
+  const lista = municipiosProntos.get(codigoEleicao(estado.aba, TURNO)) || (DEMO ? MUNICIPIOS_DEMO : null)
+  return lista?.find((m) => m.cd === mun.cd)?.zonas || []
+}
+
+function escolherZona(zona) {
+  estado.mun = { ...estado.mun, zona: zona || undefined }
+  gravarLocal(`${PREFIXO}municipio:v1`, JSON.stringify(estado.mun))
+  estado.dados = null
+  carregar()
 }
 
 function escolherMunicipio(mun) {
@@ -809,6 +824,22 @@ function cabecalhoAbrangencia() {
       ${mun ? '<button type="button" class="local-limpar" data-mun-limpar aria-label="Voltar para o estado todo">✕</button>' : ''}
       <ul id="mun-sugestoes" class="sugestoes" hidden></ul>
     </div>
+  </div>${seletorZonas(mun)}`
+}
+
+function seletorZonas(mun) {
+  if (!mun) return ''
+  const zonas = zonasDe(mun)
+  if (!zonas.length) {
+    // a lista ainda não chegou: carrega e redesenha
+    municipios(estado.aba).then(() => zonasDe(mun).length > 1 && renderizar()).catch(() => {})
+    return ''
+  }
+  if (zonas.length < 2 && !mun.zona) return ''
+  return `<div class="zonas" role="group" aria-label="Zona eleitoral">
+    <span class="zonas-rot">Zona eleitoral:</span>
+    <button type="button" class="filtro ${mun.zona ? '' : 'ativo'}" data-zona="">Todas</button>
+    ${zonas.map((z) => `<button type="button" class="filtro ${mun.zona === z ? 'ativo' : ''}" data-zona="${esc(z)}">${Number(z)}ª</button>`).join('')}
   </div>`
 }
 
@@ -897,6 +928,11 @@ conteudo.addEventListener('click', (ev) => {
   if (ordemBtn) {
     painel.ordem = ordemBtn.dataset.ordem
     renderizar()
+    return
+  }
+  const zonaBtn = ev.target.closest('[data-zona]')
+  if (zonaBtn) {
+    escolherZona(zonaBtn.dataset.zona)
     return
   }
   const munBtn = ev.target.closest('[data-mun-cd]')
@@ -1029,9 +1065,9 @@ function foto(c, cor = corPartido(c.partido)) {
 
 // Majoritários: no 1º turno de Presidente/Governador o objetivo é ficar entre os 2 que vão ao 2º turno.
 function contextoMaj(aba, d) {
-  if (aba.cargo === 5) return { vagas: d.vagas, alvo: `as ${d.vagas} vagas` }
-  if (TURNO === 1) return { vagas: 2, alvo: 'o 2º turno', segundoTurno: true }
-  return { vagas: 1, alvo: 'a vitória' }
+  if (aba.cargo === 5) return { vagas: d.vagas, alvo: `as ${d.vagas} vagas`, dentro: `Está entre os ${d.vagas} eleitos`, garantido: `vaga garantida` }
+  if (TURNO === 1) return { vagas: 2, alvo: 'o 2º turno', segundoTurno: true, dentro: 'Está entre os 2 que vão ao 2º turno', garantido: 'lugar garantido no 2º turno' }
+  return { vagas: 1, alvo: 'a vitória', dentro: 'Está na frente', garantido: 'vitória garantida' }
 }
 
 const ROTULOS_2T = { garantido: 'Garantido no 2º turno', segura: '2º turno seguro', provavel: '2º turno provável', risco: '2º turno em risco', fora: 'Fora do 2º turno' }
@@ -1079,9 +1115,9 @@ function textoChance(d, c, aba) {
   const vezes = (m) => `${fmtPct.format(m)}×`
   if (venceNoPrimeiroGarantido(d, c, aba, ch)) linhas.push('✅ Já tem mais da metade de todos os votos válidos, mesmo contando os que faltam: <strong>vence no 1º turno</strong> (certeza matemática).')
   else if (aba.tipo === 'maj') {
-    if (ch.nivel === 'garantido') linhas.push(`✅ <strong>Garantido em ${ctx.alvo}</strong>: ${ch.rival ? `a vantagem de ${fmt.format(ch.vantagem)} votos sobre ${esc(ch.rival.nome)} é maior que todos os votos que faltam` : 'ninguém pode alcançá-lo'} (certeza matemática).`)
+    if (ch.nivel === 'garantido') linhas.push(`✅ <strong>${ctx.garantido[0].toUpperCase() + ctx.garantido.slice(1)}</strong>: ${ch.rival ? `a vantagem de ${fmt.format(ch.vantagem)} votos sobre ${esc(ch.rival.nome)} é maior que todos os votos que faltam` : 'ninguém pode alcançá-lo'} (certeza matemática).`)
     else if (ch.vantagem != null)
-      linhas.push(`Está em ${ctx.alvo} com <strong>${fmt.format(ch.vantagem)}</strong> votos de vantagem sobre ${esc(ch.rival.nome)}. ${
+      linhas.push(`${ctx.dentro}, com <strong>${fmt.format(ch.vantagem)}</strong> votos de vantagem sobre ${esc(ch.rival.nome)}. ${
         ch.f <= 0 ? 'Mesmo sem nenhum voto a mais, o rival não o alcança se mantiver o ritmo dele.' : `Perderia a posição se, nas urnas que faltam, tivesse menos de ${vezes(ch.f)} o próprio desempenho atual.`
       }`)
     else if (ch.nivel === 'fora') linhas.push(`❌ Precisa tirar <strong>${fmt.format(ch.falta)}</strong> votos de diferença para ${esc(ch.rival.nome)}, mais do que todos os votos que faltam: <strong>não alcança mais ${ctx.alvo}</strong> (certeza matemática).`)
@@ -1688,10 +1724,11 @@ function tratarFav(favBtn) {
 
 // Enquanto o app está aberto, guarda a evolução de todos os candidatos vistos (só em memória).
 const historicoSessao = new Map()
+const chaveLocal = (mun) => (mun ? `${mun.cd}${mun.zona ? 'z' + mun.zona : ''}` : '')
 function registrarSessao(abaId, abr, mun, dados) {
   const pst = Math.round(dados.secoes.percentual * 100) / 100
   dados.candidatos.forEach((c, i) => {
-    const k = `${abaId}|${abr}|${mun?.cd || ''}|${c.sqcand}`
+    const k = `${abaId}|${abr}|${chaveLocal(mun)}|${c.sqcand}`
     let serie = historicoSessao.get(k)
     if (!serie) historicoSessao.set(k, (serie = []))
     const ult = serie[serie.length - 1]
@@ -1744,6 +1781,7 @@ function abrirDetalhe({ aba, abr, sqcand }) {
 
 function fecharDetalhe(voltarHistorico = true) {
   if (!estado.detalhe) return
+  estado.detalhe.ctrlPorMun?.abort()
   estado.detalhe = null
   detalheEl.hidden = true
   detalheEl.innerHTML = ''
@@ -1763,7 +1801,7 @@ function dadosDetalhe() {
   const det = estado.detalhe
   if (!det) return null
   if (det.mun) {
-    if (estado.aba.id === det.aba && abrAtual() === det.abr && estado.dados?.mun?.cd === det.mun.cd) return estado.dados
+    if (estado.aba.id === det.aba && abrAtual() === det.abr && chaveLocal(estado.dados?.mun) === chaveLocal(det.mun)) return estado.dados
     return det.dados || null
   }
   return dadosCarregados(det.aba, det.abr)
@@ -1771,7 +1809,7 @@ function dadosDetalhe() {
 
 function serieDetalhe() {
   const det = estado.detalhe
-  const sessao = historicoSessao.get(`${det.aba}|${det.abr}|${det.mun?.cd || ''}|${det.sqcand}`) || []
+  const sessao = historicoSessao.get(`${det.aba}|${det.abr}|${chaveLocal(det.mun)}|${det.sqcand}`) || []
   if (det.mun) return sessao
   const guardada = historico[idFav(det.aba, det.abr, det.sqcand)] || []
   return guardada.length >= sessao.length ? guardada : sessao
@@ -1866,10 +1904,21 @@ function blocoDisputa(d, c, aba) {
 function renderDetalhe() {
   const det = estado.detalhe
   if (!det) return
+  const focoBusca = document.activeElement?.id === 'det-busca-mun' ? document.activeElement.selectionStart : null
+  renderDetalheConteudo()
+  if (focoBusca != null) {
+    const el = document.getElementById('det-busca-mun')
+    el?.focus()
+    el?.setSelectionRange(focoBusca, focoBusca)
+  }
+}
+
+function renderDetalheConteudo() {
+  const det = estado.detalhe
   const aba = ABAS.find((a) => a.id === det.aba)
   const d = dadosDetalhe()
   const voltar = `<div class="det-topo"><button type="button" class="det-voltar" data-fechar>‹ Voltar</button>
-    <span class="det-onde">${esc(aba ? aba.rotulo.replace(/ SC$/, '') : '')} · ${esc(det.mun ? `${det.mun.nm} (SC)` : NOMES_ABR[det.abr] || det.abr.toUpperCase())}</span></div>`
+    <span class="det-onde">${esc(aba ? aba.rotulo.replace(/ SC$/, '') : '')} · ${esc(det.mun ? `${det.mun.nm} (SC)${det.mun.zona ? ` · ${Number(det.mun.zona)}ª zona` : ''}` : NOMES_ABR[det.abr] || det.abr.toUpperCase())}</span></div>`
   if (!d) {
     detalheEl.innerHTML = `<div class="det-corpo">${voltar}<div class="cartao vazio">${det.erro ? 'Não consegui carregar os dados agora.' : 'Carregando…'}</div></div>`
     return
@@ -1905,23 +1954,7 @@ function renderDetalhe() {
         .map((v) => `<li>${v.tipo === 'v' ? 'Vice' : v.tipo === 's1' ? '1º suplente' : v.tipo === 's2' ? '2º suplente' : 'Suplente'}: <strong>${esc(v.nome)}</strong>${v.partido ? ` (${esc(v.partido)})` : ''}</li>`)
         .join('')}</ul></section>`
     : ''
-  const fl = det.floripa
-  const floripa =
-    det.abr === UF || aba?.id === 'presidente'
-      ? `<section class="cartao"><h3>📍 Votos na Grande Florianópolis</h3>${
-          !fl
-            ? `<p class="nota">Consulta os municípios da região metropolitana (pode levar alguns segundos).</p>
-               <button type="button" class="botao" data-carregar-floripa>Ver votos por município</button>`
-            : fl.carregando
-              ? `<p class="nota">Consultando ${fl.feitos} de ${fl.total} municípios…</p>`
-              : `<table class="tabela"><thead><tr><th>Município</th><th class="dir">Votos</th><th class="dir">% válidos</th></tr></thead><tbody>${fl.linhas
-                  .sort((a, b) => b.votos - a.votos)
-                  .map((l) => `<tr style="${estiloCor(cor)}"><td>${esc(l.nm)}<div class="cand-meta">${fmtPct.format(l.pst)}% apurado · ${l.pos}º no município</div></td><td class="dir">${fmt.format(l.votos)}</td><td class="dir">${fmtPct.format(l.pct)}%</td></tr>`)
-                  .join('')}</tbody></table>
-                <p class="nota">Total na região: <strong>${fmt.format(fl.linhas.reduce((a, l) => a + l.votos, 0))}</strong> votos. ${fl.semDados ? `${fl.semDados} município(s) ainda sem dados.` : ''}</p>
-                <button type="button" class="botao secundario" data-carregar-floripa>Atualizar</button>`
-        }</section>`
-      : ''
+  const floripa = det.abr === UF || aba?.id === 'presidente' ? secaoPorMunicipio(det, aba, cor) : ''
   detalheEl.innerHTML = `<div class="det-corpo">
     ${voltar}
     <section class="cartao det-cabeca" style="${estiloCor(cor)}">
@@ -1954,7 +1987,51 @@ function renderDetalhe() {
   </div>`
 }
 
-async function carregarFloripaDetalhe() {
+// Votos do candidato por município (região ou estado todo) e, sob demanda, por zona.
+function secaoPorMunicipio(det, aba, cor) {
+  const pm = det.porMun
+  const pesado = aba?.tipo === 'prop'
+  const botoes = `<div class="pm-botoes">
+      <button type="button" class="botao ${pm?.escopo === 'regiao' ? '' : 'secundario'}" data-por-mun="regiao">Grande Florianópolis</button>
+      <button type="button" class="botao ${pm?.escopo === 'todos' ? '' : 'secundario'}" data-por-mun="todos">Todos os municípios de SC</button>
+    </div>`
+  if (!pm)
+    return `<section class="cartao"><h3>📍 Votos por município e zona</h3>
+      <p class="nota">Consulta os arquivos de cada município no TSE. ${
+        pesado ? 'Para deputados, "Todos os municípios" baixa cerca de 295 arquivos grandes (dezenas de MB): prefira Wi-Fi.' : ''
+      }</p>${botoes}</section>`
+  const termo = semAcento((pm.busca || '').trim())
+  const linhas = pm.linhas.filter((l) => !termo || semAcento(l.nm).includes(termo)).sort((a, b) => b.votos - a.votos)
+  const limite = pm.verTodos || termo ? linhas.length : 40
+  const total = pm.linhas.reduce((a, l) => a + l.votos, 0)
+  const linhaZonas = (l) => {
+    const z = pm.zonas[l.cd]
+    if (!z) return ''
+    if (z.carregando) return `<tr class="pm-zona"><td colspan="3" class="mudo">Consultando ${z.feitos} de ${z.total} zonas…</td></tr>`
+    return z.linhas
+      .sort((a, b) => b.votos - a.votos)
+      .map((zl) => `<tr class="pm-zona" style="${estiloCor(cor)}"><td>↳ ${Number(zl.zona)}ª zona<div class="cand-meta">${zl.semDados ? 'sem dados ainda' : `${fmtPct.format(zl.pst)}% apurado · ${zl.pos}º na zona`}</div></td><td class="dir">${fmt.format(zl.votos)}</td><td class="dir">${fmtPct.format(zl.pct)}%</td></tr>`)
+      .join('')
+  }
+  return `<section class="cartao"><h3>📍 Votos por município e zona</h3>${botoes}
+    ${pm.carregando ? `<p class="nota">Consultando ${pm.feitos} de ${pm.total} municípios…</p>` : ''}
+    ${pm.escopo === 'todos' ? `<input id="det-busca-mun" type="search" placeholder="Buscar município…" value="${esc(pm.busca || '')}" autocomplete="off">` : ''}
+    <table class="tabela pm-tabela"><thead><tr><th>Município</th><th class="dir">Votos</th><th class="dir">%</th></tr></thead><tbody>${linhas
+      .slice(0, limite)
+      .map(
+        (l) => `<tr style="${estiloCor(cor)}"><td>${esc(l.nm)}<div class="cand-meta">${l.semDados ? 'sem dados ainda' : `${fmtPct.format(l.pst)}% apurado · ${l.pos}º no município`}</div>
+          ${l.zonas.length > 1 ? `<button type="button" class="link-zonas" data-zonas-mun="${esc(l.cd)}">${pm.zonas[l.cd] ? 'ocultar zonas ▴' : `ver ${l.zonas.length} zonas ▾`}</button>` : l.zonas.length === 1 ? `<div class="cand-meta">zona única: ${Number(l.zonas[0])}ª</div>` : ''}</td>
+          <td class="dir">${fmt.format(l.votos)}</td><td class="dir">${fmtPct.format(l.pct)}%</td></tr>${linhaZonas(l)}`,
+      )
+      .join('')}</tbody></table>
+    ${linhas.length > limite ? `<button type="button" class="botao secundario" data-pm-ver-todos>Mostrar todos os ${linhas.length}</button>` : ''}
+    <p class="nota">Total ${pm.escopo === 'regiao' ? 'na região' : 'nos municípios consultados'}: <strong>${fmt.format(total)}</strong> votos${
+      pm.semDados ? ` · ${pm.semDados} município(s) ainda sem dados` : ''
+    }. ${pm.carregando ? '' : `Consultado às ${new Date(pm.t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.`}</p>
+  </section>`
+}
+
+async function carregarPorMunicipio(escopo) {
   const det = estado.detalhe
   if (!det) return
   const aba = ABAS.find((a) => a.id === det.aba)
@@ -1964,25 +2041,60 @@ async function carregarFloripaDetalhe() {
   } catch {
     return
   }
-  const alvo = lista.filter((m) => NUCLEO.has(chaveNome(m.nm)) || EXPANSAO.has(chaveNome(m.nm)))
-  const fl = { carregando: true, feitos: 0, total: alvo.length, linhas: [], semDados: 0 }
-  det.floripa = fl
+  det.ctrlPorMun?.abort()
+  const alvo = escopo === 'regiao' ? lista.filter((m) => NUCLEO.has(chaveNome(m.nm)) || EXPANSAO.has(chaveNome(m.nm))) : lista
+  const pm = { escopo, carregando: true, feitos: 0, total: alvo.length, linhas: [], semDados: 0, zonas: {}, busca: '', t: Date.now() }
+  det.porMun = pm
   renderDetalhe()
   const ctrl = new AbortController()
-  det.ctrlFloripa = ctrl
-  await emLotes(alvo, 4, async (m) => {
+  det.ctrlPorMun = ctrl
+  let ultimo = 0
+  await emLotes(alvo, 6, async (m) => {
     try {
-      const d = await buscar(aba, UF, TURNO, ctrl.signal, m)
+      const d = await buscar(aba, UF, TURNO, ctrl.signal, { cd: m.cd, nm: m.nm })
       const c = d.candidatos.find((x) => x.sqcand === det.sqcand)
-      fl.linhas.push({ nm: m.nm, votos: c?.votos || 0, pct: c?.percentual || 0, pos: c ? d.candidatos.indexOf(c) + 1 : '–', pst: d.secoes.percentual })
+      pm.linhas.push({ cd: m.cd, nm: m.nm, zonas: m.zonas || [], votos: c?.votos || 0, pct: c?.percentual || 0, pos: c ? d.candidatos.indexOf(c) + 1 : '–', pst: d.secoes.percentual })
     } catch (err) {
       if (err.name === 'AbortError') throw err
-      fl.semDados++
+      pm.semDados++
+      pm.linhas.push({ cd: m.cd, nm: m.nm, zonas: m.zonas || [], votos: 0, pct: 0, pos: '–', pst: 0, semDados: true })
     }
-    fl.feitos++
-    if (estado.detalhe === det) renderDetalhe()
+    pm.feitos++
+    if (estado.detalhe === det && Date.now() - ultimo > 600) {
+      ultimo = Date.now()
+      renderDetalhe()
+    }
   }, ctrl.signal).catch(() => {})
-  fl.carregando = false
+  if (ctrl.signal.aborted) return
+  pm.carregando = false
+  pm.t = Date.now()
+  if (estado.detalhe === det) renderDetalhe()
+}
+
+async function alternarZonas(cd) {
+  const det = estado.detalhe
+  const pm = det?.porMun
+  if (!pm) return
+  if (pm.zonas[cd]) {
+    delete pm.zonas[cd]
+    return renderDetalhe()
+  }
+  const l = pm.linhas.find((x) => x.cd === cd)
+  const aba = ABAS.find((a) => a.id === det.aba)
+  const z = { carregando: true, feitos: 0, total: l.zonas.length, linhas: [] }
+  pm.zonas[cd] = z
+  renderDetalhe()
+  await emLotes(l.zonas, 4, async (zona) => {
+    try {
+      const d = await buscar(aba, UF, TURNO, undefined, { cd, nm: l.nm, zona })
+      const c = d.candidatos.find((x) => x.sqcand === det.sqcand)
+      z.linhas.push({ zona, votos: c?.votos || 0, pct: c?.percentual || 0, pos: c ? d.candidatos.indexOf(c) + 1 : '–', pst: d.secoes.percentual })
+    } catch {
+      z.linhas.push({ zona, votos: 0, pct: 0, pos: '–', pst: 0, semDados: true })
+    }
+    z.feitos++
+  }, new AbortController().signal)
+  z.carregando = false
   if (estado.detalhe === det) renderDetalhe()
 }
 
@@ -1994,7 +2106,19 @@ detalheEl.addEventListener('click', (ev) => {
     renderDetalhe()
     return
   }
-  if (ev.target.closest('[data-carregar-floripa]')) carregarFloripaDetalhe()
+  const pmBtn = ev.target.closest('[data-por-mun]')
+  if (pmBtn) return carregarPorMunicipio(pmBtn.dataset.porMun)
+  const zBtn = ev.target.closest('[data-zonas-mun]')
+  if (zBtn) return alternarZonas(zBtn.dataset.zonasMun)
+  if (ev.target.closest('[data-pm-ver-todos]') && estado.detalhe?.porMun) {
+    estado.detalhe.porMun.verTodos = true
+    renderDetalhe()
+  }
+})
+detalheEl.addEventListener('input', (ev) => {
+  if (ev.target.id !== 'det-busca-mun' || !estado.detalhe?.porMun) return
+  estado.detalhe.porMun.busca = ev.target.value
+  renderDetalhe()
 })
 detalheEl.addEventListener('pointermove', (ev) => {
   const el = ev.target.closest('[data-dica]')
