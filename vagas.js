@@ -103,3 +103,44 @@ export function calcularVagas({ vagas, grupos }) {
   }
   return resultado
 }
+
+// Recalcula as vagas com os votos de um candidato alterados em `delta` (o resto fica igual).
+function eleitoCom(entrada, sqcand, delta) {
+  const grupos = entrada.grupos.map((g) =>
+    g.candidatos.some((c) => c.sqcand === sqcand)
+      ? { ...g, candidatos: g.candidatos.map((c) => (c.sqcand === sqcand ? { ...c, votos: Math.max(0, c.votos + delta) } : c)) }
+      : g,
+  )
+  return calcularVagas({ vagas: entrada.vagas, grupos }).eleitos.has(sqcand)
+}
+
+/**
+ * Menor número de votos a mais que elegeria o candidato, com os votos dos demais parados.
+ * Devolve null se nem com `limite` votos a mais ele entraria.
+ */
+export function votosParaEleger(entrada, sqcand, limite) {
+  if (eleitoCom(entrada, sqcand, 0)) return 0
+  if (!(limite > 0) || !eleitoCom(entrada, sqcand, limite)) return null
+  let lo = 0, hi = limite
+  const passo = Math.max(1, Math.floor(limite / 4000))
+  while (hi - lo > passo) {
+    const meio = Math.floor((lo + hi) / 2)
+    if (eleitoCom(entrada, sqcand, meio)) hi = meio
+    else lo = meio
+  }
+  return hi
+}
+
+/** Quantos votos o candidato eleito poderia perder (demais parados) antes de sair. Infinity se nunca sai. */
+export function folgaDaVaga(entrada, sqcand, votosAtuais) {
+  if (!eleitoCom(entrada, sqcand, 0)) return 0
+  if (eleitoCom(entrada, sqcand, -votosAtuais)) return Infinity
+  let lo = 0, hi = votosAtuais
+  const passo = Math.max(1, Math.floor(votosAtuais / 4000))
+  while (hi - lo > passo) {
+    const meio = Math.floor((lo + hi) / 2)
+    if (eleitoCom(entrada, sqcand, -meio)) lo = meio
+    else hi = meio
+  }
+  return lo
+}

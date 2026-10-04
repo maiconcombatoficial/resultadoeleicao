@@ -4,8 +4,9 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610042208'
-import { corPartido, corTexto } from './cores.js?v=202610042208'
+import { calcularVagas } from './vagas.js?v=202610042216'
+import { chanceDe, NIVEIS } from './chances.js?v=202610042216'
+import { corPartido, corTexto } from './cores.js?v=202610042216'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -1007,6 +1008,82 @@ function foto(c, cor = corPartido(c.partido)) {
   return `<span class="foto" style="${estiloCor(cor)}"><span>${ini}</span>${img}</span>`
 }
 
+/* ---------------- chance de reverter ---------------- */
+
+// Majoritários: no 1º turno de Presidente/Governador o objetivo é ficar entre os 2 que vão ao 2º turno.
+function contextoMaj(aba, d) {
+  if (aba.cargo === 5) return { vagas: d.vagas, alvo: `as ${d.vagas} vagas` }
+  if (TURNO === 1) return { vagas: 2, alvo: 'o 2º turno', segundoTurno: true }
+  return { vagas: 1, alvo: 'a vitória' }
+}
+
+const ROTULOS_2T = { garantido: 'Garantido no 2º turno', segura: '2º turno seguro', provavel: '2º turno provável', risco: '2º turno em risco', fora: 'Fora do 2º turno' }
+
+function chance(d, c, aba, forcar = false) {
+  if (!d || !aba || d.mun || d.final || !c.valido || d.secoes.percentual < 1) return null
+  if (aba.tipo === 'prop') {
+    if (!d.projecao?.qe) return null
+    if (!forcar && d.candidatos.indexOf(c) >= 3 * d.vagas && !ehFavorito(aba.id, d.abrangencia, c.sqcand)) return null
+    return chanceDe(d, c, 'prop')
+  }
+  if (aba.tipo !== 'maj') return null
+  return chanceDe(d, c, 'maj', contextoMaj(aba, d).vagas)
+}
+
+// Vitória no 1º turno garantida: mais da metade de todos os válidos, mesmo sem nenhum voto a mais.
+function venceNoPrimeiroGarantido(d, c, aba, ch) {
+  if (aba.tipo !== 'maj' || aba.cargo === 5 || TURNO !== 1 || !ch) return false
+  const validos = d.candidatos.filter((x) => x.valido).reduce((a, x) => a + x.votos, 0)
+  return c.votos > (validos + ch.R) / 2
+}
+
+function seloChance(d, c, aba, forcar = false) {
+  const ch = chance(d, c, aba, forcar)
+  if (!ch) return ''
+  if (venceNoPrimeiroGarantido(d, c, aba, ch)) return `<span class="tag chance ch-garantido" title="Tem mais da metade de todos os votos válidos, contando os que faltam">✅ Vence no 1º turno</span>`
+  const n = NIVEIS[ch.nivel]
+  const rotulo = (aba.tipo === 'maj' && contextoMaj(aba, d).segundoTurno && ROTULOS_2T[ch.nivel]) || n.rotulo
+  const titulo = ch.exato ? 'Certeza matemática' : 'Estimativa com as urnas que faltam'
+  return `<span class="tag chance ${n.classe}" title="${titulo}">${n.icone} ${esc(rotulo)}${ch.exato && ch.nivel === 'fora' ? ' · matemático' : ''}</span>`
+}
+
+function textoChance(d, c, aba) {
+  const ch = chance(d, c, aba, true)
+  if (!ch) {
+    if (d.final) return '<p class="nota">Apuração encerrada: não há mais o que reverter.</p>'
+    if (d.mun) return '<p class="nota">A chance de reverter é calculada com os números de toda a abrangência (estado ou país), não do município.</p>'
+    return '<p class="nota">Disponível quando houver votos apurados.</p>'
+  }
+  const ctx = aba.tipo === 'maj' ? contextoMaj(aba, d) : null
+  const pct = d.secoes.percentual
+  const linhas = [`Faltam cerca de <strong>${fmt.format(ch.R)}</strong> votos válidos para apurar (${fmtPct.format(100 - pct)}% das seções).`]
+  const vezes = (m) => `${fmtPct.format(m)}×`
+  if (venceNoPrimeiroGarantido(d, c, aba, ch)) linhas.push('✅ Já tem mais da metade de todos os votos válidos, mesmo contando os que faltam: <strong>vence no 1º turno</strong> (certeza matemática).')
+  else if (aba.tipo === 'maj') {
+    if (ch.nivel === 'garantido') linhas.push(`✅ <strong>Garantido em ${ctx.alvo}</strong>: ${ch.rival ? `a vantagem de ${fmt.format(ch.vantagem)} votos sobre ${esc(ch.rival.nome)} é maior que todos os votos que faltam` : 'ninguém pode alcançá-lo'} (certeza matemática).`)
+    else if (ch.vantagem != null)
+      linhas.push(`Está em ${ctx.alvo} com <strong>${fmt.format(ch.vantagem)}</strong> votos de vantagem sobre ${esc(ch.rival.nome)}. ${
+        ch.f <= 0 ? 'Mesmo sem nenhum voto a mais, o rival não o alcança se mantiver o ritmo dele.' : `Perderia a posição se, nas urnas que faltam, tivesse menos de ${vezes(ch.f)} o próprio desempenho atual.`
+      }`)
+    else if (ch.nivel === 'fora') linhas.push(`❌ Precisa tirar <strong>${fmt.format(ch.falta)}</strong> votos de diferença para ${esc(ch.rival.nome)}, mais do que todos os votos que faltam: <strong>não alcança mais ${ctx.alvo}</strong> (certeza matemática).`)
+    else linhas.push(`Precisa tirar <strong>${fmt.format(ch.falta)}</strong> votos de diferença para ${esc(ch.rival.nome)}. Para isso precisaria de <strong>${vezes(ch.m)}</strong> o próprio desempenho atual nas urnas que faltam.`)
+  } else {
+    if (c.projecao)
+      linhas.push(
+        ch.folga === Infinity
+          ? 'Mantidos os votos dos demais, ficaria com a vaga mesmo sem nenhum voto a mais.'
+          : `Mantidos os votos dos demais, perderia a vaga com <strong>${fmt.format(ch.folga)}</strong> votos a menos. ${
+              ch.f <= 0 ? 'Com o ritmo atual dos outros, a vaga se mantém mesmo que ele não ganhe mais votos.' : `Perderia a vaga se, nas urnas que faltam, tivesse menos de ${vezes(ch.f)} o próprio desempenho atual.`
+            }`,
+      )
+    else if (ch.falta == null) linhas.push(`❌ Mesmo com todos os cerca de ${fmt.format(ch.R)} votos que faltam (e os demais parados), não entraria pelo cálculo atual.`)
+    else linhas.push(`Precisaria de mais <strong>${fmt.format(ch.falta)}</strong> votos para entrar, com os demais parados. Com os outros mantendo o ritmo, precisaria de <strong>${vezes(ch.m)}</strong> o próprio desempenho atual nas urnas que faltam.`)
+  }
+  return `<div class="chance-det">${seloChance(d, c, aba, true)}</div>
+    <ul class="det-lista">${linhas.map((l) => `<li>${l}</li>`).join('')}</ul>
+    <p class="nota">Estimativa supondo que os outros candidatos mantenham o ritmo atual e que as urnas que faltam tenham o mesmo número médio de votos das já apuradas. Só os casos marcados como certeza matemática são definitivos.</p>`
+}
+
 function selo(c) {
   if (c.eleito) return `<span class="tag eleito">${esc(/eleito/i.test(c.situacao) ? c.situacao : 'Eleito')}</span>`
   if (c.projecao)
@@ -1130,7 +1207,7 @@ function cardFavorito(f, d, { mostrarCargo = false } = {}) {
     <div class="fav-topo">
       ${foto(c, cor)}
       <div class="cand-info">
-        <div class="cand-linha"><span class="cand-nome">${esc(c.nome)}</span> ${situacao}</div>
+        <div class="cand-linha"><span class="cand-nome">${esc(c.nome)}</span> ${situacao} ${seloChance(d, c, aba, true)}</div>
         <div class="cand-meta">${pill(c.partido, cor)} ${esc(c.numero)}${mostrarCargo ? ` · ${esc(cargoTxt)}` : ''}</div>
       </div>
       ${estrela(c, f.aba, f.abr)}
@@ -1218,7 +1295,7 @@ function renderMajoritario(d) {
         <div class="cand-info">
           <div class="cand-linha">
             <span class="cand-nome">${esc(c.nome)}</span>
-            ${selo(c)}
+            ${selo(c)} ${seloChance(d, c, estado.aba)}
           </div>
           <div class="cand-meta">${pill(c.partido, cor)} ${esc(c.numero)}${
             c.vices.length ? ` · ${c.vices.map((v) => `${v.tipo === 'v' ? 'Vice' : 'Supl.'}: ${esc(v.nome)}`).join(' · ')}` : ''
@@ -1291,7 +1368,7 @@ function listaProporcional() {
         return `<tr ${attrCand(c)} class="${c.eleito ? 'is-eleito' : c.projecao ? 'is-proj' : ''} ${ganho(c) > 0 ? 'subiu' : ''}" style="${estiloCor(cor)}">
         <td class="mudo pos-tab">${pos}</td>
         <td>
-          <div class="cand-linha">${estrela(c)}<span class="cand-nome">${esc(c.nome)}</span> ${selo(c)}</div>
+          <div class="cand-linha">${estrela(c)}<span class="cand-nome">${esc(c.nome)}</span> ${selo(c)} ${seloChance(d, c, estado.aba)}</div>
           <div class="cand-meta">${pill(c.partido, cor)} ${esc(c.numero)}${c.agremiacao !== c.partido ? ` · ${esc(nomeCurto(c.agremiacao))}` : ''}</div>
         </td>
         <td class="dir"><strong>${fmt.format(c.votos)}</strong><span class="pct-tab">${fmtPct.format(c.percentual)}%</span>${delta(c)}</td>
@@ -1840,6 +1917,7 @@ function renderDetalhe() {
       ${graficoLinha(ptsVot, { cor, fmtY: (v) => fmt.format(Math.round(v)), zero: true, titulo: 'Votos acumulados' })}
       ${ptsPos.length > 1 && new Set(ptsPos.map((p) => p.y)).size > 1 ? graficoLinha(ptsPos, { cor, fmtY: (v) => `${Math.round(-v)}º`, titulo: 'Posição (mais alto = melhor)' }) : ''}
     </section>
+    <section class="cartao"><h3>Chance de reverter</h3>${textoChance(d, c, aba)}</section>
     <section class="cartao"><h3>Disputa</h3>${blocoDisputa(d, c, aba)}</section>
     ${vices}
     ${floripa}
