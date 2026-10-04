@@ -468,3 +468,62 @@ main > .segmentado { margin-bottom: 0; }
   .calculo .tabela th { font-size: 0.62rem; letter-spacing: 0; }
 }
 .pct-tab { display: block; font-size: 0.78rem; color: var(--mudo); }
+
+/* ---------- tela de detalhes do candidato ---------- */
+html.com-detalhe, html.com-detalhe body { overflow: hidden; }
+.detalhe {
+  position: fixed; inset: 0; z-index: 15; overflow-y: auto; overscroll-behavior: contain;
+  background: var(--fundo); -webkit-overflow-scrolling: touch;
+}
+.detalhe[hidden] { display: none; }
+.det-corpo { max-width: 680px; margin: 0 auto; padding: 0 16px 32px; display: grid; gap: 14px; }
+.det-topo {
+  position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 10px;
+  margin: 0 -16px; padding: 10px 16px; background: var(--topo); color: #fff;
+  border-bottom: 4px solid var(--amarelo);
+}
+.det-voltar {
+  border: 1px solid rgb(255 255 255 / 45%); background: rgb(255 255 255 / 15%); color: #fff;
+  font: inherit; font-weight: 700; border-radius: 999px; padding: 6px 14px; cursor: pointer;
+}
+.det-onde { font-size: 0.85rem; opacity: 0.9; min-width: 0; overflow-wrap: anywhere; }
+.det-cabeca { border-top: 6px solid var(--cor); background: linear-gradient(180deg, color-mix(in srgb, var(--cor) 12%, var(--cartao)), var(--cartao) 60%); }
+.det-id { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: start; }
+.det-id .foto { width: 76px; height: 76px; font-size: 1.3rem; }
+.det-id h2 { margin: 2px 0 2px; font-size: 1.35rem; line-height: 1.2; overflow-wrap: anywhere; }
+.det-completo { margin: 0 0 4px; font-size: 0.8rem; overflow-wrap: anywhere; }
+.det-selo { margin-top: 6px; }
+.det-id .estrela { font-size: 1.7rem; }
+.det-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 0.9rem; }
+.det-lista li { overflow-wrap: anywhere; }
+.det-lista strong { font-variant-numeric: tabular-nums; }
+
+.tend { display: flex; gap: 12px; align-items: center; border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; }
+.tend > div { display: grid; gap: 2px; min-width: 0; }
+.tend strong { font-size: 1.1rem; }
+.tend span { font-size: 0.85rem; overflow-wrap: anywhere; }
+.tend-icone { font-size: 1.8rem; }
+.tend-alta { background: var(--eleito-fundo); }
+.tend-alta strong { color: var(--eleito); }
+.tend-queda { background: color-mix(in srgb, var(--erro) 14%, var(--cartao)); }
+.tend-queda strong { color: var(--erro); }
+.tend-estavel { background: var(--fundo); }
+
+.grafico { margin: 12px 0 0; }
+.grafico figcaption { font-size: 0.78rem; font-weight: 700; color: var(--mudo); text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 2px; }
+.grafico svg { display: block; width: 100%; height: auto; overflow: visible; }
+.grafico .grade { stroke: var(--linha); stroke-width: 1; stroke-dasharray: 3 3; }
+.grafico .rot { font-size: 9px; fill: var(--mudo); }
+.grafico .linha { fill: none; stroke: var(--cor); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.grafico .ponta { fill: var(--cor); stroke: var(--cartao); stroke-width: 2; }
+.grafico .alvo { fill: transparent; cursor: crosshair; }
+.grafico .alvo:hover { fill: color-mix(in srgb, var(--cor) 25%, transparent); }
+
+.botao {
+  font: inherit; font-weight: 700; border: 0; border-radius: 999px; padding: 9px 16px; cursor: pointer;
+  background: var(--topo); color: #fff;
+}
+.botao.secundario { background: var(--fundo); color: var(--texto); border: 1px solid var(--linha); }
+[data-cand] { cursor: pointer; }
+.cand-nome { text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 25%, transparent); text-underline-offset: 3px; }
+.dica { z-index: 30; }
