@@ -527,3 +527,23 @@ html.com-detalhe, html.com-detalhe body { overflow: hidden; }
 [data-cand] { cursor: pointer; }
 .cand-nome { text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 25%, transparent); text-underline-offset: 3px; }
 .dica { z-index: 30; }
+
+/* ---------- chance de reverter ---------- */
+.tag.chance { text-transform: none; letter-spacing: 0; font-size: 0.7rem; border: 1px solid transparent; white-space: normal; }
+.ch-garantido { background: #0b7a45; color: #fff; }
+.ch-segura { background: #d9f2e4; color: #0b5d34; border-color: #a9dcc0; }
+.ch-provavel { background: #eef8e6; color: #3d6b12; border-color: #cfe7b8; }
+.ch-risco { background: #ffe7c7; color: #8a4b00; border-color: #ffc98a; }
+.ch-pode { background: #dceaff; color: #0a4fa0; border-color: #a9c8f5; }
+.ch-dificil { background: #ece6fb; color: #4b2d8f; border-color: #cdbff0; }
+.ch-improvavel { background: var(--fundo); color: var(--mudo); border-color: var(--linha); }
+.ch-fora { background: var(--fundo); color: var(--erro); border-color: var(--linha); }
+@media (prefers-color-scheme: dark) {
+  .ch-segura { background: #133a27; color: #7fe0ab; border-color: #1f5a3d; }
+  .ch-provavel { background: #24361a; color: #b5e08a; border-color: #3a5428; }
+  .ch-risco { background: #3d2a10; color: #ffbe6b; border-color: #6b4716; }
+  .ch-pode { background: #132a4a; color: #8cbcff; border-color: #234a80; }
+  .ch-dificil { background: #2a2145; color: #c3b0ff; border-color: #44367a; }
+}
+.chance-det { margin-bottom: 10px; }
+.chance-det .tag.chance { font-size: 0.9rem; padding: 5px 12px; }
