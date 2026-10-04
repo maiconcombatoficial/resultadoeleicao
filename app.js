@@ -4,7 +4,7 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { corPartido, corTexto } from './cores.js?v=202610042052'
+import { corPartido, corTexto } from './cores.js?v=202610042109'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -69,10 +69,16 @@ function codigoEleicao(aba, turno) {
   return ELEICOES[aba.eleicao][aba.turno1 ? 1 : turno]
 }
 
-function urlResultado(aba, abr, turno) {
+// Com município: dados/sc/sc{código TSE do município, 5 dígitos}-c{cargo}-e{eleição}-u.json
+function urlResultado(aba, abr, turno, mun) {
   const ele = codigoEleicao(aba, turno)
   const c = String(aba.cargo).padStart(4, '0')
-  return `${BASE}/${CICLO}/${ele}/dados/${abr}/${abr}-c${c}-e${ele.padStart(6, '0')}-u.json`
+  const local = mun ? `${abr}${String(mun.cd).padStart(5, '0')}` : abr
+  return `${BASE}/${CICLO}/${ele}/dados/${abr}/${local}-c${c}-e${ele.padStart(6, '0')}-u.json`
+}
+
+function urlMunicipios(ele) {
+  return `${BASE}/${CICLO}/${ele}/config/mun-e${ele.padStart(6, '0')}-cm.json`
 }
 
 function urlFoto(aba, abr, sqcand, turno) {
@@ -81,9 +87,9 @@ function urlFoto(aba, abr, sqcand, turno) {
 
 class NaoDivulgado extends Error {}
 
-function normalizar(raw, aba, turno) {
+function normalizar(raw, aba, turno, abrPedida) {
   const carg = (raw.carg || []).find((x) => Number(x.cd) === aba.cargo) || (raw.carg || [])[0] || { agr: [] }
-  const abr = (raw.cdabr || '').toLowerCase()
+  const abr = abrPedida || (raw.cdabr || '').toLowerCase()
   const candidatos = []
   for (const agr of carg.agr || []) {
     const agremiacao = agr.tp === 'f' || agr.tp === 'c' ? agr.nm : ''
@@ -137,18 +143,53 @@ function normalizar(raw, aba, turno) {
   }
 }
 
-async function buscar(aba, abr, turno, signal) {
-  if (DEMO) return demo(aba, abr)
+async function buscar(aba, abr, turno, signal, mun = null) {
+  if (DEMO) return demo(aba, abr, mun)
   let res
   try {
-    res = await fetch(urlResultado(aba, abr, turno), { signal, cache: 'no-store' })
+    res = await fetch(urlResultado(aba, abr, turno, mun), { signal, cache: 'no-store' })
   } catch (err) {
     if (err.name === 'AbortError') throw err
     throw new Error('Não foi possível conectar ao TSE. Verifique sua internet (o site do TSE pode estar sobrecarregado).')
   }
   if (res.status === 404 || res.status === 403) throw new NaoDivulgado()
   if (!res.ok) throw new Error(`O TSE respondeu com erro ${res.status}. Tentando de novo em instantes.`)
-  return normalizar(await res.json(), aba, turno)
+  return normalizar(await res.json(), aba, turno, abr)
+}
+
+// Nomes do TSE vêm em maiúsculas: "SAO JOSE DO CEDRO" → "Sao Jose do Cedro"
+function nomeBonito(nome) {
+  return String(nome)
+    .toLowerCase()
+    .replace(/(^|[\s'-])(\p{L})/gu, (m, sep, l) => sep + l.toUpperCase())
+    .replace(/ (D[aeo]s?|E) /g, (m) => m.toLowerCase())
+}
+
+const MUNICIPIOS_DEMO = [
+  ['81051', 'Florianópolis', true], ['81795', 'Joinville'], ['80470', 'Blumenau'], ['81132', 'Chapecó'],
+  ['81574', 'Itajaí'], ['80950', 'Criciúma'], ['82230', 'São José'], ['81779', 'Jaraguá do Sul'],
+  ['82015', 'Palhoça'], ['81833', 'Lages'], ['80570', 'Balneário Camboriú'], ['82694', 'Tubarão'],
+].map(([cd, nm, capital]) => ({ cd, nm, capital: !!capital }))
+
+const municipiosCache = new Map()
+// Lista de municípios de SC publicada pelo TSE (código TSE de 5 dígitos + nome). Não muda durante a eleição.
+async function municipios(aba) {
+  if (DEMO) return MUNICIPIOS_DEMO
+  const ele = codigoEleicao(aba, TURNO)
+  if (!municipiosCache.has(ele)) {
+    const p = fetch(urlMunicipios(ele))
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((json) => {
+        const uf = (json.abr || []).find((a) => String(a.cd).toLowerCase() === UF)
+        return (uf?.mu || [])
+          .filter((m) => m.cd && m.nm)
+          .map((m) => ({ cd: String(m.cd), nm: nomeBonito(m.nm), capital: /^s$/i.test(String(m.c || '')) }))
+          .sort((a, b) => a.nm.localeCompare(b.nm, 'pt-BR'))
+      })
+    p.catch(() => municipiosCache.delete(ele))
+    municipiosCache.set(ele, p)
+  }
+  return municipiosCache.get(ele)
 }
 
 /* ---------------- modo demonstração ---------------- */
@@ -169,12 +210,12 @@ function aleatorio(semente) {
   }
 }
 
-function demo(aba, abr) {
-  const r = aleatorio(`${aba.id}|${abr}`)
+function demo(aba, abr, mun = null) {
+  const r = aleatorio(`${aba.id}|${abr}|${mun?.cd || ''}`)
   const ciclo = 10 * 60_000
   const p = Math.min(1, ((Date.now() % ciclo) / ciclo) * 1.15)
-  const eleitorado = abr === 'br' ? 158_000_000 : 5_600_000
-  const secoesTot = abr === 'br' ? 472_000 : 16_900
+  const eleitorado = mun ? 40_000 + Math.round(r() * 400_000) : abr === 'br' ? 158_000_000 : 5_600_000
+  const secoesTot = mun ? Math.round(eleitorado / 330) : abr === 'br' ? 472_000 : 16_900
   const vagas = { 1: 1, 3: 1, 5: 2, 6: 16, 7: 40 }[aba.cargo]
   const qtd = { 1: 9, 3: 7, 5: 10, 6: 180, 7: 400 }[aba.cargo]
   const comparec = eleitorado * 0.8 * p
@@ -286,6 +327,8 @@ const estado = {
   busca: '',
   visao: 'candidatos', // proporcionais: candidatos | partidos
   partido: null, // filtro por agremiação na lista de deputados
+  mun: lerJSON(`${PREFIXO}municipio:v1`, null), // município de SC escolhido ({cd, nm}) ou null = estado todo
+  renderPendente: false,
   dados: null,
   controlador: null,
   timer: null,
@@ -299,6 +342,25 @@ const statusEl = $('#status')
 function abrAtual() {
   const a = estado.aba
   return estado.abr[a.id] || a.abrangencias[0]
+}
+
+// O município só vale quando a aba está olhando Santa Catarina.
+function munAtual() {
+  return abrAtual() === UF ? estado.mun : null
+}
+
+function nomeLocal(d) {
+  const mun = munAtual()
+  if (mun) return `${mun.nm} (SC)`
+  return NOMES_ABR[d.abrangencia] || d.abrangencia.toUpperCase()
+}
+
+function escolherMunicipio(mun) {
+  estado.mun = mun
+  gravarLocal(`${PREFIXO}municipio:v1`, JSON.stringify(mun))
+  estado.partido = null
+  estado.dados = null
+  carregar()
 }
 
 function montarAbas() {
@@ -350,13 +412,15 @@ async function carregar() {
   const abr = abrAtual()
   statusEl.textContent = 'Atualizando…'
   statusEl.className = 'status carregando'
-  if (!estado.dados) conteudo.innerHTML = `<div class="cartao vazio">Carregando ${esc(aba.rotulo)}…</div>`
+  if (!estado.dados) conteudo.innerHTML = (aba.tipo === 'fav' ? '' : cabecalhoAbrangencia()) + `<div class="cartao vazio">Carregando ${esc(aba.rotulo)}${munAtual() ? ` em ${esc(munAtual().nm)}` : ''}…</div>`
   if (aba.tipo === 'fav') return carregarFavoritos(ctrl)
+  const mun = munAtual()
   try {
-    const dados = await buscar(aba, abr, TURNO, ctrl.signal)
+    const dados = await buscar(aba, abr, TURNO, ctrl.signal, mun)
     if (ctrl.signal.aborted) return
-    registrarHistorico(aba.id, abr, dados)
-    const anterior = estado.dados && estado.dados.abrangencia === dados.abrangencia ? estado.dados : null
+    dados.mun = mun
+    if (!mun) registrarHistorico(aba.id, abr, dados) // o histórico dos acompanhados é sempre do estado/país
+    const anterior = estado.dados && estado.dados.abrangencia === dados.abrangencia && estado.dados.mun?.cd === mun?.cd ? estado.dados : null
     estado.anterior = new Map((anterior?.candidatos || []).map((c) => [c.sqcand, c.votos]))
     estado.dados = dados
     renderizar()
@@ -368,7 +432,7 @@ async function carregar() {
     if (err instanceof NaoDivulgado) {
       conteudo.innerHTML = cabecalhoAbrangencia() + `
         <div class="cartao vazio">
-          <p class="vazio-titulo">Resultados ainda não divulgados</p>
+          <p class="vazio-titulo">Resultados ainda não divulgados${mun ? ` para ${esc(mun.nm)}` : ''}</p>
           <p>O TSE só publica os números de ${esc(aba.rotulo)} depois que as urnas fecham em todo o país (17h de Brasília).
           Esta página tenta de novo automaticamente a cada 30 segundos.</p>
           <p><a href="?demo=1#${aba.id}">Ver como fica com dados fictícios</a></p>
@@ -438,14 +502,86 @@ function pill(sigla, cor = corPartido(sigla)) {
 
 function cabecalhoAbrangencia() {
   const a = estado.aba
-  if (a.abrangencias.length < 2) return ''
   const atual = abrAtual()
-  return `<div class="segmentado" role="group" aria-label="Abrangência">
+  const seg =
+    a.abrangencias.length < 2
+      ? ''
+      : `<div class="segmentado" role="group" aria-label="Abrangência">
     ${a.abrangencias
       .map((abr) => `<button type="button" data-abr="${abr}" aria-pressed="${abr === atual}">${esc(NOMES_ABR[abr] || abr.toUpperCase())}</button>`)
       .join('')}
   </div>`
+  if (atual !== UF) return seg
+  const mun = estado.mun
+  return `${seg}<div class="local ${mun ? 'com-mun' : ''}">
+    <span class="local-icone" aria-hidden="true">📍</span>
+    <div class="local-campo">
+      <input id="mun-busca" type="search" autocomplete="off" enterkeyhint="search"
+        placeholder="Santa Catarina inteira · digite um município" value="${esc(mun?.nm || '')}" aria-label="Escolher município de SC">
+      ${mun ? '<button type="button" class="local-limpar" data-mun-limpar aria-label="Voltar para o estado todo">✕</button>' : ''}
+      <ul id="mun-sugestoes" class="sugestoes" hidden></ul>
+    </div>
+  </div>`
 }
+
+async function mostrarSugestoes() {
+  const ul = $('#mun-sugestoes')
+  const input = $('#mun-busca')
+  if (!ul || !input) return
+  let lista
+  try {
+    lista = await municipios(estado.aba)
+  } catch {
+    ul.innerHTML = '<li class="sug-info">Não consegui carregar a lista de municípios do TSE. Tente de novo em instantes.</li>'
+    ul.hidden = false
+    return
+  }
+  const termo = semAcento(input.value.trim())
+  const achados = (termo && termo !== semAcento(estado.mun?.nm || '') ? lista.filter((m) => semAcento(m.nm).includes(termo)) : lista)
+    .sort((a, b) => {
+      const ia = semAcento(a.nm).startsWith(termo) ? 0 : 1
+      const ib = semAcento(b.nm).startsWith(termo) ? 0 : 1
+      return ia - ib || a.nm.localeCompare(b.nm, 'pt-BR')
+    })
+    .slice(0, 40)
+  ul.innerHTML =
+    `<li><button type="button" data-mun-limpar class="sug-estado">🗺️ Santa Catarina inteira</button></li>` +
+    (achados.length
+      ? achados
+          .map((m) => `<li><button type="button" data-mun-cd="${esc(m.cd)}" data-mun-nm="${esc(m.nm)}">${esc(m.nm)}${m.capital ? ' <span class="mudo">· capital</span>' : ''}</button></li>`)
+          .join('')
+      : `<li class="sug-info">Nenhum município encontrado para “${esc(input.value)}”.</li>`)
+  ul.hidden = false
+}
+
+function fecharSugestoes() {
+  const ul = $('#mun-sugestoes')
+  if (ul) ul.hidden = true
+  if (estado.renderPendente) {
+    estado.renderPendente = false
+    renderizar()
+  }
+}
+
+conteudo.addEventListener('focusin', (ev) => {
+  if (ev.target.id === 'mun-busca') {
+    ev.target.select()
+    mostrarSugestoes()
+  }
+})
+conteudo.addEventListener('focusout', (ev) => {
+  if (ev.target.id === 'mun-busca') setTimeout(() => {
+    if (!document.activeElement?.closest?.('.local')) fecharSugestoes()
+  }, 150)
+})
+conteudo.addEventListener('keydown', (ev) => {
+  if (ev.target.id !== 'mun-busca') return
+  if (ev.key === 'Escape') ev.target.blur()
+  if (ev.key === 'Enter') {
+    ev.preventDefault()
+    $('#mun-sugestoes [data-mun-cd]')?.click()
+  }
+})
 
 conteudo.addEventListener('click', (ev) => {
   const favBtn = ev.target.closest('[data-fav]')
@@ -458,10 +594,19 @@ conteudo.addEventListener('click', (ev) => {
       const c = estado.dados?.candidatos?.find((x) => x.sqcand === sqcand)
       if (!c) return
       alternarFavorito(abaId, abr, c)
-      registrarHistorico(abaId, abr, estado.dados)
+      if (!estado.dados.mun) registrarHistorico(abaId, abr, estado.dados)
     }
     montarAbas()
     renderizar()
+    return
+  }
+  const munBtn = ev.target.closest('[data-mun-cd]')
+  if (munBtn) {
+    escolherMunicipio({ cd: munBtn.dataset.munCd, nm: munBtn.dataset.munNm })
+    return
+  }
+  if (ev.target.closest('[data-mun-limpar]')) {
+    escolherMunicipio(null)
     return
   }
   const abrBtn = ev.target.closest('[data-abr]')
@@ -499,6 +644,10 @@ conteudo.addEventListener('click', (ev) => {
 })
 
 conteudo.addEventListener('input', (ev) => {
+  if (ev.target.id === 'mun-busca') {
+    mostrarSugestoes()
+    return
+  }
   if (ev.target.id === 'busca') {
     estado.busca = ev.target.value
     $('#lista').innerHTML = listaProporcional()
@@ -542,7 +691,7 @@ window.addEventListener('scroll', () => (dica.hidden = true), { passive: true })
 function resumo(d) {
   const tpl = $('#tpl-resumo').content.cloneNode(true)
   const f = (n) => tpl.querySelector(`[data-f="${n}"]`)
-  const local = NOMES_ABR[d.abrangencia] || d.abrangencia.toUpperCase()
+  const local = nomeLocal(d)
   f('titulo').textContent = `${d.cargoNome} · ${local}`
   f('selo').textContent = d.final ? 'Totalização final' : TURNO === 2 ? '2º turno' : 'Em apuração'
   f('selo').classList.toggle('final', d.final)
@@ -705,6 +854,7 @@ function cardFavorito(f, d, { mostrarCargo = false } = {}) {
 
 function secaoAcompanhando(d) {
   const abr = abrAtual()
+  if (munAtual()) return ''
   const meus = favoritos.filter((f) => f.aba === estado.aba.id && f.abr === abr)
   if (!meus.length) return ''
   return `<section class="cartao acompanhando">
@@ -920,7 +1070,22 @@ function renderProporcional(d) {
   if (resto) fatias.push({ valor: resto, cor: OUTROS, rotulo: 'Demais partidos' })
 
   let bancada = ''
-  if (eleitos.length) {
+  const mun = munAtual()
+  if (mun) {
+    const top = d.candidatos.filter((c) => c.votos > 0).slice(0, 10)
+    bancada = `<section class="cartao">
+      <h3>Mais votados em ${esc(mun.nm)}</h3>
+      <p class="nota">Votos dados neste município. A eleição de deputados é estadual: as ${d.vagas} vagas dependem dos votos em toda Santa Catarina.</p>
+      <ol class="chips ranking">${top
+        .map(
+          (c, i) =>
+            `<li class="chip" style="${estiloCor(corPartido(c.partido))}"><span class="mudo">${i + 1}º</span> <strong>${esc(c.nome)}</strong> ${pill(c.partido)} <span class="mudo">${fmt.format(
+              c.votos,
+            )}</span></li>`,
+        )
+        .join('')}</ol>
+    </section>`
+  } else if (eleitos.length) {
     const ordem = new Map(grupos.map((g, i) => [g.nome, i]))
     const ordenados = [...eleitos].sort((a, b) => ordem.get(a.agremiacao) - ordem.get(b.agremiacao) || b.votos - a.votos)
     const contagem = grupos.filter((g) => g.eleitos)
@@ -981,6 +1146,10 @@ function renderProporcional(d) {
 function renderizar() {
   const d = estado.dados
   if (!d) return
+  if (document.activeElement?.id === 'mun-busca') {
+    estado.renderPendente = true
+    return
+  }
   const busca = document.activeElement?.id === 'busca'
   const pos = busca ? document.activeElement.selectionStart : null
   if (estado.aba.tipo === 'fav') {
