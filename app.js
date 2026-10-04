@@ -4,8 +4,8 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610042203'
-import { corPartido, corTexto } from './cores.js?v=202610042203'
+import { calcularVagas } from './vagas.js?v=202610042208'
+import { corPartido, corTexto } from './cores.js?v=202610042208'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -360,7 +360,7 @@ function registrarHistorico(abaId, abr, dados) {
     const pst = Math.round(dados.secoes.percentual * 100) / 100
     if (ultimo && (c.votos < ultimo[1] || pst < ultimo[0])) serie.length = 0 // apuração recomeçou (ex.: demonstração)
     if (!ultimo || serie.length === 0 || ultimo[1] !== c.votos || ultimo[0] !== pst) {
-      serie.push([pst, c.votos, Date.now()])
+      serie.push([pst, c.votos, Date.now(), Math.round(c.percentual * 1000) / 1000, dados.candidatos.indexOf(c) + 1])
       if (serie.length > 300) serie.splice(1, serie.length - 300)
       historico[f.id] = serie
       mudou = true
@@ -472,6 +472,7 @@ async function carregar() {
     if (ctrl.signal.aborted) return
     dados.mun = mun
     if (!mun) registrarHistorico(aba.id, abr, dados) // o histórico dos acompanhados é sempre do estado/país
+    registrarSessao(aba.id, abr, mun, dados)
     const anterior = estado.dados && estado.dados.abrangencia === dados.abrangencia && estado.dados.mun?.cd === mun?.cd ? estado.dados : null
     estado.anterior = new Map((anterior?.candidatos || []).map((c) => [c.sqcand, c.votos]))
     estado.dados = dados
@@ -518,6 +519,7 @@ async function carregarFavoritos(ctrl) {
       const [k, dados] = r.value
       const [abaId, abr] = k.split('|')
       registrarHistorico(abaId, abr, dados)
+      registrarSessao(abaId, abr, null, dados)
       estado.favDados.set(k, dados)
     } else if (!(r.reason instanceof NaoDivulgado)) erros++
   }
@@ -853,19 +855,15 @@ conteudo.addEventListener('keydown', (ev) => {
 
 conteudo.addEventListener('click', (ev) => {
   const favBtn = ev.target.closest('[data-fav]')
-  if (favBtn) {
-    const { fav: sqcand, favAba: abaId, favAbr: abr } = favBtn.dataset
-    if (ehFavorito(abaId, abr, sqcand)) {
-      favoritos = favoritos.filter((f) => f.id !== idFav(abaId, abr, sqcand))
-      gravarLocal(CHAVE_FAV, JSON.stringify(favoritos))
-    } else {
-      const c = estado.dados?.candidatos?.find((x) => x.sqcand === sqcand)
-      if (!c) return
-      alternarFavorito(abaId, abr, c)
-      if (!estado.dados.mun) registrarHistorico(abaId, abr, estado.dados)
+  if (!favBtn) {
+    const candEl = ev.target.closest('[data-cand]')
+    if (candEl && !ev.target.closest('a, input, [data-mun-cd], [data-mun-limpar]')) {
+      abrirDetalhe({ aba: candEl.dataset.candAba, abr: candEl.dataset.candAbr, sqcand: candEl.dataset.cand })
+      return
     }
-    montarAbas()
-    renderizar()
+  }
+  if (favBtn) {
+    tratarFav(favBtn)
     return
   }
   const abrirMun = ev.target.closest('[data-abrir-mun]')
@@ -1128,7 +1126,7 @@ function cardFavorito(f, d, { mostrarCargo = false } = {}) {
     acima ? `<li>▼ <strong>${fmt.format(acima.votos - c.votos)}</strong> atrás do ${pos - 1}º (${esc(acima.nome)})</li>` : '<li>🥇 Em 1º lugar</li>',
     abaixo ? `<li>▲ <strong>${fmt.format(c.votos - abaixo.votos)}</strong> à frente do ${pos + 1}º (${esc(abaixo.nome)})</li>` : '',
   ].join('')
-  return `<article class="fav" style="${estiloCor(cor)}">
+  return `<article class="fav" ${attrCand(c, f.aba, f.abr)} style="${estiloCor(cor)}">
     <div class="fav-topo">
       ${foto(c, cor)}
       <div class="cand-info">
@@ -1214,7 +1212,7 @@ function renderMajoritario(d) {
       .map((c, i) => {
         const cor = corPartido(c.partido)
         return `
-      <li id="c-${esc(c.sqcand)}" class="cand ${c.eleito ? 'is-eleito' : ''} ${ganho(c) > 0 ? 'subiu' : ''}" style="${estiloCor(cor)}">
+      <li id="c-${esc(c.sqcand)}" ${attrCand(c)} class="cand ${c.eleito ? 'is-eleito' : ''} ${ganho(c) > 0 ? 'subiu' : ''}" style="${estiloCor(cor)}">
         <span class="pos">${i + 1}º</span>
         ${foto(c, cor)}
         <div class="cand-info">
@@ -1290,7 +1288,7 @@ function listaProporcional() {
       .slice(0, limite)
       .map(({ c, pos }) => {
         const cor = corPartido(c.partido)
-        return `<tr class="${c.eleito ? 'is-eleito' : c.projecao ? 'is-proj' : ''} ${ganho(c) > 0 ? 'subiu' : ''}" style="${estiloCor(cor)}">
+        return `<tr ${attrCand(c)} class="${c.eleito ? 'is-eleito' : c.projecao ? 'is-proj' : ''} ${ganho(c) > 0 ? 'subiu' : ''}" style="${estiloCor(cor)}">
         <td class="mudo pos-tab">${pos}</td>
         <td>
           <div class="cand-linha">${estrela(c)}<span class="cand-nome">${esc(c.nome)}</span> ${selo(c)}</div>
@@ -1405,7 +1403,7 @@ function hemiciclo(eleitos) {
     .map((c, i) => {
       const p = pontos[i]
       const cor = corPartido(c.partido)
-      return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${raioPonto.toFixed(1)}" fill="${cor}"
+      return `<circle ${attrCand(c)} cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${raioPonto.toFixed(1)}" fill="${cor}"
         data-dica="${esc(`<strong>${esc(c.nome)}</strong><br>${esc(c.partido)} · ${fmt.format(c.votos)} votos`)}" data-partido="${esc(c.agremiacao)}"></circle>`
     })
     .join('')
@@ -1432,7 +1430,7 @@ function renderProporcional(d) {
       <ol class="chips ranking">${top
         .map(
           (c, i) =>
-            `<li class="chip" style="${estiloCor(corPartido(c.partido))}"><span class="mudo">${i + 1}º</span> <strong>${esc(c.nome)}</strong> ${pill(c.partido)} <span class="mudo">${fmt.format(
+            `<li class="chip" ${attrCand(c)} style="${estiloCor(corPartido(c.partido))}"><span class="mudo">${i + 1}º</span> <strong>${esc(c.nome)}</strong> ${pill(c.partido)} <span class="mudo">${fmt.format(
               c.votos,
             )}</span></li>`,
         )
@@ -1467,7 +1465,7 @@ function renderProporcional(d) {
         .sort((a, b) => a.projecao.ordem - b.projecao.ordem)
         .map(
           (c) =>
-            `<li class="chip" style="${estiloCor(corPartido(c.partido))}"><strong>${esc(c.nome)}</strong> ${pill(c.partido)} <span class="mudo">${fmt.format(c.votos)} · ${
+            `<li class="chip" ${attrCand(c)} style="${estiloCor(corPartido(c.partido))}"><strong>${esc(c.nome)}</strong> ${pill(c.partido)} <span class="mudo">${fmt.format(c.votos)} · ${
               c.projecao.forma === 'QP' ? 'QP' : 'média'
             }</span></li>`,
         )
@@ -1508,6 +1506,7 @@ function renderProporcional(d) {
 }
 
 function renderizar() {
+  if (estado.detalhe) renderDetalhe()
   const d = estado.dados
   if (!d) return
   if (document.activeElement?.id === 'mun-busca') {
@@ -1543,6 +1542,365 @@ function renderizar() {
     el?.setSelectionRange(pos, pos)
   }
 }
+
+/* ---------------- coração (acompanhar) ---------------- */
+
+// Dados já carregados de um cargo/abrangência (aba aberta, aba Acompanhados ou tela de detalhes).
+function dadosCarregados(abaId, abr) {
+  if (estado.aba.id === abaId && abrAtual() === abr && estado.dados?.candidatos && !estado.dados.mun) return estado.dados
+  const fav = estado.favDados?.get(`${abaId}|${abr}`)
+  if (fav) return fav
+  const det = estado.detalhe
+  if (det && det.aba === abaId && det.abr === abr && det.dados && !det.dados.mun) return det.dados
+  return null
+}
+
+function tratarFav(favBtn) {
+  const { fav: sqcand, favAba: abaId, favAbr: abr } = favBtn.dataset
+  if (ehFavorito(abaId, abr, sqcand)) {
+    favoritos = favoritos.filter((f) => f.id !== idFav(abaId, abr, sqcand))
+    gravarLocal(CHAVE_FAV, JSON.stringify(favoritos))
+  } else {
+    const d = dadosCarregados(abaId, abr)
+    const c = (d || dadosDetalhe())?.candidatos?.find((x) => x.sqcand === sqcand)
+    if (!c) return
+    alternarFavorito(abaId, abr, c)
+    if (d) registrarHistorico(abaId, abr, d)
+    // aproveita o que já foi visto nesta sessão para o histórico guardado
+    const sessao = historicoSessao.get(`${abaId}|${abr}||${sqcand}`)
+    if (sessao?.length > 1) {
+      historico[idFav(abaId, abr, sqcand)] = sessao.map((p) => [...p])
+      gravarLocal(CHAVE_HIST, JSON.stringify(historico))
+    }
+  }
+  montarAbas()
+  renderizar()
+}
+
+/* ---------------- histórico da sessão (todos os candidatos) ---------------- */
+
+// Enquanto o app está aberto, guarda a evolução de todos os candidatos vistos (só em memória).
+const historicoSessao = new Map()
+function registrarSessao(abaId, abr, mun, dados) {
+  const pst = Math.round(dados.secoes.percentual * 100) / 100
+  dados.candidatos.forEach((c, i) => {
+    const k = `${abaId}|${abr}|${mun?.cd || ''}|${c.sqcand}`
+    let serie = historicoSessao.get(k)
+    if (!serie) historicoSessao.set(k, (serie = []))
+    const ult = serie[serie.length - 1]
+    if (ult && (c.votos < ult[1] || pst < ult[0])) serie.length = 0
+    if (!serie.length || serie[serie.length - 1][1] !== c.votos || serie[serie.length - 1][0] !== pst) {
+      serie.push([pst, c.votos, Date.now(), Math.round(c.percentual * 1000) / 1000, i + 1])
+      if (serie.length > 240) serie.splice(1, 1)
+    }
+  })
+}
+
+function attrCand(c, abaId = estado.aba.id, abr = abrAtual()) {
+  return `data-cand="${esc(c.sqcand)}" data-cand-aba="${esc(abaId)}" data-cand-abr="${esc(abr)}"`
+}
+
+/* ---------------- tela de detalhes do candidato ---------------- */
+
+const detalheEl = document.createElement('div')
+detalheEl.className = 'detalhe'
+detalheEl.hidden = true
+detalheEl.setAttribute('role', 'dialog')
+detalheEl.setAttribute('aria-modal', 'true')
+document.body.appendChild(detalheEl)
+
+function abrirDetalhe({ aba, abr, sqcand }) {
+  const mun = estado.aba.id === aba && abrAtual() === abr ? munAtual() : null
+  estado.detalhe = { aba, abr, sqcand, mun, floripa: null }
+  history.pushState({ detalhe: true }, '', location.href)
+  document.documentElement.classList.add('com-detalhe')
+  detalheEl.hidden = false
+  detalheEl.scrollTop = 0
+  renderDetalhe()
+  if (!dadosDetalhe()) {
+    const abaObj = ABAS.find((a) => a.id === aba)
+    buscar(abaObj, abr, TURNO, undefined, mun)
+      .then((d) => {
+        if (estado.detalhe?.sqcand !== sqcand) return
+        estado.detalhe.dados = d
+        registrarSessao(aba, abr, mun, d)
+        renderDetalhe()
+      })
+      .catch(() => {
+        if (estado.detalhe?.sqcand === sqcand) {
+          estado.detalhe.erro = true
+          renderDetalhe()
+        }
+      })
+  }
+}
+
+function fecharDetalhe(voltarHistorico = true) {
+  if (!estado.detalhe) return
+  estado.detalhe = null
+  detalheEl.hidden = true
+  detalheEl.innerHTML = ''
+  document.documentElement.classList.remove('com-detalhe')
+  dica.hidden = true
+  if (voltarHistorico && history.state?.detalhe) history.back()
+}
+
+window.addEventListener('popstate', () => {
+  if (estado.detalhe) fecharDetalhe(false)
+})
+document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape' && estado.detalhe) fecharDetalhe()
+})
+
+function dadosDetalhe() {
+  const det = estado.detalhe
+  if (!det) return null
+  if (det.mun) {
+    if (estado.aba.id === det.aba && abrAtual() === det.abr && estado.dados?.mun?.cd === det.mun.cd) return estado.dados
+    return det.dados || null
+  }
+  return dadosCarregados(det.aba, det.abr)
+}
+
+function serieDetalhe() {
+  const det = estado.detalhe
+  const sessao = historicoSessao.get(`${det.aba}|${det.abr}|${det.mun?.cd || ''}|${det.sqcand}`) || []
+  if (det.mun) return sessao
+  const guardada = historico[idFav(det.aba, det.abr, det.sqcand)] || []
+  return guardada.length >= sessao.length ? guardada : sessao
+}
+
+// Gráfico de linha genérico: x = % das seções apuradas.
+function graficoLinha(pontos, { cor, fmtY, zero = false, titulo }) {
+  if (pontos.length < 2) return ''
+  const W = 320, H = 120, ML = 6, MR = 6, MT = 16, MB = 18
+  const xs = pontos.map((p) => p.x), ys = pontos.map((p) => p.y)
+  const x0 = Math.min(...xs), x1 = Math.max(...xs)
+  let y0 = zero ? 0 : Math.min(...ys), y1 = Math.max(...ys)
+  if (y1 === y0) { y0 -= Math.abs(y0) * 0.05 || 1; y1 += Math.abs(y1) * 0.05 || 1 }
+  const pad = zero ? 0 : (y1 - y0) * 0.12
+  y0 = zero ? y0 : y0 - pad
+  y1 += pad
+  const X = (v) => (x1 === x0 ? W / 2 : ML + ((v - x0) / (x1 - x0)) * (W - ML - MR))
+  const Y = (v) => MT + (1 - (v - y0) / (y1 - y0)) * (H - MT - MB)
+  const pts = pontos.map((p) => `${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join(' ')
+  const ult = pontos[pontos.length - 1]
+  const alvos = pontos
+    .map(
+      (p) =>
+        `<circle class="alvo" cx="${X(p.x).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="8" data-dica="${esc(
+          `<strong>${fmtY(p.y)}</strong><br>com ${fmtPct.format(p.x)}% apurado${p.t ? ' · ' + new Date(p.t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : ''}`,
+        )}"></circle>`,
+    )
+    .join('')
+  return `<figure class="grafico">
+    <figcaption>${esc(titulo)}</figcaption>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(titulo)}" style="--cor:${cor}">
+      <line class="grade" x1="${ML}" x2="${W - MR}" y1="${Y(y1 - pad).toFixed(1)}" y2="${Y(y1 - pad).toFixed(1)}"></line>
+      <line class="grade" x1="${ML}" x2="${W - MR}" y1="${Y(y0 + (zero ? 0 : pad)).toFixed(1)}" y2="${Y(y0 + (zero ? 0 : pad)).toFixed(1)}"></line>
+      <text class="rot" x="${ML}" y="${(Y(y1 - pad) - 4).toFixed(1)}">${esc(fmtY(y1 - pad))}</text>
+      <text class="rot" x="${ML}" y="${(Y(y0 + (zero ? 0 : pad)) - 4).toFixed(1)}">${esc(fmtY(y0 + (zero ? 0 : pad)))}</text>
+      <polyline class="linha" points="${pts}"></polyline>
+      <circle class="ponta" cx="${X(ult.x).toFixed(1)}" cy="${Y(ult.y).toFixed(1)}" r="4.5"></circle>
+      <text class="rot" x="${ML}" y="${H - 4}">${fmtPct.format(x0)}% apurado</text>
+      <text class="rot" x="${W - MR}" y="${H - 4}" text-anchor="end">${fmtPct.format(x1)}% apurado</text>
+      ${alvos}
+    </svg>
+  </figure>`
+}
+
+// Tendência do % dos válidos: compara o último ponto com o de algumas atualizações atrás.
+function tendencia(serie) {
+  const comPct = serie.filter((p) => p[3] != null)
+  if (comPct.length < 2) return null
+  const ult = comPct[comPct.length - 1]
+  const ref = comPct[Math.max(0, comPct.length - 6)]
+  const ini = comPct[0]
+  const delta = ult[3] - ref[3]
+  const limite = Math.max(0.005, Math.abs(ult[3]) * 0.004)
+  const tipo = delta > limite ? 'alta' : delta < -limite ? 'queda' : 'estavel'
+  return { tipo, delta, ref, ini, ult, deltaTotal: ult[3] - ini[3] }
+}
+
+const pp = (v) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${fmtPct.format(Math.abs(v))} p.p.`
+
+function blocoDisputa(d, c, aba) {
+  const pos = d.candidatos.indexOf(c) + 1
+  const acima = d.candidatos[pos - 2]
+  const abaixo = d.candidatos[pos]
+  const itens = []
+  if (acima) itens.push(`▼ <strong>${fmt.format(acima.votos - c.votos)}</strong> votos atrás do ${pos - 1}º (${esc(acima.nome)})`)
+  else itens.push('🥇 Em 1º lugar')
+  if (abaixo) itens.push(`▲ <strong>${fmt.format(c.votos - abaixo.votos)}</strong> votos à frente do ${pos + 1}º (${esc(abaixo.nome)})`)
+  if (aba.tipo === 'maj') {
+    if (aba.cargo === 5) {
+      const corte = d.candidatos[d.vagas - 1]
+      const fora = d.candidatos[d.vagas]
+      if (pos <= d.vagas && fora) itens.push(`🪑 Dentro das ${d.vagas} vagas: <strong>${fmt.format(c.votos - fora.votos)}</strong> votos à frente do ${d.vagas + 1}º`)
+      else if (corte) itens.push(`🪑 Fora das ${d.vagas} vagas: precisa de <strong>${fmt.format(corte.votos - c.votos + 1)}</strong> votos para passar o ${d.vagas}º`)
+    } else if (TURNO === 1) {
+      itens.push(c.percentual > 50 ? `✅ Acima de 50% dos válidos: venceria no 1º turno` : `🎯 Faltam <strong>${pp(50 - c.percentual).replace('+', '')}</strong> para 50% dos válidos (vitória no 1º turno)`)
+    }
+  } else if (d.projecao?.qe && !d.mun) {
+    const g = d.projecao.grupos.find((x) => x.nome === c.agremiacao)
+    const noPartido = g ? g.cands.indexOf(c) + 1 : 0
+    if (noPartido) itens.push(`🏛️ ${noPartido}º mais votado de ${esc(nomeCurto(c.agremiacao))} (${g.cands.length} candidatos)`)
+    if (g) itens.push(`📊 ${esc(nomeCurto(c.agremiacao))}: ${fmt.format(g.votos)} votos (com ${fmt.format(g.legenda)} de legenda) · ${g.eleitos.length} vaga(s) na projeção · QP ${g.qp}`)
+    if (c.projecao) itens.push(`★ Eleito na projeção por ${c.projecao.forma === 'QP' ? 'quociente partidário' : c.projecao.forma}`)
+    else if (g?.eleitos.length) {
+      const ultimo = g.eleitos[g.eleitos.length - 1]
+      itens.push(`🎯 <strong>${fmt.format(Math.max(0, ultimo.votos - c.votos))}</strong> votos atrás do último eleito do partido (${esc(ultimo.nome)})`)
+    } else itens.push('🎯 O partido ainda não tem vaga na projeção')
+    itens.push(`Mínimo para vaga por QP: ${fmt.format(Math.ceil(0.1 * d.projecao.qe))} votos (10% do QE) — ${c.votos >= 0.1 * d.projecao.qe ? 'atingido ✓' : 'não atingido'}`)
+  }
+  return `<ul class="det-lista">${itens.map((i) => `<li>${i}</li>`).join('')}</ul>`
+}
+
+function renderDetalhe() {
+  const det = estado.detalhe
+  if (!det) return
+  const aba = ABAS.find((a) => a.id === det.aba)
+  const d = dadosDetalhe()
+  const voltar = `<div class="det-topo"><button type="button" class="det-voltar" data-fechar>‹ Voltar</button>
+    <span class="det-onde">${esc(aba ? aba.rotulo.replace(/ SC$/, '') : '')} · ${esc(det.mun ? `${det.mun.nm} (SC)` : NOMES_ABR[det.abr] || det.abr.toUpperCase())}</span></div>`
+  if (!d) {
+    detalheEl.innerHTML = `<div class="det-corpo">${voltar}<div class="cartao vazio">${det.erro ? 'Não consegui carregar os dados agora.' : 'Carregando…'}</div></div>`
+    return
+  }
+  const c = d.candidatos.find((x) => x.sqcand === det.sqcand)
+  if (!c) {
+    detalheEl.innerHTML = `<div class="det-corpo">${voltar}<div class="cartao vazio">Candidato não encontrado nesta apuração.</div></div>`
+    return
+  }
+  const cor = corPartido(c.partido)
+  const pos = d.candidatos.indexOf(c) + 1
+  const total = d.candidatos.filter((x) => x.valido).length
+  const serie = serieDetalhe()
+  const t = tendencia(serie)
+  const ganhoUlt = serie.length > 1 ? serie[serie.length - 1][1] - serie[serie.length - 2][1] : 0
+  const tendTxt = !t
+    ? `<p class="nota">A tendência aparece depois de algumas atualizações com votos novos. ${
+        ehFavorito(det.aba, det.abr, det.sqcand) ? '' : 'Toque no ♡ para guardar o histórico deste candidato mesmo se fechar o app.'
+      }</p>`
+    : `<div class="tend tend-${t.tipo}">
+        <span class="tend-icone">${t.tipo === 'alta' ? '📈' : t.tipo === 'queda' ? '📉' : '➖'}</span>
+        <div><strong>${t.tipo === 'alta' ? 'Crescendo' : t.tipo === 'queda' ? 'Caindo' : 'Estável'}</strong>
+          <span>${pp(t.delta)} nas últimas atualizações (de ${fmtPct.format(t.ref[3])}% para ${fmtPct.format(t.ult[3])}% dos válidos)</span>
+          <span class="mudo">Desde ${fmtPct.format(t.ini[0])}% apurado: ${pp(t.deltaTotal)}${
+            t.ini[4] && t.ult[4] && t.ini[4] !== t.ult[4] ? ` · posição ${t.ini[4]}º → ${t.ult[4]}º` : ''
+          }</span></div>
+      </div>`
+  const ptsPct = serie.filter((p) => p[3] != null).map((p) => ({ x: p[0], y: p[3], t: p[2] }))
+  const ptsVot = serie.map((p) => ({ x: p[0], y: p[1], t: p[2] }))
+  const ptsPos = serie.filter((p) => p[4]).map((p) => ({ x: p[0], y: -p[4], t: p[2] }))
+  const vices = c.vices.length
+    ? `<section class="cartao"><h3>${aba?.cargo === 5 ? 'Suplentes' : 'Vice'}</h3><ul class="det-lista">${c.vices
+        .map((v) => `<li>${v.tipo === 'v' ? 'Vice' : v.tipo === 's1' ? '1º suplente' : v.tipo === 's2' ? '2º suplente' : 'Suplente'}: <strong>${esc(v.nome)}</strong>${v.partido ? ` (${esc(v.partido)})` : ''}</li>`)
+        .join('')}</ul></section>`
+    : ''
+  const fl = det.floripa
+  const floripa =
+    det.abr === UF || aba?.id === 'presidente'
+      ? `<section class="cartao"><h3>📍 Votos na Grande Florianópolis</h3>${
+          !fl
+            ? `<p class="nota">Consulta os municípios da região metropolitana (pode levar alguns segundos).</p>
+               <button type="button" class="botao" data-carregar-floripa>Ver votos por município</button>`
+            : fl.carregando
+              ? `<p class="nota">Consultando ${fl.feitos} de ${fl.total} municípios…</p>`
+              : `<table class="tabela"><thead><tr><th>Município</th><th class="dir">Votos</th><th class="dir">% válidos</th></tr></thead><tbody>${fl.linhas
+                  .sort((a, b) => b.votos - a.votos)
+                  .map((l) => `<tr style="${estiloCor(cor)}"><td>${esc(l.nm)}<div class="cand-meta">${fmtPct.format(l.pst)}% apurado · ${l.pos}º no município</div></td><td class="dir">${fmt.format(l.votos)}</td><td class="dir">${fmtPct.format(l.pct)}%</td></tr>`)
+                  .join('')}</tbody></table>
+                <p class="nota">Total na região: <strong>${fmt.format(fl.linhas.reduce((a, l) => a + l.votos, 0))}</strong> votos. ${fl.semDados ? `${fl.semDados} município(s) ainda sem dados.` : ''}</p>
+                <button type="button" class="botao secundario" data-carregar-floripa>Atualizar</button>`
+        }</section>`
+      : ''
+  detalheEl.innerHTML = `<div class="det-corpo">
+    ${voltar}
+    <section class="cartao det-cabeca" style="${estiloCor(cor)}">
+      <div class="det-id">
+        ${foto(c, cor)}
+        <div class="cand-info">
+          <h2>${esc(c.nome)}</h2>
+          ${c.nomeCompleto && c.nomeCompleto !== c.nome ? `<p class="mudo det-completo">${esc(c.nomeCompleto)}</p>` : ''}
+          <div class="cand-meta">${pill(c.partido, cor)} nº ${esc(c.numero)}${c.agremiacao !== c.partido ? ` · ${esc(nomeCurto(c.agremiacao))}` : ''}</div>
+          <div class="det-selo">${selo(c)}</div>
+        </div>
+        ${estrela(c, det.aba, det.abr)}
+      </div>
+      <div class="fav-nums">
+        <div><span class="fav-rot">Votos</span><strong>${fmt.format(c.votos)}</strong>${ganhoUlt > 0 ? `<span class="delta">▲ ${fmt.format(ganhoUlt)}</span>` : ''}</div>
+        <div><span class="fav-rot">% válidos</span><strong>${fmtPct.format(c.percentual)}%</strong></div>
+        <div><span class="fav-rot">Posição</span><strong>${pos}º</strong><span class="mudo">de ${total}</span></div>
+      </div>
+      <p class="nota">${fmtPct.format(d.secoes.percentual)}% das seções apuradas · dados do TSE de ${esc(d.atualizadoEm || '—')}</p>
+    </section>
+    <section class="cartao"><h3>Tendência</h3>${tendTxt}
+      ${graficoLinha(ptsPct, { cor, fmtY: (v) => `${fmtPct.format(v)}%`, titulo: '% dos votos válidos' })}
+      ${graficoLinha(ptsVot, { cor, fmtY: (v) => fmt.format(Math.round(v)), zero: true, titulo: 'Votos acumulados' })}
+      ${ptsPos.length > 1 && new Set(ptsPos.map((p) => p.y)).size > 1 ? graficoLinha(ptsPos, { cor, fmtY: (v) => `${Math.round(-v)}º`, titulo: 'Posição (mais alto = melhor)' }) : ''}
+    </section>
+    <section class="cartao"><h3>Disputa</h3>${blocoDisputa(d, c, aba)}</section>
+    ${vices}
+    ${floripa}
+  </div>`
+}
+
+async function carregarFloripaDetalhe() {
+  const det = estado.detalhe
+  if (!det) return
+  const aba = ABAS.find((a) => a.id === det.aba)
+  let lista
+  try {
+    lista = await municipios(aba)
+  } catch {
+    return
+  }
+  const alvo = lista.filter((m) => NUCLEO.has(chaveNome(m.nm)) || EXPANSAO.has(chaveNome(m.nm)))
+  const fl = { carregando: true, feitos: 0, total: alvo.length, linhas: [], semDados: 0 }
+  det.floripa = fl
+  renderDetalhe()
+  const ctrl = new AbortController()
+  det.ctrlFloripa = ctrl
+  await emLotes(alvo, 4, async (m) => {
+    try {
+      const d = await buscar(aba, UF, TURNO, ctrl.signal, m)
+      const c = d.candidatos.find((x) => x.sqcand === det.sqcand)
+      fl.linhas.push({ nm: m.nm, votos: c?.votos || 0, pct: c?.percentual || 0, pos: c ? d.candidatos.indexOf(c) + 1 : '–', pst: d.secoes.percentual })
+    } catch (err) {
+      if (err.name === 'AbortError') throw err
+      fl.semDados++
+    }
+    fl.feitos++
+    if (estado.detalhe === det) renderDetalhe()
+  }, ctrl.signal).catch(() => {})
+  fl.carregando = false
+  if (estado.detalhe === det) renderDetalhe()
+}
+
+detalheEl.addEventListener('click', (ev) => {
+  if (ev.target.closest('[data-fechar]') || ev.target === detalheEl) return fecharDetalhe()
+  const favBtn = ev.target.closest('[data-fav]')
+  if (favBtn) {
+    tratarFav(favBtn)
+    renderDetalhe()
+    return
+  }
+  if (ev.target.closest('[data-carregar-floripa]')) carregarFloripaDetalhe()
+})
+detalheEl.addEventListener('pointermove', (ev) => {
+  const el = ev.target.closest('[data-dica]')
+  if (el) mostrarDica(el, ev.clientX, ev.clientY)
+  else if (ev.pointerType === 'mouse') dica.hidden = true
+})
+detalheEl.addEventListener('pointerdown', (ev) => {
+  const el = ev.target.closest('[data-dica]')
+  if (!el || ev.pointerType === 'mouse') return
+  mostrarDica(el, ev.clientX, ev.clientY)
+  clearTimeout(dicaTimer)
+  dicaTimer = setTimeout(() => (dica.hidden = true), 2500)
+})
+detalheEl.addEventListener('scroll', () => (dica.hidden = true), { passive: true })
 
 /* ---------------- início ---------------- */
 
