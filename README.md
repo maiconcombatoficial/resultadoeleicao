@@ -9,6 +9,8 @@ App web para acompanhar a apuração das **Eleições Gerais 2026** com os dados
 
 **📍 Municípios de SC:** em qualquer aba de Santa Catarina (e em Presidente → Santa Catarina), digite o nome de um município para ver a apuração só dele. A lista dos 295 municípios vem do TSE (`config/mun-e<eleição>-cm.json`) e o resultado de `dados/sc/sc<código TSE>-c<cargo>-e<eleição>-u.json`. O município escolhido fica salvo e vale para todas as abas.
 
+**✔ Situação oficial do TSE:** quando o TSE marca os eleitos (ou fecha a totalização), cada candidato passa a mostrar a situação oficial — "✔ Eleito · conforme TSE" (com QP ou média), "Suplente · conforme TSE", "2º turno · conforme TSE" ou "Não eleito · conforme TSE" — e os selos de projeção e de chance saem de cena.
+
 **🔄 Chance de reverter:** selo em cada candidato dizendo se, com as urnas que faltam, ainda dá para mudar a situação: ✅ Garantido / ❌ Sem chance (certeza matemática nos majoritários: a diferença é maior que todos os votos que faltam), 🛡️ Vaga segura, 👍 provável, ⚠️ em risco, 🔄 Pode reverter, ⏳ Reversão difícil, 📉 improvável. Nos deputados usa o próprio cálculo do TSE para achar quantos votos a mais (ou a menos) mudariam a vaga; a lógica está em `chances.js`. Votos que faltam = válidos apurados × seções que faltam ÷ seções apuradas.
 
 **👤 Detalhes do candidato:** toque no nome (ou na linha/cartão) de qualquer candidato para abrir a ficha: votos, % dos válidos, posição, tendência (crescendo, caindo ou estável), gráficos de % e de votos ao longo da apuração, disputa com os vizinhos, situação na projeção, vice/suplentes e votos na Grande Florianópolis.

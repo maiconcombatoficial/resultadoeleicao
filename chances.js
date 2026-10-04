@@ -13,7 +13,7 @@
 // com o desempenho atual dele, supondo que os demais mantenham o próprio ritmo:
 //   multiplicador ≤ 1,1 → pode reverter · ≤ 1,5 → reversão difícil · acima → improvável.
 
-import { votosParaEleger, folgaDaVaga } from './vagas.js?v=202610042216'
+import { votosParaEleger, folgaDaVaga } from './vagas.js?v=202610042247'
 
 export const NIVEIS = {
   garantido: { rotulo: 'Garantido', icone: '✅', classe: 'ch-garantido' },
