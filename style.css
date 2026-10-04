@@ -547,3 +547,16 @@ html.com-detalhe, html.com-detalhe body { overflow: hidden; }
 }
 .chance-det { margin-bottom: 10px; }
 .chance-det .tag.chance { font-size: 0.9rem; padding: 5px 12px; }
+
+/* ---------- situação oficial do TSE ---------- */
+.tag.eleito-tse {
+  display: inline-flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px; row-gap: 0;
+  background: linear-gradient(90deg, #067a3e, #0b9a52); color: #fff; font-size: 0.78rem; padding: 4px 11px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #0b9a52 35%, transparent); white-space: normal;
+}
+.tag.eleito-tse b { white-space: nowrap; letter-spacing: 0.04em; }
+.tag.eleito-tse small { font-size: 0.64rem; font-weight: 700; opacity: 0.92; text-transform: none; letter-spacing: 0; white-space: nowrap; }
+.tag.nao-eleito { background: var(--fundo); color: var(--mudo); border: 1px solid var(--linha); text-transform: none; letter-spacing: 0; white-space: normal; }
+.tag.suplente, .tag.turno2 { white-space: normal; }
+.cand.is-eleito { box-shadow: 0 0 0 3px #0b9a52; }
+.chance-det .tag.eleito-tse { font-size: 0.95rem; padding: 6px 14px; }

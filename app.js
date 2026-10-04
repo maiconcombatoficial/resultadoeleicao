@@ -4,9 +4,9 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610042216'
-import { chanceDe, NIVEIS } from './chances.js?v=202610042216'
-import { corPartido, corTexto } from './cores.js?v=202610042216'
+import { calcularVagas } from './vagas.js?v=202610042247'
+import { chanceDe, NIVEIS } from './chances.js?v=202610042247'
+import { corPartido, corTexto } from './cores.js?v=202610042247'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -180,7 +180,24 @@ function aplicarProjecao(d) {
 
 async function buscar(aba, abr, turno, signal, mun = null) {
   const d = await buscarBruto(aba, abr, turno, signal, mun)
-  return aba.tipo === 'prop' && !mun ? aplicarProjecao(d) : d
+  const out = aba.tipo === 'prop' && !mun ? aplicarProjecao(d) : d
+  if (DEMO && out.final && out.projecao) {
+    // demonstração: no fim, simula a marcação oficial do TSE com o próprio cálculo
+    for (const c of out.candidatos) {
+      c.eleito = !!c.projecao
+      c.situacao = c.projecao ? (c.projecao.forma === 'QP' ? 'Eleito por QP' : 'Eleito por média') : c.votos > 0 ? 'Suplente' : 'Não eleito'
+    }
+  }
+  marcarDefinicaoTSE(out)
+  return out
+}
+
+// O resultado está definido pelo TSE quando a totalização é final ou o TSE já marcou todos os eleitos.
+function marcarDefinicaoTSE(d) {
+  const eleitos = d.candidatos.filter((c) => c.eleito).length
+  d.tseDefinido = d.final || eleitos >= d.vagas
+  d.eleitosTSE = eleitos
+  for (const c of d.candidatos) c.tseDefinido = d.tseDefinido
 }
 
 async function buscarBruto(aba, abr, turno, signal, mun = null) {
@@ -980,8 +997,8 @@ function resumo(d) {
   const f = (n) => tpl.querySelector(`[data-f="${n}"]`)
   const local = nomeLocal(d)
   f('titulo').textContent = `${d.cargoNome} · ${local}`
-  f('selo').textContent = d.final ? 'Totalização final' : TURNO === 2 ? '2º turno' : 'Em apuração'
-  f('selo').classList.toggle('final', d.final)
+  f('selo').textContent = d.final ? 'Totalização final · TSE' : d.tseDefinido ? 'Eleitos definidos pelo TSE' : TURNO === 2 ? '2º turno' : 'Em apuração'
+  f('selo').classList.toggle('final', !!(d.final || d.tseDefinido))
   const p = d.secoes.percentual
   f('barra').style.width = `${Math.min(100, p)}%`
   f('barra').parentElement.setAttribute('aria-valuenow', String(Math.round(p)))
@@ -1020,7 +1037,7 @@ function contextoMaj(aba, d) {
 const ROTULOS_2T = { garantido: 'Garantido no 2º turno', segura: '2º turno seguro', provavel: '2º turno provável', risco: '2º turno em risco', fora: 'Fora do 2º turno' }
 
 function chance(d, c, aba, forcar = false) {
-  if (!d || !aba || d.mun || d.final || !c.valido || d.secoes.percentual < 1) return null
+  if (!d || !aba || d.mun || d.final || d.tseDefinido || c.eleito || !c.valido || d.secoes.percentual < 1) return null
   if (aba.tipo === 'prop') {
     if (!d.projecao?.qe) return null
     if (!forcar && d.candidatos.indexOf(c) >= 3 * d.vagas && !ehFavorito(aba.id, d.abrangencia, c.sqcand)) return null
@@ -1049,6 +1066,8 @@ function seloChance(d, c, aba, forcar = false) {
 
 function textoChance(d, c, aba) {
   const ch = chance(d, c, aba, true)
+  if (c.eleito) return `<div class="chance-det">${selo(c)}</div><p>O TSE já informou que <strong>${esc(c.nome)}</strong> está eleito${/por /i.test(c.situacao) ? ` (${esc(c.situacao.toLowerCase())})` : ''}. Esta é a situação oficial.</p>`
+  if (d.tseDefinido) return `<div class="chance-det">${selo(c)}</div><p>O TSE já definiu o resultado deste cargo. Esta é a situação oficial.</p>`
   if (!ch) {
     if (d.final) return '<p class="nota">Apuração encerrada: não há mais o que reverter.</p>'
     if (d.mun) return '<p class="nota">A chance de reverter é calculada com os números de toda a abrangência (estado ou país), não do município.</p>'
@@ -1085,7 +1104,17 @@ function textoChance(d, c, aba) {
 }
 
 function selo(c) {
-  if (c.eleito) return `<span class="tag eleito">${esc(/eleito/i.test(c.situacao) ? c.situacao : 'Eleito')}</span>`
+  if (c.eleito) {
+    const forma = (c.situacao.match(/por (QP|m[ée]dia)/i) || [])[0]
+    return `<span class="tag eleito-tse" title="Situação oficial informada pelo TSE"><b>✔ Eleito</b><small>conforme TSE${forma ? ` · ${esc(forma)}` : ''}</small></span>`
+  }
+  if (c.tseDefinido) {
+    if (/2º turno|segundo turno/i.test(c.situacao)) return `<span class="tag turno2">2º turno · conforme TSE</span>`
+    if (/suplente/i.test(c.situacao)) return `<span class="tag suplente">Suplente · conforme TSE</span>`
+    if (!c.valido) return `<span class="tag invalido">${esc(c.destinacao || 'Voto anulado')}</span>`
+    return `<span class="tag nao-eleito">${esc(c.situacao && !/^eleito/i.test(c.situacao) ? c.situacao : 'Não eleito')} · conforme TSE</span>`
+  }
+  if (/2º turno|segundo turno/i.test(c.situacao)) return `<span class="tag turno2">2º turno · conforme TSE</span>`
   if (c.projecao)
     return `<span class="tag eleito-proj" title="Pelo cálculo do TSE (quociente eleitoral, legenda e sobras) com os votos apurados até agora"><b>★ Eleito</b><small>${esc(
       c.projecao.forma === 'QP' ? 'QP' : c.projecao.forma === 'média' ? 'média' : c.projecao.forma,
@@ -1190,7 +1219,7 @@ function cardFavorito(f, d, { mostrarCargo = false } = {}) {
   const ganhoUlt = serie.length > 1 ? serie[serie.length - 1][1] - serie[serie.length - 2][1] : 0
   let situacao = selo(c)
   let linhaProj = ''
-  if (!situacao && aba?.tipo === 'prop' && d.projecao?.qe) {
+  if (!situacao && !c.tseDefinido && aba?.tipo === 'prop' && d.projecao?.qe) {
     const g = d.projecao.grupos.find((x) => x.nome === c.agremiacao)
     const ultimo = g?.eleitos[g.eleitos.length - 1]
     situacao = `<span class="tag fora">Fora da projeção</span>`
@@ -1365,7 +1394,7 @@ function listaProporcional() {
       .slice(0, limite)
       .map(({ c, pos }) => {
         const cor = corPartido(c.partido)
-        return `<tr ${attrCand(c)} class="${c.eleito ? 'is-eleito' : c.projecao ? 'is-proj' : ''} ${ganho(c) > 0 ? 'subiu' : ''}" style="${estiloCor(cor)}">
+        return `<tr ${attrCand(c)} class="${c.eleito ? 'is-eleito' : c.projecao && !c.tseDefinido ? 'is-proj' : ''} ${ganho(c) > 0 ? 'subiu' : ''}" style="${estiloCor(cor)}">
         <td class="mudo pos-tab">${pos}</td>
         <td>
           <div class="cand-linha">${estrela(c)}<span class="cand-nome">${esc(c.nome)}</span> ${selo(c)} ${seloChance(d, c, estado.aba)}</div>
@@ -1518,7 +1547,8 @@ function renderProporcional(d) {
     const ordenados = [...eleitos].sort((a, b) => ordem.get(a.agremiacao) - ordem.get(b.agremiacao) || b.votos - a.votos)
     const contagem = grupos.filter((g) => g.eleitos)
     bancada = `<section class="cartao">
-      <h3>Bancada eleita (${eleitos.length} de ${d.vagas})</h3>
+      <h3>✔ Bancada eleita conforme TSE (${eleitos.length} de ${d.vagas})</h3>
+      <p class="nota">Eleitos informados oficialmente pelo TSE.</p>
       ${hemiciclo(ordenados)}
       <ul class="legenda">${contagem
         .map((g) => `<li data-partido="${esc(g.nome)}"><i style="background:${g.cor}"></i>${esc(nomeCurto(g.nome))} <strong>${g.eleitos}</strong></li>`)
@@ -1917,7 +1947,7 @@ function renderDetalhe() {
       ${graficoLinha(ptsVot, { cor, fmtY: (v) => fmt.format(Math.round(v)), zero: true, titulo: 'Votos acumulados' })}
       ${ptsPos.length > 1 && new Set(ptsPos.map((p) => p.y)).size > 1 ? graficoLinha(ptsPos, { cor, fmtY: (v) => `${Math.round(-v)}º`, titulo: 'Posição (mais alto = melhor)' }) : ''}
     </section>
-    <section class="cartao"><h3>Chance de reverter</h3>${textoChance(d, c, aba)}</section>
+    <section class="cartao"><h3>${c.eleito || d.tseDefinido ? 'Situação oficial (TSE)' : 'Chance de reverter'}</h3>${textoChance(d, c, aba)}</section>
     <section class="cartao"><h3>Disputa</h3>${blocoDisputa(d, c, aba)}</section>
     ${vices}
     ${floripa}
