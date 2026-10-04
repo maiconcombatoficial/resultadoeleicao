@@ -4,7 +4,7 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { corPartido, corTexto } from './cores.js?v=202610042109'
+import { corPartido, corTexto } from './cores.js?v=202610042119'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -20,7 +20,7 @@ const ELEICOES = {
 }
 
 const ABAS = [
-  { id: 'favoritos', rotulo: '⭐ Acompanhados', tipo: 'fav', abrangencias: ['br'] },
+  { id: 'favoritos', rotulo: '❤️ Acompanhados', tipo: 'fav', abrangencias: ['br'] },
   { id: 'presidente', rotulo: 'Presidente', cargo: 1, eleicao: 'federal', tipo: 'maj', abrangencias: ['br', UF] },
   { id: 'senador', rotulo: 'Senado SC', cargo: 5, eleicao: 'estadual', tipo: 'maj', abrangencias: [UF], turno1: true },
   { id: 'depfed', rotulo: 'Dep. Federal SC', cargo: 6, eleicao: 'estadual', tipo: 'prop', abrangencias: [UF], turno1: true },
@@ -769,7 +769,7 @@ function barraEmpilhada(fatias, { marco50 = false, legenda = true, total: totalI
 function estrela(c, abaId = estado.aba.id, abr = abrAtual()) {
   const on = ehFavorito(abaId, abr, c.sqcand)
   return `<button type="button" class="estrela ${on ? 'on' : ''}" data-fav="${esc(c.sqcand)}" data-fav-aba="${esc(abaId)}" data-fav-abr="${esc(abr)}"
-    aria-pressed="${on}" aria-label="${on ? 'Deixar de acompanhar' : 'Acompanhar'} ${esc(c.nome)}" title="${on ? 'Deixar de acompanhar' : 'Acompanhar este candidato'}">${on ? '★' : '☆'}</button>`
+    aria-pressed="${on}" aria-label="${on ? 'Deixar de acompanhar' : 'Acompanhar'} ${esc(c.nome)}" title="${on ? 'Deixar de acompanhar' : 'Acompanhar este candidato'}">${on ? '♥' : '♡'}</button>`
 }
 
 // Gráfico da evolução: votos (eixo y, a partir de zero) × % de seções apuradas (eixo x).
@@ -858,7 +858,7 @@ function secaoAcompanhando(d) {
   const meus = favoritos.filter((f) => f.aba === estado.aba.id && f.abr === abr)
   if (!meus.length) return ''
   return `<section class="cartao acompanhando">
-    <h3>⭐ Acompanhando</h3>
+    <h3>❤️ Acompanhando</h3>
     <div class="favs">${meus.map((f) => cardFavorito(f, d)).join('')}</div>
   </section>`
 }
@@ -866,8 +866,8 @@ function secaoAcompanhando(d) {
 function renderFavoritos() {
   if (!favoritos.length) {
     return `<div class="cartao vazio">
-      <p class="vazio-titulo">⭐ Nenhum candidato acompanhado ainda</p>
-      <p>Toque na estrela <span class="estrela-exemplo">☆</span> ao lado de qualquer candidato, em qualquer aba, para acompanhar aqui a posição, os votos e a evolução dele durante a apuração.</p>
+      <p class="vazio-titulo">❤️ Nenhum candidato acompanhado ainda</p>
+      <p>Toque no coração <span class="estrela-exemplo">♡</span> ao lado de qualquer candidato, em qualquer aba, para acompanhar aqui a posição, os votos e a evolução dele durante a apuração.</p>
       <p class="nota">A lista fica salva neste aparelho.</p>
     </div>`
   }
