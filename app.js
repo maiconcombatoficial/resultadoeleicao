@@ -4,7 +4,7 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { corPartido, corTexto } from './cores.js?v=202610042119'
+import { corPartido, corTexto } from './cores.js?v=202610042129'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -21,6 +21,7 @@ const ELEICOES = {
 
 const ABAS = [
   { id: 'favoritos', rotulo: '❤️ Acompanhados', tipo: 'fav', abrangencias: ['br'] },
+  { id: 'municipios', rotulo: '📊 Municípios', tipo: 'mun', abrangencias: ['sc'] },
   { id: 'presidente', rotulo: 'Presidente', cargo: 1, eleicao: 'federal', tipo: 'maj', abrangencias: ['br', UF] },
   { id: 'senador', rotulo: 'Senado SC', cargo: 5, eleicao: 'estadual', tipo: 'maj', abrangencias: [UF], turno1: true },
   { id: 'depfed', rotulo: 'Dep. Federal SC', cargo: 6, eleicao: 'estadual', tipo: 'prop', abrangencias: [UF], turno1: true },
@@ -169,6 +170,9 @@ const MUNICIPIOS_DEMO = [
   ['81051', 'Florianópolis', true], ['81795', 'Joinville'], ['80470', 'Blumenau'], ['81132', 'Chapecó'],
   ['81574', 'Itajaí'], ['80950', 'Criciúma'], ['82230', 'São José'], ['81779', 'Jaraguá do Sul'],
   ['82015', 'Palhoça'], ['81833', 'Lages'], ['80570', 'Balneário Camboriú'], ['82694', 'Tubarão'],
+  ['80390', 'Biguaçu'], ['82511', 'Santo Amaro da Imperatriz'], ['81353', 'Governador Celso Ramos'],
+  ['80152', 'Antônio Carlos'], ['80055', 'Águas Mornas'], ['82392', 'São Pedro de Alcântara'],
+  ['82678', 'Tijucas'], ['81302', 'Garopaba'], ['82155', 'Paulo Lopes'], ['82171', 'Rancho Queimado'],
 ].map(([cd, nm, capital]) => ({ cd, nm, capital: !!capital }))
 
 const municipiosCache = new Map()
@@ -213,7 +217,8 @@ function aleatorio(semente) {
 function demo(aba, abr, mun = null) {
   const r = aleatorio(`${aba.id}|${abr}|${mun?.cd || ''}`)
   const ciclo = 10 * 60_000
-  const p = Math.min(1, ((Date.now() % ciclo) / ciclo) * 1.15)
+  const ritmo = mun ? 0.6 + 0.8 * aleatorio(`ritmo|${mun.cd}`)() : 1 // cada município apura num ritmo
+  const p = Math.min(1, ((Date.now() % ciclo) / ciclo) * 1.15 * ritmo)
   const eleitorado = mun ? 40_000 + Math.round(r() * 400_000) : abr === 'br' ? 158_000_000 : 5_600_000
   const secoesTot = mun ? Math.round(eleitorado / 330) : abr === 'br' ? 472_000 : 16_900
   const vagas = { 1: 1, 3: 1, 5: 2, 6: 16, 7: 40 }[aba.cargo]
@@ -346,6 +351,7 @@ function abrAtual() {
 
 // O município só vale quando a aba está olhando Santa Catarina.
 function munAtual() {
+  if (estado.aba.tipo !== 'maj' && estado.aba.tipo !== 'prop') return null
   return abrAtual() === UF ? estado.mun : null
 }
 
@@ -412,8 +418,9 @@ async function carregar() {
   const abr = abrAtual()
   statusEl.textContent = 'Atualizando…'
   statusEl.className = 'status carregando'
-  if (!estado.dados) conteudo.innerHTML = (aba.tipo === 'fav' ? '' : cabecalhoAbrangencia()) + `<div class="cartao vazio">Carregando ${esc(aba.rotulo)}${munAtual() ? ` em ${esc(munAtual().nm)}` : ''}…</div>`
+  if (!estado.dados) conteudo.innerHTML = (aba.tipo === 'fav' || aba.tipo === 'mun' ? '' : cabecalhoAbrangencia()) + `<div class="cartao vazio">Carregando ${esc(aba.rotulo)}${munAtual() ? ` em ${esc(munAtual().nm)}` : ''}…</div>`
   if (aba.tipo === 'fav') return carregarFavoritos(ctrl)
+  if (aba.tipo === 'mun') return carregarPainelMunicipios(ctrl)
   const mun = munAtual()
   try {
     const dados = await buscar(aba, abr, TURNO, ctrl.signal, mun)
@@ -474,6 +481,214 @@ async function carregarFavoritos(ctrl) {
   statusEl.textContent = erros ? 'Erro ao atualizar' : `Atualizado ${new Date().toLocaleTimeString('pt-BR')}`
   statusEl.className = erros ? 'status erro' : 'status ok'
   if (estado.controlador === ctrl) agendar()
+}
+
+/* ---------------- painel: % apurado por município ---------------- */
+
+// Região Metropolitana de Florianópolis (LC estadual 495/2010): núcleo metropolitano e área de expansão.
+const GRANDE_FLORIPA = [
+  'Florianópolis', 'São José', 'Palhoça', 'Biguaçu', 'Santo Amaro da Imperatriz', 'Governador Celso Ramos',
+  'Antônio Carlos', 'Águas Mornas', 'São Pedro de Alcântara',
+]
+const EXPANSAO_FLORIPA = [
+  'Alfredo Wagner', 'Angelina', 'Anitápolis', 'Canelinha', 'Garopaba', 'Leoberto Leal', 'Major Gercino',
+  'Nova Trento', 'Paulo Lopes', 'Rancho Queimado', 'São Bonifácio', 'São João Batista', 'Tijucas',
+]
+const chaveNome = (nm) => semAcento(nm).replace(/[^a-z]/g, '')
+const NUCLEO = new Set(GRANDE_FLORIPA.map(chaveNome))
+const EXPANSAO = new Set(EXPANSAO_FLORIPA.map(chaveNome))
+const REVARRER_MS = 3 * 60_000 // demais municípios: no máximo uma consulta a cada 3 minutos
+const ABA_PROGRESSO = ABAS.find((a) => a.id === 'presidente') // as seções são as mesmas para todos os cargos
+
+// cd → { cd, nm, pst, st, ts, pc, final, semDados, t }
+const progresso = new Map()
+const painel = { ordem: 'regiao', busca: '', erroLista: false, carregando: 0 }
+
+async function lerProgresso(m, signal) {
+  try {
+    const d = await buscar(ABA_PROGRESSO, UF, TURNO, signal, m)
+    progresso.set(m.cd, {
+      cd: m.cd, nm: m.nm, pst: d.secoes.percentual, st: d.secoes.totalizadas, ts: d.secoes.total,
+      pc: d.eleitorado.pComparecimento, eleitores: d.eleitorado.total, final: d.final || d.secoes.percentual >= 100, t: Date.now(),
+    })
+  } catch (err) {
+    if (err.name === 'AbortError') throw err
+    const antes = progresso.get(m.cd)
+    progresso.set(m.cd, { ...(antes || { cd: m.cd, nm: m.nm }), semDados: !antes?.ts, erro: !(err instanceof NaoDivulgado), t: Date.now() })
+  }
+}
+
+// Consulta com no máximo `n` pedidos ao mesmo tempo, para não sobrecarregar o TSE nem o celular.
+async function emLotes(itens, n, fn, signal) {
+  let i = 0
+  const trabalhador = async () => {
+    while (i < itens.length && !signal.aborted) await fn(itens[i++])
+  }
+  await Promise.all(Array.from({ length: Math.min(n, itens.length) }, trabalhador))
+}
+
+async function carregarPainelMunicipios(ctrl) {
+  const { signal } = ctrl
+  let lista
+  try {
+    lista = await municipios(ABA_PROGRESSO)
+    painel.erroLista = false
+  } catch {
+    painel.erroLista = true
+  }
+  if (signal.aborted) return
+  try {
+    estado.dadosEstado = await buscar(ABA_PROGRESSO, UF, TURNO, signal)
+  } catch (err) {
+    if (err.name === 'AbortError') return
+  }
+  if (!lista) {
+    estado.dados = { painel: true }
+    renderizar()
+    statusEl.textContent = 'Erro ao atualizar'
+    statusEl.className = 'status erro'
+    if (estado.controlador === ctrl) agendar()
+    return
+  }
+  painel.lista = lista
+  const destaque = lista.filter((m) => NUCLEO.has(chaveNome(m.nm)) || EXPANSAO.has(chaveNome(m.nm)))
+  const agora = Date.now()
+  const demais = lista.filter((m) => {
+    if (NUCLEO.has(chaveNome(m.nm)) || EXPANSAO.has(chaveNome(m.nm))) return false
+    const p = progresso.get(m.cd)
+    return !p || (!p.final && agora - p.t > REVARRER_MS)
+  })
+  let ultimoRender = 0
+  const talvezRenderizar = (forcar) => {
+    if (forcar || Date.now() - ultimoRender > 1500) {
+      ultimoRender = Date.now()
+      estado.dados = { painel: true }
+      renderizar()
+    }
+  }
+  try {
+    painel.carregando = destaque.filter((m) => !progresso.get(m.cd)?.final).length + demais.length
+    await emLotes(destaque.filter((m) => !progresso.get(m.cd)?.final), 6, async (m) => {
+      await lerProgresso(m, signal)
+      painel.carregando--
+    }, signal)
+    if (signal.aborted) return
+    talvezRenderizar(true)
+    await emLotes(demais, 6, async (m) => {
+      await lerProgresso(m, signal)
+      painel.carregando--
+      talvezRenderizar(false)
+    }, signal)
+  } catch (err) {
+    if (err.name !== 'AbortError') throw err
+  }
+  if (signal.aborted) return
+  painel.carregando = 0
+  talvezRenderizar(true)
+  statusEl.textContent = `Atualizado ${new Date().toLocaleTimeString('pt-BR')}`
+  statusEl.className = 'status ok'
+  if (estado.controlador === ctrl) agendar()
+}
+
+// Escala sequencial de um só matiz (verde): mais claro = pouco apurado, mais escuro = quase tudo.
+function corProgresso(p) {
+  if (p == null) return 'var(--linha)'
+  const l = 78 - (Math.min(100, p) / 100) * 46
+  return `hsl(145 62% ${l}%)`
+}
+
+function barraMun(p) {
+  const pst = p?.pst
+  return `<div class="pbar"><span style="width:${Math.min(100, pst || 0)}%;background:${corProgresso(pst)}"></span></div>`
+}
+
+function textoPct(p) {
+  if (!p || p.semDados) return '<span class="mudo">sem dados</span>'
+  if (p.pst == null) return '<span class="mudo">…</span>'
+  return `${fmtPct.format(p.pst)}%${p.final ? ' ✓' : ''}`
+}
+
+function cartaoMun(m, grande = false) {
+  const p = progresso.get(m.cd)
+  return `<button type="button" class="mun-card ${grande ? 'grande' : ''} ${p?.final ? 'completo' : ''}" data-abrir-mun="${esc(m.cd)}" data-abrir-nm="${esc(m.nm)}">
+    <span class="mun-nome">${esc(m.nm)}</span>
+    <span class="mun-pct">${textoPct(p)}</span>
+    ${barraMun(p)}
+    ${p?.ts ? `<span class="mun-det">${fmt.format(p.st)} de ${fmt.format(p.ts)} seções${grande && p.pc != null ? ` · comparecimento ${fmtPct.format(p.pc)}%` : ''}</span>` : ''}
+  </button>`
+}
+
+function renderPainelMunicipios() {
+  if (painel.erroLista && !painel.lista) {
+    return `<div class="cartao vazio erro"><p>Não consegui carregar a lista de municípios do TSE. Tentando de novo em instantes.</p></div>`
+  }
+  const lista = painel.lista || []
+  const de = (set) => lista.filter((m) => set.has(chaveNome(m.nm)))
+  const floripa = lista.find((m) => chaveNome(m.nm) === 'florianopolis')
+  const ordemLista = (nomes) => (a, b) => nomes.findIndex((n) => chaveNome(n) === chaveNome(a.nm)) - nomes.findIndex((n) => chaveNome(n) === chaveNome(b.nm))
+  const nucleo = de(NUCLEO).filter((m) => m !== floripa).sort(ordemLista(GRANDE_FLORIPA))
+  const expansao = de(EXPANSAO).sort(ordemLista(EXPANSAO_FLORIPA))
+  const regiao = [floripa, ...nucleo, ...expansao].filter(Boolean)
+  const somaReg = regiao.reduce((a, m) => {
+    const p = progresso.get(m.cd)
+    if (p?.ts) { a.st += p.st; a.ts += p.ts }
+    return a
+  }, { st: 0, ts: 0 })
+
+  const valores = lista.map((m) => progresso.get(m.cd)).filter((p) => p && !p.semDados && p.pst != null)
+  const faixas = [
+    ['Não começou', (p) => p.pst === 0], ['Até 50%', (p) => p.pst > 0 && p.pst < 50],
+    ['50% a 99%', (p) => p.pst >= 50 && p.pst < 100], ['100% apurado', (p) => p.pst >= 100],
+  ].map(([rot, f], i) => ({ rot, n: valores.filter(f).length, cor: corProgresso([0, 30, 75, 100][i]) }))
+  const est = estado.dadosEstado
+
+  const termo = semAcento(painel.busca.trim())
+  const ordenar = {
+    regiao: (a, b) => (regiao.includes(b) - regiao.includes(a)) || a.nm.localeCompare(b.nm, 'pt-BR'),
+    nome: (a, b) => a.nm.localeCompare(b.nm, 'pt-BR'),
+    mais: (a, b) => (progresso.get(b.cd)?.pst ?? -1) - (progresso.get(a.cd)?.pst ?? -1) || a.nm.localeCompare(b.nm, 'pt-BR'),
+    menos: (a, b) => (progresso.get(a.cd)?.pst ?? 101) - (progresso.get(b.cd)?.pst ?? 101) || a.nm.localeCompare(b.nm, 'pt-BR'),
+  }[painel.ordem]
+  const linhas = lista.filter((m) => !termo || semAcento(m.nm).includes(termo)).sort(ordenar)
+
+  return `
+    <section class="cartao resumo">
+      <div class="resumo-titulo"><h2>Apuração por município · SC</h2>
+        <span class="selo">${painel.carregando > 0 ? `Consultando ${painel.carregando}…` : `${lista.length} municípios`}</span></div>
+      ${est ? `<div class="progresso"><div class="progresso-barra" style="width:${Math.min(100, est.secoes.percentual)}%"></div></div>
+        <p class="progresso-texto"><strong>${fmtPct.format(est.secoes.percentual)}%</strong> das seções de Santa Catarina
+        <span class="mudo">(${fmt.format(est.secoes.totalizadas)} de ${fmt.format(est.secoes.total)})</span></p>` : ''}
+      <div class="faixas">${faixas.map((f) => `<div class="faixa" style="--c:${f.cor}"><strong>${f.n}</strong><span>${f.rot}</span></div>`).join('')}</div>
+    </section>
+
+    <section class="cartao destaque-floripa">
+      <h3>📍 Grande Florianópolis</h3>
+      ${somaReg.ts ? `<p class="nota">Região toda: <strong>${fmtPct.format((100 * somaReg.st) / somaReg.ts)}%</strong> das seções (${fmt.format(somaReg.st)} de ${fmt.format(somaReg.ts)})</p>` : ''}
+      ${floripa ? cartaoMun(floripa, true) : ''}
+      <div class="mun-grade">${nucleo.map((m) => cartaoMun(m)).join('')}</div>
+      ${expansao.length ? `<h4>Área de expansão metropolitana</h4><div class="mun-grade">${expansao.map((m) => cartaoMun(m)).join('')}</div>` : ''}
+      <p class="nota">Toque num município para ver os votos dele. Atualiza a cada 30 segundos.</p>
+    </section>
+
+    <section class="cartao">
+      <h3>Todos os municípios</h3>
+      <input id="busca-mun" type="search" placeholder="Buscar município…" value="${esc(painel.busca)}" autocomplete="off">
+      <div class="segmentado ordem" role="group" aria-label="Ordenar">
+        ${[['regiao', 'Região primeiro'], ['mais', 'Mais apurados'], ['menos', 'Menos apurados'], ['nome', 'A–Z']]
+          .map(([k, r]) => `<button type="button" data-ordem="${k}" aria-pressed="${painel.ordem === k}">${r}</button>`)
+          .join('')}
+      </div>
+      <ul class="mun-lista">${linhas
+        .map((m) => {
+          const p = progresso.get(m.cd)
+          return `<li><button type="button" class="${regiao.includes(m) ? 'regiao' : ''}" data-abrir-mun="${esc(m.cd)}" data-abrir-nm="${esc(m.nm)}">
+            <span class="mun-nome">${esc(m.nm)}${m.capital ? ' <span class="mudo">· capital</span>' : ''}</span>
+            ${barraMun(p)}
+            <span class="mun-pct">${textoPct(p)}</span></button></li>`
+        })
+        .join('')}</ul>
+      <p class="nota">Os demais municípios são consultados a cada 3 minutos; os que chegam a 100% param de ser consultados.</p>
+    </section>`
 }
 
 function agendar() {
@@ -600,6 +815,21 @@ conteudo.addEventListener('click', (ev) => {
     renderizar()
     return
   }
+  const abrirMun = ev.target.closest('[data-abrir-mun]')
+  if (abrirMun) {
+    estado.mun = { cd: abrirMun.dataset.abrirMun, nm: abrirMun.dataset.abrirNm }
+    gravarLocal(`${PREFIXO}municipio:v1`, JSON.stringify(estado.mun))
+    estado.abr.presidente = UF
+    trocarAba('presidente')
+    window.scrollTo({ top: 0 })
+    return
+  }
+  const ordemBtn = ev.target.closest('[data-ordem]')
+  if (ordemBtn) {
+    painel.ordem = ordemBtn.dataset.ordem
+    renderizar()
+    return
+  }
   const munBtn = ev.target.closest('[data-mun-cd]')
   if (munBtn) {
     escolherMunicipio({ cd: munBtn.dataset.munCd, nm: munBtn.dataset.munNm })
@@ -646,6 +876,11 @@ conteudo.addEventListener('click', (ev) => {
 conteudo.addEventListener('input', (ev) => {
   if (ev.target.id === 'mun-busca') {
     mostrarSugestoes()
+    return
+  }
+  if (ev.target.id === 'busca-mun') {
+    painel.busca = ev.target.value
+    renderizar()
     return
   }
   if (ev.target.id === 'busca') {
@@ -1154,6 +1389,17 @@ function renderizar() {
   const pos = busca ? document.activeElement.selectionStart : null
   if (estado.aba.tipo === 'fav') {
     conteudo.innerHTML = renderFavoritos()
+    return
+  }
+  if (estado.aba.tipo === 'mun') {
+    const busca = document.activeElement?.id === 'busca-mun'
+    const pos = busca ? document.activeElement.selectionStart : null
+    conteudo.innerHTML = renderPainelMunicipios()
+    if (busca) {
+      const el = $('#busca-mun')
+      el?.focus()
+      el?.setSelectionRange(pos, pos)
+    }
     return
   }
   conteudo.innerHTML =

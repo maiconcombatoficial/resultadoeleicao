@@ -359,3 +359,57 @@ main > .segmentado { margin-bottom: 0; }
   .cand-num { min-width: 78px; }
   .status { max-width: 110px; }
 }
+
+/* ---------- painel de municípios ---------- */
+.faixas { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+.faixa { display: grid; background: var(--fundo); border-radius: 10px; padding: 8px 10px; border-left: 5px solid var(--c); }
+.faixa strong { font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.faixa span { font-size: 0.72rem; color: var(--mudo); text-transform: uppercase; letter-spacing: 0.03em; }
+
+.destaque-floripa { border-top: 5px solid #0a5ea8; }
+.destaque-floripa h4 { margin: 16px 0 8px; font-size: 0.85rem; color: var(--mudo); text-transform: uppercase; letter-spacing: 0.04em; }
+.mun-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.mun-card {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; align-items: baseline; text-align: left;
+  font: inherit; color: var(--texto); background: var(--fundo); border: 1px solid var(--linha); border-radius: 12px;
+  padding: 10px 12px; cursor: pointer; transition: transform 0.15s, border-color 0.15s;
+}
+.mun-card:hover { transform: translateY(-1px); border-color: #0a5ea8; }
+.mun-card .pbar, .mun-card .mun-det { grid-column: 1 / -1; }
+.mun-card:not(.grande) { grid-template-columns: 1fr; }
+.mun-card:not(.grande) .mun-pct { font-size: 1.15rem; }
+.mun-card.completo { border-color: color-mix(in srgb, var(--verde) 50%, var(--linha)); }
+.mun-card.grande {
+  width: 100%; margin-bottom: 10px; padding: 16px; border: 2px solid #0a5ea8;
+  background: linear-gradient(120deg, color-mix(in srgb, #0a5ea8 12%, var(--cartao)), var(--cartao));
+}
+.mun-card.grande .mun-nome { font-size: 1.3rem; }
+.mun-card.grande .mun-nome::before { content: "🏛️ "; }
+.mun-card.grande .mun-pct { font-size: 1.6rem; }
+.mun-card.grande .pbar { height: 14px; }
+.mun-nome { font-weight: 700; overflow-wrap: break-word; hyphens: auto; }
+.mun-pct { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mun-det { font-size: 0.75rem; color: var(--mudo); }
+.pbar { height: 8px; background: var(--cartao); border: 1px solid var(--linha); border-radius: 999px; overflow: hidden; }
+.pbar span { display: block; height: 100%; border-radius: 999px; transition: width 0.8s ease; }
+
+#busca-mun {
+  width: 100%; font: inherit; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--linha); background: var(--fundo); color: var(--texto); margin-bottom: 10px;
+}
+.segmentado.ordem { display: flex; flex-wrap: wrap; border-radius: 14px; }
+.mun-lista { list-style: none; margin: 0 0 10px; padding: 0; }
+.mun-lista button {
+  width: 100%; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(60px, 1fr) 76px; gap: 10px; align-items: center;
+  font: inherit; color: var(--texto); background: none; border: 0; border-bottom: 1px solid var(--linha);
+  padding: 9px 4px; text-align: left; cursor: pointer;
+}
+.mun-lista button:hover { background: var(--fundo); }
+.mun-lista button.regiao { box-shadow: inset 4px 0 0 #0a5ea8; padding-left: 10px; }
+.mun-lista .mun-nome { font-weight: 600; }
+.mun-lista .mun-pct { text-align: right; }
+
+@media (max-width: 560px) {
+  .faixas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mun-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
