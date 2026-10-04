@@ -43,6 +43,7 @@
 
 body {
   margin: 0;
+  overflow-x: clip;
   background: var(--fundo);
   color: var(--texto);
   font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -212,8 +213,9 @@ main > .segmentado { margin-bottom: 0; }
 
 .tag {
   font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
-  padding: 2px 7px; border-radius: 999px; white-space: nowrap;
+  padding: 2px 7px; border-radius: 999px; white-space: nowrap; max-width: 100%;
 }
+.tag.fora, .tag.invalido, .tag.eleito { white-space: normal; }
 .tag.eleito { background: var(--eleito); color: var(--cartao); }
 .tag.eleito::before { content: "✓ "; }
 .tag.turno2 { background: var(--amarelo); color: #3b3200; }
@@ -444,3 +446,25 @@ main > .segmentado { margin-bottom: 0; }
 .tabela td .tag { white-space: normal; }
 .tag.eleito-proj { flex-wrap: wrap; row-gap: 0; column-gap: 5px; }
 .tag.eleito-proj b, .tag.eleito-proj small { white-space: nowrap; }
+
+/* nada pode passar da largura da tela */
+.cand-info, .cand-linha, .fav-topo > *, .chip { min-width: 0; }
+.chip { max-width: 100%; flex-wrap: wrap; }
+.distancias li { overflow-wrap: anywhere; }
+.fav-nums strong { overflow-wrap: anywhere; }
+@media (max-width: 380px) {
+  main { padding-left: 10px; padding-right: 10px; }
+  .cartao { padding: 12px; }
+  .fav { padding: 10px; }
+  .fav-nums { gap: 6px; }
+  .fav-nums strong { font-size: 1rem; }
+  .tabela td, .tabela th { padding-left: 4px; padding-right: 4px; }
+}
+.pill { white-space: normal; overflow-wrap: anywhere; max-width: 100%; }
+.calculo .tabela th:first-child, .calculo .tabela td:first-child { width: auto; }
+.calculo .tabela { font-size: 0.9rem; }
+@media (max-width: 380px) {
+  .calculo .tabela { font-size: 0.8rem; }
+  .calculo .tabela th { font-size: 0.62rem; letter-spacing: 0; }
+}
+.pct-tab { display: block; font-size: 0.78rem; color: var(--mudo); }
