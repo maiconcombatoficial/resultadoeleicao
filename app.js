@@ -4,8 +4,8 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610042154'
-import { corPartido, corTexto } from './cores.js?v=202610042154'
+import { calcularVagas } from './vagas.js?v=202610042203'
+import { corPartido, corTexto } from './cores.js?v=202610042203'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -756,6 +756,14 @@ function estiloCor(cor) {
   return `--cor:${cor};--cor-txt:${corTexto(cor)}`
 }
 
+// "FEDERAÇÃO BRASIL DA ESPERANÇA - FE BRASIL" → "FE BRASIL"; "Federação PSDB Cidadania" → "PSDB Cidadania"
+function nomeCurto(nome) {
+  const n = String(nome || '')
+  if (!/^federa/i.test(n)) return n
+  const sigla = n.split(/\s+-\s+/)[1]
+  return sigla || n.replace(/^federa[çc][ãa]o\s+/i, '')
+}
+
 function pill(sigla, cor = corPartido(sigla)) {
   return `<span class="pill" style="${estiloCor(cor)}">${esc(sigla)}</span>`
 }
@@ -777,7 +785,7 @@ function cabecalhoAbrangencia() {
     <span class="local-icone" aria-hidden="true">📍</span>
     <div class="local-campo">
       <input id="mun-busca" type="search" autocomplete="off" enterkeyhint="search"
-        placeholder="Santa Catarina inteira · digite um município" value="${esc(mun?.nm || '')}" aria-label="Escolher município de SC">
+        placeholder="SC inteira · buscar município" value="${esc(mun?.nm || '')}" aria-label="Escolher município de SC">
       ${mun ? '<button type="button" class="local-limpar" data-mun-limpar aria-label="Voltar para o estado todo">✕</button>' : ''}
       <ul id="mun-sugestoes" class="sugestoes" hidden></ul>
     </div>
@@ -1106,14 +1114,17 @@ function cardFavorito(f, d, { mostrarCargo = false } = {}) {
   const serie = historico[f.id] || []
   const ganhoUlt = serie.length > 1 ? serie[serie.length - 1][1] - serie[serie.length - 2][1] : 0
   let situacao = selo(c)
+  let linhaProj = ''
   if (!situacao && aba?.tipo === 'prop' && d.projecao?.qe) {
     const g = d.projecao.grupos.find((x) => x.nome === c.agremiacao)
     const ultimo = g?.eleitos[g.eleitos.length - 1]
-    situacao = ultimo
-      ? `<span class="tag fora">Fora da projeção · ${fmt.format(Math.max(0, ultimo.votos - c.votos))} votos atrás do último eleito do partido</span>`
-      : `<span class="tag fora">Fora da projeção · partido sem vaga até agora</span>`
+    situacao = `<span class="tag fora">Fora da projeção</span>`
+    linhaProj = ultimo
+      ? `<li>🎯 <strong>${fmt.format(Math.max(0, ultimo.votos - c.votos))}</strong> atrás do último eleito do partido (${esc(ultimo.nome)})</li>`
+      : '<li>🎯 O partido ainda não tem vaga na projeção</li>'
   }
   const distancias = [
+    linhaProj,
     acima ? `<li>▼ <strong>${fmt.format(acima.votos - c.votos)}</strong> atrás do ${pos - 1}º (${esc(acima.nome)})</li>` : '<li>🥇 Em 1º lugar</li>',
     abaixo ? `<li>▲ <strong>${fmt.format(c.votos - abaixo.votos)}</strong> à frente do ${pos + 1}º (${esc(abaixo.nome)})</li>` : '',
   ].join('')
@@ -1273,7 +1284,7 @@ function listaProporcional() {
   if (!linhas.length) return `<p class="vazio">Nenhum candidato encontrado${estado.busca ? ` para “${esc(estado.busca)}”` : ''}.</p>`
   const limite = termo || estado.partido ? 300 : 120
   return `<table class="tabela">
-    <thead><tr><th>#</th><th>Candidato</th><th class="dir">Votos</th><th class="dir">%</th></tr></thead>
+    <thead><tr><th>#</th><th>Candidato</th><th class="dir">Votos</th></tr></thead>
     <tbody>
     ${linhas
       .slice(0, limite)
@@ -1283,10 +1294,9 @@ function listaProporcional() {
         <td class="mudo pos-tab">${pos}</td>
         <td>
           <div class="cand-linha">${estrela(c)}<span class="cand-nome">${esc(c.nome)}</span> ${selo(c)}</div>
-          <div class="cand-meta">${pill(c.partido, cor)} ${esc(c.numero)}${c.agremiacao !== c.partido ? ` · ${esc(c.agremiacao)}` : ''}</div>
+          <div class="cand-meta">${pill(c.partido, cor)} ${esc(c.numero)}${c.agremiacao !== c.partido ? ` · ${esc(nomeCurto(c.agremiacao))}` : ''}</div>
         </td>
-        <td class="dir">${fmt.format(c.votos)} ${delta(c)}</td>
-        <td class="dir">${fmtPct.format(c.percentual)}</td>
+        <td class="dir"><strong>${fmt.format(c.votos)}</strong><span class="pct-tab">${fmtPct.format(c.percentual)}%</span>${delta(c)}</td>
       </tr>`
       })
       .join('')}
@@ -1307,7 +1317,7 @@ function tabelaPartidos(d) {
     ${lista
       .map(
         (g) => `<tr class="clicavel" data-partido="${esc(g.nome)}" style="${estiloCor(g.cor)}">
-        <td><div class="cand-linha">${pill(g.nome, g.cor)}</div>
+        <td><div class="cand-linha">${pill(nomeCurto(g.nome), g.cor)}</div>
           <div class="cand-meta">${g.partidos.length > 1 || g.partidos[0] !== g.nome ? esc(g.partidos.join(', ')) + ' · ' : ''}${g.cands} candidatos${
             g.legenda ? ` · legenda ${fmt.format(g.legenda)}` : ''
           }</div>
@@ -1349,7 +1359,7 @@ function cartaoCalculo(d) {
         <thead><tr><th>Partido / federação</th><th class="dir">Votos</th><th class="dir">QP</th><th class="dir">Sobras</th><th class="dir">Vagas</th></tr></thead>
         <tbody>${linhas
           .map(
-            (g) => `<tr style="${estiloCor(g.cor)}"><td>${pill(g.nome, g.cor)}<div class="cand-meta">${fmtPct.format((100 * g.total) / r.qe)}% do QE</div></td>
+            (g) => `<tr style="${estiloCor(g.cor)}"><td>${pill(nomeCurto(g.nome), g.cor)}<div class="cand-meta">${fmtPct.format((100 * g.total) / r.qe)}% do QE</div></td>
             <td class="dir">${fmt.format(g.total)}</td><td class="dir">${g.porQP}</td><td class="dir">${g.porMedia}</td><td class="dir"><strong>${g.vagasProj}</strong></td></tr>`,
           )
           .join('')}</tbody>
@@ -1409,7 +1419,7 @@ function renderProporcional(d) {
   const eleitos = d.candidatos.filter((c) => c.eleito)
   const top = grupos.slice(0, 8)
   const resto = grupos.slice(8).reduce((a, g) => a + g.votos, 0)
-  const fatias = top.map((g) => ({ valor: g.votos, cor: g.cor, rotulo: g.nome, partido: g.nome }))
+  const fatias = top.map((g) => ({ valor: g.votos, cor: g.cor, rotulo: nomeCurto(g.nome), partido: g.nome }))
   if (resto) fatias.push({ valor: resto, cor: OUTROS, rotulo: 'Demais partidos' })
 
   let bancada = ''
@@ -1436,7 +1446,7 @@ function renderProporcional(d) {
       <h3>Bancada eleita (${eleitos.length} de ${d.vagas})</h3>
       ${hemiciclo(ordenados)}
       <ul class="legenda">${contagem
-        .map((g) => `<li data-partido="${esc(g.nome)}"><i style="background:${g.cor}"></i>${esc(g.nome)} <strong>${g.eleitos}</strong></li>`)
+        .map((g) => `<li data-partido="${esc(g.nome)}"><i style="background:${g.cor}"></i>${esc(nomeCurto(g.nome))} <strong>${g.eleitos}</strong></li>`)
         .join('')}</ul>
     </section>
     ${d.projecao?.qe ? cartaoCalculo(d) : ''}`
@@ -1451,7 +1461,7 @@ function renderProporcional(d) {
       ${hemiciclo(ordenados)}
       <ul class="legenda">${grupos
         .filter((g) => g.vagasProj)
-        .map((g) => `<li data-partido="${esc(g.nome)}"><i style="background:${g.cor}"></i>${esc(g.nome)} <strong>${g.vagasProj}</strong></li>`)
+        .map((g) => `<li data-partido="${esc(g.nome)}"><i style="background:${g.cor}"></i>${esc(nomeCurto(g.nome))} <strong>${g.vagasProj}</strong></li>`)
         .join('')}</ul>
       <ul class="chips">${[...proj]
         .sort((a, b) => a.projecao.ordem - b.projecao.ordem)
@@ -1477,7 +1487,7 @@ function renderProporcional(d) {
         .map(
           (g) =>
             `<button type="button" class="filtro ${estado.partido === g.nome ? 'ativo' : ''}" data-partido="${esc(g.nome)}" style="${estiloCor(g.cor)}"><i></i>${esc(
-              g.nome,
+              nomeCurto(g.nome),
             )}</button>`,
         )
         .join('')}
