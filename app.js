@@ -4,6 +4,8 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
+import { corPartido, corTexto } from './cores.js'
+
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
 const TURNO = params.get('turno') === '2' ? 2 : 1
@@ -234,6 +236,7 @@ const estado = {
   abr: {},
   busca: '',
   visao: 'candidatos', // proporcionais: candidatos | partidos
+  partido: null, // filtro por agremiação na lista de deputados
   dados: null,
   controlador: null,
   timer: null,
@@ -274,6 +277,7 @@ function trocarAba(id) {
   estado.aba = aba
   estado.busca = ''
   estado.visao = 'candidatos'
+  estado.partido = null
   estado.dados = null
   estado.anterior = new Map()
   gravarLocal('aba', id)
@@ -342,6 +346,16 @@ document.addEventListener('visibilitychange', () => {
 
 /* ---------------- renderização ---------------- */
 
+const OUTROS = '#9aa5a0'
+
+function estiloCor(cor) {
+  return `--cor:${cor};--cor-txt:${corTexto(cor)}`
+}
+
+function pill(sigla, cor = corPartido(sigla)) {
+  return `<span class="pill" style="${estiloCor(cor)}">${esc(sigla)}</span>`
+}
+
 function cabecalhoAbrangencia() {
   const a = estado.aba
   if (a.abrangencias.length < 2) return ''
@@ -365,6 +379,26 @@ conteudo.addEventListener('click', (ev) => {
   if (visaoBtn) {
     estado.visao = visaoBtn.dataset.visao
     renderizar()
+    return
+  }
+  const partidoBtn = ev.target.closest('[data-partido]')
+  if (partidoBtn) {
+    const p = partidoBtn.dataset.partido
+    estado.partido = !p || estado.partido === p ? null : p
+    estado.visao = 'candidatos'
+    renderizar()
+    $('#filtros')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    return
+  }
+  const alvo = ev.target.closest('[data-alvo]')
+  if (alvo) {
+    const el = document.getElementById(`c-${alvo.dataset.alvo}`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.classList.remove('piscar')
+      void el.offsetWidth
+      el.classList.add('piscar')
+    }
   }
 })
 
@@ -374,6 +408,40 @@ conteudo.addEventListener('input', (ev) => {
     $('#lista').innerHTML = listaProporcional()
   }
 })
+
+/* dica flutuante: qualquer elemento com data-dica (passar o mouse ou tocar) */
+const dica = document.createElement('div')
+dica.className = 'dica'
+dica.hidden = true
+document.body.appendChild(dica)
+let dicaTimer
+function mostrarDica(el, x, y) {
+  dica.innerHTML = el.getAttribute('data-dica')
+  dica.hidden = false
+  const r = dica.getBoundingClientRect()
+  const left = Math.max(8, Math.min(window.innerWidth - r.width - 8, x - r.width / 2))
+  const top = y - r.height - 14 < 8 ? y + 18 : y - r.height - 14
+  dica.style.transform = `translate(${left}px, ${top}px)`
+}
+conteudo.addEventListener('pointermove', (ev) => {
+  const el = ev.target.closest('[data-dica]')
+  if (!el) {
+    if (ev.pointerType === 'mouse') dica.hidden = true
+    return
+  }
+  mostrarDica(el, ev.clientX, ev.clientY)
+  clearTimeout(dicaTimer)
+  if (ev.pointerType !== 'mouse') dicaTimer = setTimeout(() => (dica.hidden = true), 2500)
+})
+conteudo.addEventListener('pointerdown', (ev) => {
+  const el = ev.target.closest('[data-dica]')
+  if (!el || ev.pointerType === 'mouse') return
+  mostrarDica(el, ev.clientX, ev.clientY)
+  clearTimeout(dicaTimer)
+  dicaTimer = setTimeout(() => (dica.hidden = true), 2500)
+})
+conteudo.addEventListener('pointerleave', () => (dica.hidden = true))
+window.addEventListener('scroll', () => (dica.hidden = true), { passive: true })
 
 function resumo(d) {
   const tpl = $('#tpl-resumo').content.cloneNode(true)
@@ -387,25 +455,25 @@ function resumo(d) {
   f('barra').parentElement.setAttribute('aria-valuenow', String(Math.round(p)))
   f('ptexto').innerHTML = `<strong>${fmtPct.format(p)}%</strong> das seções totalizadas
     <span class="mudo">(${fmt.format(d.secoes.totalizadas)} de ${fmt.format(d.secoes.total)})</span>`
-  const item = (rot, valor, extra) =>
-    `<div><dt>${rot}</dt><dd>${valor}${extra != null && !Number.isNaN(extra) ? ` <span class="mudo">${fmtPct.format(extra)}%</span>` : ''}</dd></div>`
+  const item = (rot, cls, valor, extra) =>
+    `<div class="num ${cls}"><dt>${rot}</dt><dd>${valor}${extra != null && !Number.isNaN(extra) ? ` <span class="mudo">${fmtPct.format(extra)}%</span>` : ''}</dd></div>`
   f('numeros').innerHTML = [
-    item('Comparecimento', fmt.format(d.eleitorado.comparecimento), d.eleitorado.pComparecimento),
-    item('Abstenção', fmt.format(d.eleitorado.abstencao), d.eleitorado.pAbstencao),
-    item('Votos válidos', fmt.format(d.votos.validos), d.votos.pValidos),
-    item('Brancos', fmt.format(d.votos.brancos), d.votos.pBrancos),
-    item('Nulos', fmt.format(d.votos.nulos), d.votos.pNulos),
-    item(d.vagas > 1 ? 'Vagas' : 'Vaga', fmt.format(d.vagas)),
+    item('Comparecimento', 'n-comp', fmt.format(d.eleitorado.comparecimento), d.eleitorado.pComparecimento),
+    item('Abstenção', 'n-abst', fmt.format(d.eleitorado.abstencao), d.eleitorado.pAbstencao),
+    item('Votos válidos', 'n-val', fmt.format(d.votos.validos), d.votos.pValidos),
+    item('Brancos', 'n-bra', fmt.format(d.votos.brancos), d.votos.pBrancos),
+    item('Nulos', 'n-nul', fmt.format(d.votos.nulos), d.votos.pNulos),
+    item(d.vagas > 1 ? 'Vagas' : 'Vaga', 'n-vag', fmt.format(d.vagas)),
   ].join('')
   const div = document.createElement('div')
   div.appendChild(tpl)
   return div.innerHTML
 }
 
-function foto(c) {
+function foto(c, cor = corPartido(c.partido)) {
   const ini = esc(iniciais(c.nome))
-  if (!c.foto) return `<span class="foto"><span>${ini}</span></span>`
-  return `<span class="foto"><span>${ini}</span><img src="${esc(c.foto)}" alt="" loading="lazy" onerror="this.remove()"></span>`
+  const img = c.foto ? `<img src="${esc(c.foto)}" alt="" loading="lazy" onerror="this.remove()">` : ''
+  return `<span class="foto" style="${estiloCor(cor)}"><span>${ini}</span>${img}</span>`
 }
 
 function selo(c) {
@@ -416,31 +484,76 @@ function selo(c) {
   return ''
 }
 
-function delta(c) {
-  if (!estado.anterior.size) return ''
+function ganho(c) {
+  if (!estado.anterior.size) return 0
   const antes = estado.anterior.get(c.sqcand)
-  const d = antes == null ? 0 : c.votos - antes
-  return d > 0 ? `<span class="delta">+${fmt.format(d)}</span>` : ''
+  return antes == null ? 0 : c.votos - antes
+}
+
+function delta(c) {
+  const d = ganho(c)
+  return d > 0 ? `<span class="delta">▲ ${fmt.format(d)}</span>` : ''
+}
+
+// Barra empilhada com a divisão dos votos válidos; cada fatia leva a cor do partido.
+function barraEmpilhada(fatias, { marco50 = false, legenda = true, total: totalInformado = 0 } = {}) {
+  const total = Math.max(totalInformado, fatias.reduce((a, f) => a + f.valor, 0)) || 1
+  const segs = fatias
+    .filter((f) => f.valor > 0)
+    .map(
+      (f) =>
+        `<span class="seg" style="width:${(100 * f.valor) / total}%;background:${f.cor}" ${f.alvo ? `data-alvo="${esc(f.alvo)}"` : ''} ${
+          f.partido ? `data-partido="${esc(f.partido)}"` : ''
+        } data-dica="${esc(`<strong>${esc(f.rotulo)}</strong><br>${fmtPct.format((100 * f.valor) / total)}% · ${fmt.format(f.valor)} votos`)}"></span>`,
+    )
+    .join('')
+  const leg = legenda
+    ? `<ul class="legenda">${fatias
+        .filter((f) => f.valor > 0)
+        .map(
+          (f) =>
+            `<li ${f.alvo ? `data-alvo="${esc(f.alvo)}"` : ''} ${f.partido ? `data-partido="${esc(f.partido)}"` : ''}><i style="background:${f.cor}"></i>${esc(
+              f.rotulo,
+            )} <strong>${fmtPct.format((100 * f.valor) / total)}%</strong></li>`,
+        )
+        .join('')}</ul>`
+    : ''
+  return `<div class="empilhada">${segs}${marco50 ? '<span class="marco50" data-dica="50% dos votos válidos + 1 vence no 1º turno"></span>' : ''}</div>${leg}`
 }
 
 function renderMajoritario(d) {
   const lista = d.candidatos.filter((c) => c.valido || c.votos > 0)
+  const validos = lista.filter((c) => c.valido)
   const max = Math.max(1, ...lista.map((c) => c.percentual))
-  const vagasTxt =
-    estado.aba.cargo === 5 ? `<p class="nota">Em 2026 o Senado renova 2/3: SC elege <strong>${d.vagas}</strong> senadores — os ${d.vagas} mais votados.</p>` : ''
-  return `${vagasTxt}<ol class="candidatos">
+  const top = validos.slice(0, 5)
+  const resto = validos.slice(5).reduce((a, c) => a + c.votos, 0)
+  const fatias = top.map((c) => ({ valor: c.votos, cor: corPartido(c.partido), rotulo: `${c.nome} (${c.partido})`, alvo: c.sqcand }))
+  if (resto) fatias.push({ valor: resto, cor: OUTROS, rotulo: 'Demais candidatos' })
+  const nota =
+    estado.aba.cargo === 5
+      ? `<p class="nota">Em 2026 o Senado renova 2/3: SC elege <strong>${d.vagas}</strong> senadores — os ${d.vagas} mais votados.</p>`
+      : `<p class="nota">A linha tracejada marca 50% dos votos válidos: quem passar dela vence no 1º turno.</p>`
+  return `<section class="cartao">
+      <h3>Divisão dos votos válidos</h3>
+      ${barraEmpilhada(fatias, { marco50: estado.aba.cargo !== 5 && TURNO === 1, total: d.votos.validos })}
+      ${nota}
+    </section>
+    <section class="cartao"><ol class="candidatos">
     ${lista
-      .map(
-        (c, i) => `
-      <li class="cand ${c.eleito ? 'is-eleito' : ''} ${i < d.vagas ? 'is-vaga' : ''}">
+      .map((c, i) => {
+        const cor = corPartido(c.partido)
+        return `
+      <li id="c-${esc(c.sqcand)}" class="cand ${c.eleito ? 'is-eleito' : ''} ${ganho(c) > 0 ? 'subiu' : ''}" style="${estiloCor(cor)}">
         <span class="pos">${i + 1}º</span>
-        ${foto(c)}
+        ${foto(c, cor)}
         <div class="cand-info">
           <div class="cand-linha">
             <span class="cand-nome">${esc(c.nome)}</span>
             ${selo(c)}
           </div>
-          <div class="cand-meta">${esc(c.partido)} · ${esc(c.numero)}${c.vices.length ? ` · ${c.vices.map((v) => `${v.tipo === 'v' ? 'Vice' : 'Supl.'}: ${esc(v.nome)}`).join(' · ')}` : ''}</div>
+          <div class="cand-meta">${pill(c.partido, cor)} ${esc(c.numero)}${
+            c.vices.length ? ` · ${c.vices.map((v) => `${v.tipo === 'v' ? 'Vice' : 'Supl.'}: ${esc(v.nome)}`).join(' · ')}` : ''
+          }</div>
           <div class="barra"><span style="width:${(100 * c.percentual) / max}%"></span></div>
         </div>
         <div class="cand-num">
@@ -448,10 +561,34 @@ function renderMajoritario(d) {
           <span class="votos">${fmt.format(c.votos)} votos</span>
           ${delta(c)}
         </div>
-      </li>`,
-      )
+      </li>`
+      })
       .join('')}
-  </ol>`
+  </ol></section>`
+}
+
+// Soma por partido/federação; a cor do grupo é a do seu partido mais votado.
+function agremiacoes(d) {
+  const grupos = new Map()
+  for (const c of d.candidatos) {
+    const g = grupos.get(c.agremiacao) || { nome: c.agremiacao, porPartido: new Map(), votos: 0, eleitos: 0, cands: 0 }
+    g.porPartido.set(c.partido, (g.porPartido.get(c.partido) || 0) + (c.valido ? c.votos : 0))
+    g.votos += c.valido ? c.votos : 0
+    g.eleitos += c.eleito ? 1 : 0
+    g.cands += 1
+    grupos.set(c.agremiacao, g)
+  }
+  const lista = [...grupos.values()]
+  for (const g of lista) {
+    const [lider] = [...g.porPartido.entries()].sort((a, b) => b[1] - a[1])[0] || [g.nome]
+    g.cor = corPartido(g.porPartido.has(g.nome) ? g.nome : lider)
+    g.partidos = [...g.porPartido.keys()]
+  }
+  return lista.sort((a, b) => b.votos - a.votos || b.eleitos - a.eleitos)
+}
+
+function corDaAgremiacao(nome) {
+  return estado.grupos?.find((g) => g.nome === nome)?.cor || corPartido(nome)
 }
 
 function listaProporcional() {
@@ -460,53 +597,46 @@ function listaProporcional() {
   const termo = semAcento(estado.busca.trim())
   const linhas = d.candidatos
     .map((c, i) => ({ c, pos: i + 1 }))
+    .filter(({ c }) => !estado.partido || c.agremiacao === estado.partido)
     .filter(({ c }) => !termo || semAcento(`${c.nome} ${c.nomeCompleto} ${c.partido} ${c.numero} ${c.agremiacao}`).includes(termo))
-  if (!linhas.length) return `<p class="vazio">Nenhum candidato encontrado para “${esc(estado.busca)}”.</p>`
-  const limite = termo ? 300 : 120
+  if (!linhas.length) return `<p class="vazio">Nenhum candidato encontrado${estado.busca ? ` para “${esc(estado.busca)}”` : ''}.</p>`
+  const limite = termo || estado.partido ? 300 : 120
   return `<table class="tabela">
     <thead><tr><th>#</th><th>Candidato</th><th class="dir">Votos</th><th class="dir">%</th></tr></thead>
     <tbody>
     ${linhas
       .slice(0, limite)
-      .map(
-        ({ c, pos }) => `<tr class="${c.eleito ? 'is-eleito' : ''}">
-        <td class="mudo">${pos}</td>
+      .map(({ c, pos }) => {
+        const cor = corPartido(c.partido)
+        return `<tr class="${c.eleito ? 'is-eleito' : ''} ${ganho(c) > 0 ? 'subiu' : ''}" style="${estiloCor(cor)}">
+        <td class="mudo pos-tab">${pos}</td>
         <td>
           <div class="cand-linha"><span class="cand-nome">${esc(c.nome)}</span> ${selo(c)}</div>
-          <div class="cand-meta">${esc(c.partido)} · ${esc(c.numero)}${c.agremiacao !== c.partido ? ` · ${esc(c.agremiacao)}` : ''}</div>
+          <div class="cand-meta">${pill(c.partido, cor)} ${esc(c.numero)}${c.agremiacao !== c.partido ? ` · ${esc(c.agremiacao)}` : ''}</div>
         </td>
         <td class="dir">${fmt.format(c.votos)} ${delta(c)}</td>
         <td class="dir">${fmtPct.format(c.percentual)}</td>
-      </tr>`,
-      )
+      </tr>`
+      })
       .join('')}
     </tbody></table>
     ${linhas.length > limite ? `<p class="nota">Mostrando ${limite} de ${fmt.format(linhas.length)}. Use a busca para encontrar outros candidatos.</p>` : ''}`
 }
 
 function tabelaPartidos(d) {
-  const grupos = new Map()
-  for (const c of d.candidatos) {
-    const g = grupos.get(c.agremiacao) || { nome: c.agremiacao, partidos: new Set(), votos: 0, eleitos: 0, cands: 0 }
-    g.partidos.add(c.partido)
-    g.votos += c.valido ? c.votos : 0
-    g.eleitos += c.eleito ? 1 : 0
-    g.cands += 1
-    grupos.set(c.agremiacao, g)
-  }
-  const lista = [...grupos.values()].sort((a, b) => b.votos - a.votos)
+  const lista = estado.grupos
   const total = lista.reduce((a, g) => a + g.votos, 0) || 1
   const max = Math.max(1, ...lista.map((g) => g.votos))
   return `<p class="nota">Soma dos votos nominais de cada partido ou federação (sem votos de legenda).
-    A distribuição oficial das ${d.vagas} vagas usa o quociente eleitoral e sai no fim da apuração — os eleitos aparecem marcados pelo TSE.</p>
+    Toque numa linha para ver os candidatos dela.</p>
     <table class="tabela">
     <thead><tr><th>Partido / federação</th><th class="dir">Votos</th><th class="dir">%</th><th class="dir">Eleitos</th></tr></thead>
     <tbody>
     ${lista
       .map(
-        (g) => `<tr>
-        <td><div class="cand-nome">${esc(g.nome)}</div>
-          <div class="cand-meta">${g.partidos.size > 1 || !g.partidos.has(g.nome) ? esc([...g.partidos].join(', ')) + ' · ' : ''}${g.cands} candidatos</div>
+        (g) => `<tr class="clicavel" data-partido="${esc(g.nome)}" style="${estiloCor(g.cor)}">
+        <td><div class="cand-linha">${pill(g.nome, g.cor)}</div>
+          <div class="cand-meta">${g.partidos.length > 1 || g.partidos[0] !== g.nome ? esc(g.partidos.join(', ')) + ' · ' : ''}${g.cands} candidatos</div>
           <div class="barra fina"><span style="width:${(100 * g.votos) / max}%"></span></div></td>
         <td class="dir">${fmt.format(g.votos)}</td>
         <td class="dir">${fmtPct.format((100 * g.votos) / total)}</td>
@@ -517,28 +647,108 @@ function tabelaPartidos(d) {
     </tbody></table>`
 }
 
-function renderProporcional(d) {
-  const eleitos = d.candidatos.filter((c) => c.eleito)
-  const destaque = eleitos.length ? eleitos : d.candidatos.slice(0, d.vagas)
-  const titulo = eleitos.length ? `Eleitos (${eleitos.length} de ${d.vagas})` : `Os ${d.vagas} mais votados até agora`
-  const chips = destaque
-    .map((c) => `<li class="chip ${c.eleito ? 'is-eleito' : ''}"><strong>${esc(c.nome)}</strong> <span class="mudo">${esc(c.partido)} · ${fmt.format(c.votos)}</span></li>`)
+// Semicírculo de cadeiras com os eleitos (só aparece quando o TSE marca os eleitos).
+function hemiciclo(eleitos) {
+  const n = eleitos.length
+  const fileiras = n <= 20 ? 2 : n <= 32 ? 3 : 4
+  const r0 = 46
+  const passo = 54 / fileiras
+  const raios = Array.from({ length: fileiras }, (_, i) => r0 + i * passo + passo / 2)
+  const somaR = raios.reduce((a, b) => a + b, 0)
+  const qtd = raios.map((r) => Math.max(1, Math.round((n * r) / somaR)))
+  let dif = n - qtd.reduce((a, b) => a + b, 0)
+  for (let i = fileiras - 1; dif !== 0; i = (i - 1 + fileiras) % fileiras) {
+    qtd[i] += Math.sign(dif)
+    dif -= Math.sign(dif)
+  }
+  const pontos = []
+  raios.forEach((r, i) => {
+    const k = qtd[i]
+    for (let j = 0; j < k; j++) {
+      const t = k === 1 ? Math.PI / 2 : Math.PI - (j * Math.PI) / (k - 1)
+      pontos.push({ t, x: 110 + r * Math.cos(t), y: 108 - r * Math.sin(t) })
+    }
+  })
+  pontos.sort((a, b) => b.t - a.t)
+  const raioPonto = Math.min(9, passo * 0.42, ((Math.PI * raios[0]) / Math.max(1, qtd[0] - 1)) * 0.45)
+  const circulos = eleitos
+    .map((c, i) => {
+      const p = pontos[i]
+      const cor = corPartido(c.partido)
+      return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${raioPonto.toFixed(1)}" fill="${cor}"
+        data-dica="${esc(`<strong>${esc(c.nome)}</strong><br>${esc(c.partido)} · ${fmt.format(c.votos)} votos`)}" data-partido="${esc(c.agremiacao)}"></circle>`
+    })
     .join('')
-  const abas = `<div class="segmentado" role="group" aria-label="Visão">
+  return `<svg class="hemiciclo" viewBox="0 0 220 116" role="img" aria-label="Cadeiras por partido">${circulos}
+    <text x="110" y="104" text-anchor="middle" class="hemi-num">${n}</text></svg>`
+}
+
+function renderProporcional(d) {
+  estado.grupos = agremiacoes(d)
+  const grupos = estado.grupos
+  const eleitos = d.candidatos.filter((c) => c.eleito)
+  const top = grupos.slice(0, 8)
+  const resto = grupos.slice(8).reduce((a, g) => a + g.votos, 0)
+  const fatias = top.map((g) => ({ valor: g.votos, cor: g.cor, rotulo: g.nome, partido: g.nome }))
+  if (resto) fatias.push({ valor: resto, cor: OUTROS, rotulo: 'Demais partidos' })
+
+  let bancada = ''
+  if (eleitos.length) {
+    const ordem = new Map(grupos.map((g, i) => [g.nome, i]))
+    const ordenados = [...eleitos].sort((a, b) => ordem.get(a.agremiacao) - ordem.get(b.agremiacao) || b.votos - a.votos)
+    const contagem = grupos.filter((g) => g.eleitos)
+    bancada = `<section class="cartao">
+      <h3>Bancada eleita (${eleitos.length} de ${d.vagas})</h3>
+      ${hemiciclo(ordenados)}
+      <ul class="legenda">${contagem
+        .map((g) => `<li data-partido="${esc(g.nome)}"><i style="background:${g.cor}"></i>${esc(g.nome)} <strong>${g.eleitos}</strong></li>`)
+        .join('')}</ul>
+    </section>`
+  } else {
+    const destaque = d.candidatos.slice(0, d.vagas)
+    bancada = `<section class="cartao">
+      <h3>Os ${d.vagas} mais votados até agora</h3>
+      <p class="nota">Ordem por votos nominais — não é a projeção das vagas, que depende do quociente eleitoral de cada partido.</p>
+      <ul class="chips">${destaque
+        .map(
+          (c) =>
+            `<li class="chip" style="${estiloCor(corPartido(c.partido))}"><strong>${esc(c.nome)}</strong> ${pill(c.partido)} <span class="mudo">${fmt.format(
+              c.votos,
+            )}</span></li>`,
+        )
+        .join('')}</ul>
+    </section>`
+  }
+
+  const visoes = `<div class="segmentado" role="group" aria-label="Visão">
     <button type="button" data-visao="candidatos" aria-pressed="${estado.visao === 'candidatos'}">Candidatos</button>
     <button type="button" data-visao="partidos" aria-pressed="${estado.visao === 'partidos'}">Partidos</button>
   </div>`
+  const filtros = `<div class="filtros" id="filtros">
+      <button type="button" class="filtro ${estado.partido ? '' : 'ativo'}" data-partido="">Todos</button>
+      ${grupos
+        .filter((g) => g.votos > 0 || g.eleitos)
+        .map(
+          (g) =>
+            `<button type="button" class="filtro ${estado.partido === g.nome ? 'ativo' : ''}" data-partido="${esc(g.nome)}" style="${estiloCor(g.cor)}"><i></i>${esc(
+              g.nome,
+            )}</button>`,
+        )
+        .join('')}
+    </div>`
   const corpo =
     estado.visao === 'partidos'
       ? tabelaPartidos(d)
-      : `<input id="busca" type="search" placeholder="Buscar por nome, partido ou número…" value="${esc(estado.busca)}" autocomplete="off">
+      : `${filtros}
+         <input id="busca" type="search" placeholder="Buscar por nome, partido ou número…" value="${esc(estado.busca)}" autocomplete="off">
          <div id="lista">${listaProporcional()}</div>`
-  return `<section class="cartao">
-      <h3>${titulo}</h3>
-      ${eleitos.length ? '' : '<p class="nota">Ordem por votos nominais — não é a projeção das vagas, que depende do quociente partidário.</p>'}
-      <ul class="chips">${chips}</ul>
+  return `${bancada}
+    <section class="cartao">
+      <h3>Votos por partido / federação</h3>
+      ${barraEmpilhada(fatias)}
+      <p class="nota">Toque numa cor para filtrar os candidatos daquele partido.</p>
     </section>
-    <section class="cartao">${abas}${corpo}</section>`
+    <section class="cartao">${visoes}${corpo}</section>`
 }
 
 function renderizar() {
@@ -549,7 +759,7 @@ function renderizar() {
   conteudo.innerHTML =
     cabecalhoAbrangencia() +
     resumo(d) +
-    (estado.aba.tipo === 'maj' ? `<section class="cartao">${renderMajoritario(d)}</section>` : renderProporcional(d)) +
+    (estado.aba.tipo === 'maj' ? renderMajoritario(d) : renderProporcional(d)) +
     `<p class="nota centro">Dados do TSE de ${esc(d.atualizadoEm || '—')}</p>`
   if (busca) {
     const el = $('#busca')

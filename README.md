@@ -7,6 +7,8 @@ App web para acompanhar a apuração das **Eleições Gerais 2026** com os dados
 - **Deputado Federal SC** (16 vagas) e **Deputado Estadual SC** (40 vagas) — busca por nome/partido/número e visão por partido/federação
 - **Governador SC** (bônus)
 
+Tudo colorido com as cores de cada partido: barra de divisão dos votos (com a linha dos 50%), semicírculo da bancada eleita, filtros por partido e dicas ao tocar nas cores.
+
 Atualiza sozinho a cada 30 s, mostra o percentual de seções totalizadas, comparecimento, brancos/nulos,
 quantos votos cada candidato ganhou desde a última atualização e marca eleitos / 2º turno conforme o TSE.
 
