@@ -1,6 +1,6 @@
 // Chance de reverter a situação com as urnas que ainda faltam apurar.
 //
-// Votos que faltam (R): estimados pelos votos válidos já apurados × seções que faltam ÷ seções apuradas.
+// Votos que faltam (R): votos válidos já apurados × (% de seções que faltam ÷ % apurado).
 // Ritmo: a fatia dos votos válidos que o candidato tem até agora (s = votos ÷ válidos).
 //
 // Majoritários (Presidente, Governador, Senado) — conta exata:
@@ -13,7 +13,7 @@
 // com o desempenho atual dele, supondo que os demais mantenham o próprio ritmo:
 //   multiplicador ≤ 1,1 → pode reverter · ≤ 1,5 → reversão difícil · acima → improvável.
 
-import { votosParaEleger, folgaDaVaga } from './vagas.js?v=202610042247'
+import { votosParaEleger, folgaDaVaga } from './vagas.js?v=202610042309'
 
 export const NIVEIS = {
   garantido: { rotulo: 'Garantido', icone: '✅', classe: 'ch-garantido' },
@@ -31,9 +31,11 @@ const nivelFora = (m) => (m <= 1.1 ? 'pode' : m <= 1.5 ? 'dificil' : 'improvavel
 
 /** Votos válidos que ainda faltam apurar (estimativa) e os já apurados. */
 export function votosRestantes(d, validos) {
-  const { total, totalizadas } = d.secoes
-  if (!totalizadas || !total || totalizadas >= total) return 0
-  return Math.round((validos * (total - totalizadas)) / totalizadas)
+  const { total, totalizadas, percentual } = d.secoes
+  // usa o % de seções totalizadas informado pelo TSE; seções/total só como reserva
+  const p = percentual > 0 ? percentual / 100 : total ? totalizadas / total : 0
+  if (!(p > 0) || p >= 1) return 0
+  return Math.round((validos * (1 - p)) / p)
 }
 
 function majoritario(d, c, vagas) {

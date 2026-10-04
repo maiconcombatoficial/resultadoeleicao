@@ -17,6 +17,8 @@ App web para acompanhar a apuração das **Eleições Gerais 2026** com os dados
 
 **★ Eleitos pela projeção (deputados):** o app aplica o cálculo do TSE aos votos já apurados e marca em destaque quem estaria eleito: quociente eleitoral (válidos ÷ vagas), quociente partidário com votos de legenda (mínimo de 10% do QE por candidato), sobras pela maior média com as exigências de 80%/20% do QE e, por fim, a fase final aberta a todos (STF, ADIs 7228/7263/7325). Código Eleitoral arts. 106–111 com a Lei 14.211/2021; lógica em `vagas.js`. Quando o TSE marca os eleitos oficiais, vale o que o TSE diz.
 
+**🗺️ Zonas eleitorais:** depois de escolher um município, dá para escolher a zona eleitoral (lista de zonas do TSE em `mun-e<eleição>-cm.json`); o resultado vem de `dados/sc/sc<município>-z<zona>-c<cargo>-e<eleição>-u.json`. Na ficha do candidato, "Votos por município e zona" mostra os votos dele na Grande Florianópolis ou em todos os municípios de SC, e cada município pode ser aberto por zona.
+
 **📊 Municípios:** percentual de seções apuradas em cada um dos 295 municípios de SC, com destaque para Florianópolis e a Grande Florianópolis (núcleo e área de expansão da região metropolitana). A região atualiza a cada 30 s; os demais municípios a cada 3 min (no máximo 6 consultas simultâneas, e quem chegou a 100% não é consultado de novo).
 
 **❤️ Acompanhados:** toque no coração ao lado de qualquer candidato para acompanhá-lo numa aba própria, com posição, votos, distância para o candidato de cima e de baixo, situação em relação às vagas e um gráfico da evolução dos votos ao longo da apuração. A lista fica salva no próprio aparelho.

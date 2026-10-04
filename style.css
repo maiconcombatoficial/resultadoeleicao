@@ -442,7 +442,7 @@ main > .segmentado { margin-bottom: 0; }
 .regras { font-size: 0.85rem; padding-left: 20px; margin: 12px 0; display: grid; gap: 6px; }
 @media (max-width: 560px) { .calc-num { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
-.tabela td:nth-child(2) { width: 100%; }
+#lista .tabela td:nth-child(2) { width: 100%; }
 .tabela td .tag { white-space: normal; }
 .tag.eleito-proj { flex-wrap: wrap; row-gap: 0; column-gap: 5px; }
 .tag.eleito-proj b, .tag.eleito-proj small { white-space: nowrap; }
@@ -560,3 +560,22 @@ html.com-detalhe, html.com-detalhe body { overflow: hidden; }
 .tag.suplente, .tag.turno2 { white-space: normal; }
 .cand.is-eleito { box-shadow: 0 0 0 3px #0b9a52; }
 .chance-det .tag.eleito-tse { font-size: 0.95rem; padding: 6px 14px; }
+
+/* ---------- zonas e votos por município ---------- */
+.zonas { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: -4px; }
+.zonas-rot { font-size: 0.8rem; font-weight: 700; color: var(--mudo); margin-right: 2px; }
+.zonas .filtro { --cor: #0a5ea8; --cor-txt: #fff; }
+.pm-botoes { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 12px; }
+.pm-botoes .botao { font-size: 0.88rem; padding: 8px 14px; }
+#det-busca-mun {
+  width: 100%; font: inherit; padding: 9px 12px; border-radius: 10px;
+  border: 1px solid var(--linha); background: var(--fundo); color: var(--texto); margin-bottom: 8px;
+}
+.link-zonas {
+  border: 0; background: none; padding: 2px 0; margin-top: 2px; font: inherit; font-size: 0.8rem; font-weight: 700;
+  color: #0a5ea8; cursor: pointer;
+}
+.pm-zona td { background: var(--fundo); font-size: 0.88rem; }
+.pm-zona td:first-child { padding-left: 18px; }
+.pm-tabela td:first-child { width: 100%; }
+.det-voltar { flex: none; white-space: nowrap; }
