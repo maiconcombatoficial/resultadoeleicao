@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Apuração 2026 · SC</title>
+  <meta name="description" content="Acompanhe a apuração das Eleições 2026: Presidente, Senado e Deputados de Santa Catarina, com dados oficiais do TSE.">
+  <meta name="theme-color" content="#0b5d3b">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗳️</text></svg>">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topo">
+    <div class="topo-linha">
+      <div>
+        <h1>Apuração 2026</h1>
+        <p class="sub">Eleições Gerais · 1º turno · foco em Santa Catarina</p>
+      </div>
+      <div class="controles">
+        <span id="status" class="status" aria-live="polite">—</span>
+        <button id="atualizar" type="button" title="Atualizar agora">⟳</button>
+      </div>
+    </div>
+    <nav class="abas" role="tablist" id="abas"></nav>
+  </header>
+
+  <div id="aviso-demo" class="aviso" hidden>
+    <strong>Modo demonstração:</strong> números e nomes fictícios, gerados só para visualizar o app.
+    <a href="?">Sair da demonstração</a>
+  </div>
+
+  <main id="conteudo"></main>
+
+  <template id="tpl-resumo">
+    <section class="resumo cartao">
+      <div class="resumo-titulo">
+        <h2 data-f="titulo"></h2>
+        <span class="selo" data-f="selo"></span>
+      </div>
+      <div class="progresso" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+        <div class="progresso-barra" data-f="barra"></div>
+      </div>
+      <p class="progresso-texto" data-f="ptexto"></p>
+      <dl class="numeros" data-f="numeros"></dl>
+    </section>
+  </template>
+
+  <footer class="rodape">
+    <p>Fonte: <a href="https://resultados.tse.jus.br/oficial/app/index.html" target="_blank" rel="noopener">TSE – Divulgação de Resultados</a>.
+      Atualização automática a cada 30&nbsp;s. Projeto independente, sem vínculo com a Justiça Eleitoral.</p>
+    <p><a href="?demo=1" id="link-demo">Ver demonstração com dados fictícios</a></p>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
