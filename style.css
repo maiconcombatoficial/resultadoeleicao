@@ -259,6 +259,39 @@ main > .segmentado { margin-bottom: 0; }
 .tabela .dir { text-align: right; white-space: nowrap; }
 .tabela .delta { display: block; }
 
+/* ---------- escolha de município ---------- */
+.local {
+  display: flex; align-items: center; gap: 8px; background: var(--cartao); border: 1px solid var(--linha);
+  border-radius: 14px; padding: 6px 8px 6px 12px; box-shadow: var(--sombra);
+}
+.local.com-mun { border-color: var(--verde); box-shadow: 0 0 0 2px color-mix(in srgb, var(--verde) 25%, transparent); }
+.local-icone { font-size: 1.15rem; }
+.local-campo { position: relative; flex: 1; min-width: 0; display: flex; align-items: center; }
+#mun-busca {
+  flex: 1; min-width: 0; font: inherit; font-weight: 600; border: 0; background: none; color: var(--texto);
+  padding: 8px 4px; outline: none;
+}
+#mun-busca::placeholder { color: var(--mudo); font-weight: 400; }
+.local-limpar {
+  border: 0; background: var(--fundo); color: var(--mudo); border-radius: 999px; width: 28px; height: 28px;
+  cursor: pointer; font-size: 0.85rem; flex: none;
+}
+.sugestoes {
+  position: absolute; left: -40px; right: -8px; top: calc(100% + 8px); z-index: 8;
+  list-style: none; margin: 0; padding: 4px; max-height: 320px; overflow-y: auto;
+  background: var(--cartao); border: 1px solid var(--linha); border-radius: 12px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 18%);
+}
+.sugestoes[hidden] { display: none; }
+.sugestoes button {
+  display: block; width: 100%; text-align: left; font: inherit; color: var(--texto);
+  background: none; border: 0; border-radius: 8px; padding: 9px 10px; cursor: pointer;
+}
+.sugestoes button:hover, .sugestoes button:focus-visible { background: var(--primaria-clara); }
+.sugestoes .sug-estado { font-weight: 700; color: var(--primaria); border-bottom: 1px solid var(--linha); border-radius: 8px 8px 0 0; }
+.sug-info { padding: 9px 10px; color: var(--mudo); font-size: 0.85rem; }
+.ranking { counter-reset: none; }
+
 /* ---------- acompanhados ---------- */
 .estrela {
   border: 0; background: none; cursor: pointer; font-size: 1.35rem; line-height: 1; padding: 2px 4px;
