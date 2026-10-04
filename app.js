@@ -4,7 +4,8 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { corPartido, corTexto } from './cores.js?v=202610042129'
+import { calcularVagas } from './vagas.js?v=202610042154'
+import { corPartido, corTexto } from './cores.js?v=202610042154'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -92,9 +93,16 @@ function normalizar(raw, aba, turno, abrPedida) {
   const carg = (raw.carg || []).find((x) => Number(x.cd) === aba.cargo) || (raw.carg || [])[0] || { agr: [] }
   const abr = abrPedida || (raw.cdabr || '').toLowerCase()
   const candidatos = []
+  // Votos de legenda por partido: o TSE usa "tval" (total de votos de legenda) no arquivo -u.json.
+  const legendas = new Map()
+  let legendaPorPartido = false
   for (const agr of carg.agr || []) {
     const agremiacao = agr.tp === 'f' || agr.tp === 'c' ? agr.nm : ''
     for (const par of agr.par || []) {
+      const campo = ['tval', 'vl', 'tvl'].find((k) => par[k] != null && par[k] !== '')
+      if (campo) legendaPorPartido = true
+      const chave = agremiacao || par.sg
+      legendas.set(chave, (legendas.get(chave) || 0) + (campo ? num(par[campo]) : 0))
       for (const c of par.cand || []) {
         candidatos.push({
           sqcand: c.sqcand,
@@ -111,6 +119,7 @@ function normalizar(raw, aba, turno, abrPedida) {
           destinacao: c.dvt || '',
           vices: (c.vs || []).map((v) => ({ nome: v.nmu || v.nm, partido: v.sgp, tipo: v.tp })),
           foto: urlFoto(aba, abr, c.sqcand, turno),
+          dt: c.dt || '',
         })
       }
     }
@@ -141,10 +150,39 @@ function normalizar(raw, aba, turno, abrPedida) {
       pNulos: pct(v.ptvn),
     },
     candidatos,
+    legenda: {
+      porGrupo: legendas,
+      porPartido: legendaPorPartido,
+      total: v.vl != null && v.vl !== '' ? num(v.vl) : null,
+      somaPartidos: [...legendas.values()].reduce((a, b) => a + b, 0),
+    },
+    qeTSE: num(carg.qe) || null,
   }
 }
 
+// Aplica o cálculo oficial das vagas (vagas.js) sobre os votos apurados até agora.
+function aplicarProjecao(d) {
+  const grupos = new Map()
+  for (const c of d.candidatos) {
+    if (!grupos.has(c.agremiacao)) grupos.set(c.agremiacao, { nome: c.agremiacao, legenda: 0, candidatos: [] })
+    grupos.get(c.agremiacao).candidatos.push(c)
+  }
+  for (const [nome, leg] of d.legenda?.porGrupo || []) {
+    if (!grupos.has(nome)) grupos.set(nome, { nome, legenda: 0, candidatos: [] })
+    grupos.get(nome).legenda += leg
+  }
+  const r = calcularVagas({ vagas: d.vagas, grupos: [...grupos.values()] })
+  for (const c of d.candidatos) c.projecao = r.eleitos.get(c.sqcand) || null
+  d.projecao = r
+  return d
+}
+
 async function buscar(aba, abr, turno, signal, mun = null) {
+  const d = await buscarBruto(aba, abr, turno, signal, mun)
+  return aba.tipo === 'prop' && !mun ? aplicarProjecao(d) : d
+}
+
+async function buscarBruto(aba, abr, turno, signal, mun = null) {
   if (DEMO) return demo(aba, abr, mun)
   let res
   try {
@@ -249,16 +287,21 @@ function demo(aba, abr, mun = null) {
       foto: '',
     }
   })
+  const legendaDemo = new Map()
+  if (aba.tipo === 'prop') {
+    for (const c of candidatos) legendaDemo.set(c.partido, (legendaDemo.get(c.partido) || 0) + Math.round(c.votos * (0.04 + r() * 0.08)))
+  }
+  const totalLegenda = [...legendaDemo.values()].reduce((a, b) => a + b, 0)
   const totalValidos = candidatos.reduce((a, c) => a + c.votos, 0)
   candidatos.forEach((c) => (c.percentual = totalValidos ? (100 * c.votos) / totalValidos : 0))
   candidatos.sort((a, b) => b.votos - a.votos)
   if (p >= 1) {
     if (aba.tipo === 'maj' && aba.cargo !== 5 && candidatos[0].percentual <= 50) {
       candidatos[0].situacao = candidatos[1].situacao = '2º turno'
-    } else {
+    } else if (aba.tipo === 'maj') {
       candidatos.slice(0, vagas).forEach((c) => {
         c.eleito = true
-        c.situacao = aba.tipo === 'prop' ? 'Eleito por QP' : 'Eleito'
+        c.situacao = 'Eleito'
       })
     }
   }
@@ -271,8 +314,10 @@ function demo(aba, abr, mun = null) {
     final: p >= 1,
     secoes: { total: secoesTot, totalizadas: Math.round(secoesTot * p), percentual: p * 100 },
     eleitorado: { total: eleitorado, comparecimento: Math.round(comparec), pComparecimento: p ? 80 : 0, abstencao: Math.round(eleitorado * 0.2 * p), pAbstencao: p ? 20 : 0 },
-    votos: { total: Math.round(comparec), validos: totalValidos, pValidos: p ? 93 : 0, brancos: Math.round(brancos), pBrancos: p ? 3 : 0, nulos: Math.round(nulos), pNulos: p ? 4 : 0 },
+    votos: { total: Math.round(comparec), validos: totalValidos + totalLegenda, pValidos: p ? 93 : 0, brancos: Math.round(brancos), pBrancos: p ? 3 : 0, nulos: Math.round(nulos), pNulos: p ? 4 : 0 },
     candidatos,
+    legenda: { porGrupo: legendaDemo, porPartido: aba.tipo === 'prop', total: totalLegenda, somaPartidos: totalLegenda },
+    qeTSE: null,
   }
 }
 
@@ -958,6 +1003,10 @@ function foto(c, cor = corPartido(c.partido)) {
 
 function selo(c) {
   if (c.eleito) return `<span class="tag eleito">${esc(/eleito/i.test(c.situacao) ? c.situacao : 'Eleito')}</span>`
+  if (c.projecao)
+    return `<span class="tag eleito-proj" title="Pelo cálculo do TSE (quociente eleitoral, legenda e sobras) com os votos apurados até agora"><b>★ Eleito</b><small>${esc(
+      c.projecao.forma === 'QP' ? 'QP' : c.projecao.forma === 'média' ? 'média' : c.projecao.forma,
+    )} · projeção</small></span>`
   if (/2º turno|segundo turno/i.test(c.situacao)) return `<span class="tag turno2">2º turno</span>`
   if (/suplente/i.test(c.situacao)) return `<span class="tag suplente">Suplente</span>`
   if (!c.valido) return `<span class="tag invalido">${esc(c.destinacao || 'Voto anulado')}</span>`
@@ -1057,12 +1106,12 @@ function cardFavorito(f, d, { mostrarCargo = false } = {}) {
   const serie = historico[f.id] || []
   const ganhoUlt = serie.length > 1 ? serie[serie.length - 1][1] - serie[serie.length - 2][1] : 0
   let situacao = selo(c)
-  if (!situacao && d.vagas && aba?.tipo === 'prop') {
-    const corte = d.candidatos[d.vagas - 1]
-    situacao =
-      pos <= d.vagas
-        ? `<span class="tag dentro">Entre os ${d.vagas} mais votados</span>`
-        : `<span class="tag fora">${fmt.format(corte.votos - c.votos)} votos atrás do ${d.vagas}º</span>`
+  if (!situacao && aba?.tipo === 'prop' && d.projecao?.qe) {
+    const g = d.projecao.grupos.find((x) => x.nome === c.agremiacao)
+    const ultimo = g?.eleitos[g.eleitos.length - 1]
+    situacao = ultimo
+      ? `<span class="tag fora">Fora da projeção · ${fmt.format(Math.max(0, ultimo.votos - c.votos))} votos atrás do último eleito do partido</span>`
+      : `<span class="tag fora">Fora da projeção · partido sem vaga até agora</span>`
   }
   const distancias = [
     acima ? `<li>▼ <strong>${fmt.format(acima.votos - c.votos)}</strong> atrás do ${pos - 1}º (${esc(acima.nome)})</li>` : '<li>🥇 Em 1º lugar</li>',
@@ -1196,7 +1245,17 @@ function agremiacoes(d) {
     g.cor = corPartido(g.porPartido.has(g.nome) ? g.nome : lider)
     g.partidos = [...g.porPartido.keys()]
   }
-  return lista.sort((a, b) => b.votos - a.votos || b.eleitos - a.eleitos)
+  const proj = d.projecao
+  for (const g of lista) {
+    const pg = proj?.grupos.find((x) => x.nome === g.nome)
+    g.legenda = pg?.legenda || 0
+    g.total = g.votos + g.legenda
+    g.qp = pg?.qp || 0
+    g.porQP = pg?.porQP || 0
+    g.porMedia = pg?.porMedia || 0
+    g.vagasProj = pg ? pg.eleitos.length : 0
+  }
+  return lista.sort((a, b) => b.total - a.total || b.eleitos - a.eleitos)
 }
 
 function corDaAgremiacao(nome) {
@@ -1220,7 +1279,7 @@ function listaProporcional() {
       .slice(0, limite)
       .map(({ c, pos }) => {
         const cor = corPartido(c.partido)
-        return `<tr class="${c.eleito ? 'is-eleito' : ''} ${ganho(c) > 0 ? 'subiu' : ''}" style="${estiloCor(cor)}">
+        return `<tr class="${c.eleito ? 'is-eleito' : c.projecao ? 'is-proj' : ''} ${ganho(c) > 0 ? 'subiu' : ''}" style="${estiloCor(cor)}">
         <td class="mudo pos-tab">${pos}</td>
         <td>
           <div class="cand-linha">${estrela(c)}<span class="cand-nome">${esc(c.nome)}</span> ${selo(c)}</div>
@@ -1237,26 +1296,75 @@ function listaProporcional() {
 
 function tabelaPartidos(d) {
   const lista = estado.grupos
-  const total = lista.reduce((a, g) => a + g.votos, 0) || 1
-  const max = Math.max(1, ...lista.map((g) => g.votos))
-  return `<p class="nota">Soma dos votos nominais de cada partido ou federação (sem votos de legenda).
+  const total = lista.reduce((a, g) => a + g.total, 0) || 1
+  const max = Math.max(1, ...lista.map((g) => g.total))
+  const comProj = !!d.projecao?.qe
+  return `<p class="nota">Votos de cada partido ou federação: nominais + legenda.${comProj ? ' "Vagas" é a projeção pelo cálculo do TSE.' : ''}
     Toque numa linha para ver os candidatos dela.</p>
     <table class="tabela">
-    <thead><tr><th>Partido / federação</th><th class="dir">Votos</th><th class="dir">%</th><th class="dir">Eleitos</th></tr></thead>
+    <thead><tr><th>Partido / federação</th><th class="dir">Votos</th><th class="dir">%</th><th class="dir">${comProj ? 'Vagas' : 'Eleitos'}</th></tr></thead>
     <tbody>
     ${lista
       .map(
         (g) => `<tr class="clicavel" data-partido="${esc(g.nome)}" style="${estiloCor(g.cor)}">
         <td><div class="cand-linha">${pill(g.nome, g.cor)}</div>
-          <div class="cand-meta">${g.partidos.length > 1 || g.partidos[0] !== g.nome ? esc(g.partidos.join(', ')) + ' · ' : ''}${g.cands} candidatos</div>
-          <div class="barra fina"><span style="width:${(100 * g.votos) / max}%"></span></div></td>
-        <td class="dir">${fmt.format(g.votos)}</td>
-        <td class="dir">${fmtPct.format((100 * g.votos) / total)}</td>
-        <td class="dir">${g.eleitos || '—'}</td>
+          <div class="cand-meta">${g.partidos.length > 1 || g.partidos[0] !== g.nome ? esc(g.partidos.join(', ')) + ' · ' : ''}${g.cands} candidatos${
+            g.legenda ? ` · legenda ${fmt.format(g.legenda)}` : ''
+          }</div>
+          <div class="barra fina"><span style="width:${(100 * g.total) / max}%"></span></div></td>
+        <td class="dir">${fmt.format(g.total)}</td>
+        <td class="dir">${fmtPct.format((100 * g.total) / total)}</td>
+        <td class="dir"><strong>${comProj ? g.vagasProj || '—' : g.eleitos || '—'}</strong></td>
       </tr>`,
       )
       .join('')}
     </tbody></table>`
+}
+
+// Quadro com o passo a passo do cálculo das vagas.
+function cartaoCalculo(d) {
+  const r = d.projecao
+  const L = d.legenda || {}
+  const avisos = []
+  if (!L.porPartido && L.total)
+    avisos.push('O arquivo do TSE não trouxe os votos de legenda separados por partido; o cálculo está usando só os votos nominais e pode diferir do oficial.')
+  else if (L.porPartido && L.total != null && Math.abs(L.somaPartidos - L.total) > Math.max(10, L.total * 0.005))
+    avisos.push(`A soma dos votos de legenda por partido (${fmt.format(L.somaPartidos)}) não bate com o total do TSE (${fmt.format(L.total)}). Confira com o site oficial.`)
+  if (d.qeTSE && d.qeTSE !== r.qe) avisos.push(`O TSE informa quociente eleitoral de ${fmt.format(d.qeTSE)}.`)
+  if (r.semQuociente) avisos.push('Nenhum partido atingiu o quociente eleitoral: elegem-se os mais votados (art. 111).')
+  const linhas = estado.grupos.filter((g) => g.total >= 0.8 * r.qe || g.vagasProj)
+  return `<section class="cartao calculo">
+    <details>
+      <summary><strong>Como as ${d.vagas} vagas foram calculadas</strong> <span class="mudo">· toque para ver</span></summary>
+      <div class="calc-num">
+        <div><span>Votos válidos</span><strong>${fmt.format(r.validos)}</strong><small>nominais + legenda</small></div>
+        <div><span>Quociente eleitoral</span><strong>${fmt.format(r.qe)}</strong><small>válidos ÷ ${d.vagas} vagas</small></div>
+        <div><span>Votos de legenda</span><strong>${fmt.format(L.somaPartidos || 0)}</strong><small>${L.porPartido ? 'por partido, do TSE' : 'não informados'}</small></div>
+        <div><span>Partido precisa de</span><strong>${fmt.format(Math.ceil(0.8 * r.qe))}</strong><small>80% do QE, para disputar sobras</small></div>
+        <div><span>Candidato: vaga por QP</span><strong>${fmt.format(Math.ceil(0.1 * r.qe))}</strong><small>10% do QE</small></div>
+        <div><span>Candidato: sobras</span><strong>${fmt.format(Math.ceil(0.2 * r.qe))}</strong><small>20% do QE (2ª fase)</small></div>
+      </div>
+      ${avisos.map((a) => `<p class="aviso-calc">⚠️ ${esc(a)}</p>`).join('')}
+      <table class="tabela">
+        <thead><tr><th>Partido / federação</th><th class="dir">Votos</th><th class="dir">QP</th><th class="dir">Sobras</th><th class="dir">Vagas</th></tr></thead>
+        <tbody>${linhas
+          .map(
+            (g) => `<tr style="${estiloCor(g.cor)}"><td>${pill(g.nome, g.cor)}<div class="cand-meta">${fmtPct.format((100 * g.total) / r.qe)}% do QE</div></td>
+            <td class="dir">${fmt.format(g.total)}</td><td class="dir">${g.porQP}</td><td class="dir">${g.porMedia}</td><td class="dir"><strong>${g.vagasProj}</strong></td></tr>`,
+          )
+          .join('')}</tbody>
+      </table>
+      <ol class="regras">
+        <li><strong>Quociente eleitoral</strong>: votos válidos ÷ vagas (fração acima de 0,5 arredonda para cima).</li>
+        <li><strong>Quociente partidário (QP)</strong>: votos do partido/federação ÷ QE, sem a fração. Essas vagas vão aos mais votados da legenda com pelo menos 10% do QE.</li>
+        <li><strong>Sobras</strong>: vaga a vaga, para a maior média (votos ÷ (vagas já obtidas + 1)) entre partidos com 80% do QE e candidatos com 20% do QE.</li>
+        <li><strong>Sobras finais</strong>: se ninguém mais cumprir essas exigências, todos os partidos e candidatos disputam pela maior média (decisão do STF de 2024).${
+          r.fase3 ? ` <em>${r.fase3} vaga(s) nesta fase.</em>` : ''
+        }</li>
+      </ol>
+      <p class="nota">Base legal: Código Eleitoral, arts. 106 a 111, com a Lei 14.211/2021 e o STF (ADIs 7228, 7263 e 7325). Federações contam como um partido só.</p>
+    </details>
+  </section>`
 }
 
 // Semicírculo de cadeiras com os eleitos (só aparece quando o TSE marca os eleitos).
@@ -1330,21 +1438,32 @@ function renderProporcional(d) {
       <ul class="legenda">${contagem
         .map((g) => `<li data-partido="${esc(g.nome)}"><i style="background:${g.cor}"></i>${esc(g.nome)} <strong>${g.eleitos}</strong></li>`)
         .join('')}</ul>
-    </section>`
-  } else {
-    const destaque = d.candidatos.slice(0, d.vagas)
-    bancada = `<section class="cartao">
-      <h3>Os ${d.vagas} mais votados até agora</h3>
-      <p class="nota">Ordem por votos nominais — não é a projeção das vagas, que depende do quociente eleitoral de cada partido.</p>
-      <ul class="chips">${destaque
+    </section>
+    ${d.projecao?.qe ? cartaoCalculo(d) : ''}`
+  } else if (d.projecao?.qe) {
+    const proj = d.candidatos.filter((c) => c.projecao)
+    const ordem = new Map(grupos.map((g, k) => [g.nome, k]))
+    const ordenados = [...proj].sort((a, b) => ordem.get(a.agremiacao) - ordem.get(b.agremiacao) || b.votos - a.votos)
+    bancada = `<section class="cartao bancada-proj">
+      <h3>★ Eleitos pela projeção (${proj.length} de ${d.vagas})</h3>
+      <p class="nota">Cálculo do TSE (quociente eleitoral, votos de legenda e sobras) aplicado aos votos apurados até agora:
+        <strong>${fmtPct.format(d.secoes.percentual)}% das seções</strong>. Muda conforme a apuração avança; o resultado oficial é o do TSE.</p>
+      ${hemiciclo(ordenados)}
+      <ul class="legenda">${grupos
+        .filter((g) => g.vagasProj)
+        .map((g) => `<li data-partido="${esc(g.nome)}"><i style="background:${g.cor}"></i>${esc(g.nome)} <strong>${g.vagasProj}</strong></li>`)
+        .join('')}</ul>
+      <ul class="chips">${[...proj]
+        .sort((a, b) => a.projecao.ordem - b.projecao.ordem)
         .map(
           (c) =>
-            `<li class="chip" style="${estiloCor(corPartido(c.partido))}"><strong>${esc(c.nome)}</strong> ${pill(c.partido)} <span class="mudo">${fmt.format(
-              c.votos,
-            )}</span></li>`,
+            `<li class="chip" style="${estiloCor(corPartido(c.partido))}"><strong>${esc(c.nome)}</strong> ${pill(c.partido)} <span class="mudo">${fmt.format(c.votos)} · ${
+              c.projecao.forma === 'QP' ? 'QP' : 'média'
+            }</span></li>`,
         )
         .join('')}</ul>
-    </section>`
+    </section>
+    ${cartaoCalculo(d)}`
   }
 
   const visoes = `<div class="segmentado" role="group" aria-label="Visão">
