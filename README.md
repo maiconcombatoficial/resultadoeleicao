@@ -9,7 +9,7 @@ App web para acompanhar a apuração das **Eleições Gerais 2026** com os dados
 
 **📍 Municípios de SC:** em qualquer aba de Santa Catarina (e em Presidente → Santa Catarina), digite o nome de um município para ver a apuração só dele. A lista dos 295 municípios vem do TSE (`config/mun-e<eleição>-cm.json`) e o resultado de `dados/sc/sc<código TSE>-c<cargo>-e<eleição>-u.json`. O município escolhido fica salvo e vale para todas as abas.
 
-**⭐ Acompanhados:** toque na estrela ao lado de qualquer candidato para acompanhá-lo numa aba própria, com posição, votos, distância para o candidato de cima e de baixo, situação em relação às vagas e um gráfico da evolução dos votos ao longo da apuração. A lista fica salva no próprio aparelho.
+**❤️ Acompanhados:** toque no coração ao lado de qualquer candidato para acompanhá-lo numa aba própria, com posição, votos, distância para o candidato de cima e de baixo, situação em relação às vagas e um gráfico da evolução dos votos ao longo da apuração. A lista fica salva no próprio aparelho.
 
 Tudo colorido com as cores de cada partido: barra de divisão dos votos (com a linha dos 50%), semicírculo da bancada eleita, filtros por partido e dicas ao tocar nas cores.
 
