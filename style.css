@@ -820,3 +820,18 @@ td .leg-ponto { margin-right: 4px; vertical-align: middle; }
 .b26-cand { margin: 12px 0 4px; padding: 10px 12px; border-radius: 12px; background: var(--fundo); }
 .b26-cand .pro-cand { margin-bottom: 0; }
 .b26-cand .link-zonas { margin-right: 14px; }
+
+/* comparação 2022 × 2026 lado a lado */
+.cmp-lista { display: grid; gap: 0; margin-top: 6px; }
+.cmp-linha { padding: 10px 2px; border-bottom: 1px solid var(--linha); }
+.cmp-linha.clicavel { cursor: pointer; }
+.cmp-topo { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 6px; }
+.cmp-nome { min-width: 0; overflow-wrap: anywhere; }
+.cmp-topo .var { flex: none; }
+.cmp-ano { display: grid; grid-template-columns: 3.1em 1fr 4.6em; align-items: center; gap: 8px; font-size: 0.85rem; line-height: 1.5; }
+.cmp-rot { color: var(--mudo); font-weight: 700; font-variant-numeric: tabular-nums; }
+.cmp-ano.agora .cmp-rot { color: var(--texto); }
+.cmp-trilho { height: 10px; border-radius: 5px; background: var(--fundo); overflow: hidden; }
+.cmp-trilho span { display: block; height: 100%; border-radius: 5px; }
+.cmp-num { text-align: right; font-variant-numeric: tabular-nums; }
+.cmp-linha .cand-meta { margin-top: 4px; }
