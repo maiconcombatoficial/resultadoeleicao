@@ -4,11 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610062100'
-import { chanceDe, NIVEIS } from './chances.js?v=202610062100'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610062100'
-import { FLORIPA } from './floripa.js?v=202610062100'
-import { corPartido, corTexto } from './cores.js?v=202610062100'
+import { calcularVagas } from './vagas.js?v=202610062200'
+import { chanceDe, NIVEIS } from './chances.js?v=202610062200'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610062200'
+import { FLORIPA } from './floripa.js?v=202610062200'
+import { corPartido, corTexto } from './cores.js?v=202610062200'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -968,7 +968,11 @@ const chip = (cd, nm, ativo) => `<button type="button" class="atalho ${ativo ? '
 function atalhosLocal(mun) {
   // fechado por padrão; o app lembra se a pessoa deixou aberto
   const aberto = estado.atalhos ?? lerLocal('atalhos:v1', '0') === '1'
-  if (!aberto) return `<button type="button" class="atalhos-toggle" data-atalhos="1" aria-expanded="false">⚡ Mostrar cidades e regiões <span aria-hidden="true">▾</span></button>`
+  // associações da FECAM sempre à mostra (uma linha que rola para o lado)
+  const assoc = `<div class="assoc-linha"><span class="atalhos-rot">🤝 Associações</span><div class="assoc-chips">${Object.keys(ASSOCIACOES)
+    .map((sg) => `<button type="button" class="atalho regiao ${mun?.regiao === 'assoc:' + sg ? 'ativo' : ''}" data-regiao="assoc:${sg}" title="${esc(ASSOCIACOES[sg])}">${esc(sg)}</button>`)
+    .join('')}</div></div>`
+  if (!aberto) return `${assoc}<button type="button" class="atalhos-toggle" data-atalhos="1" aria-expanded="false">⚡ Mostrar cidades e regiões <span aria-hidden="true">▾</span></button>`
   const ativo = (cd) => mun && !mun.regiao && mun.cd === cd
   const gf = GRANDE_FLORIPA.map((nm) => MUNICIPIOS_SC.find((m) => chaveNome(m[2]) === chaveNome(nm))).filter(Boolean)
   const gfSet = new Set(gf.map((m) => m[0]))
@@ -1037,9 +1041,11 @@ async function mostrarSugestoes() {
       return ia - ib || a.nm.localeCompare(b.nm, 'pt-BR')
     })
     .slice(0, 40)
+  const assocs = termo.length >= 2 ? Object.entries(ASSOCIACOES).filter(([sg, nm]) => semAcento(sg).includes(termo) || semAcento(nm).includes(termo)).slice(0, 6) : []
   const bairros = termo.length >= 3 ? BAIRROS_FLORIPA.filter((b) => semAcento(b.nome).includes(termo)).slice(0, 6) : []
   ul.innerHTML =
     `<li><button type="button" data-mun-limpar class="sug-estado">🗺️ Santa Catarina inteira</button></li>` +
+    assocs.map(([sg, nm]) => `<li><button type="button" data-regiao="assoc:${sg}">🤝 ${esc(sg)} <span class="mudo">· ${esc(nm)} (associação)</span></button></li>`).join('') +
     bairros
       .map((b) => `<li><button type="button" data-bairro-zona="${b.zona}">🏘️ ${esc(b.nome)} <span class="mudo">· Florianópolis, ${Number(b.zona)}ª zona</span></button></li>`)
       .join('') +
@@ -1047,7 +1053,7 @@ async function mostrarSugestoes() {
       ? achados
           .map((m) => `<li><button type="button" data-mun-cd="${esc(m.cd)}" data-mun-nm="${esc(m.nm)}">${esc(m.nm)}${m.capital ? ' <span class="mudo">· capital</span>' : ''}</button></li>`)
           .join('')
-      : bairros.length ? '' : `<li class="sug-info">Nenhum município encontrado para “${esc(input.value)}”.</li>`)
+      : bairros.length || assocs.length ? '' : `<li class="sug-info">Nenhum município encontrado para “${esc(input.value)}”.</li>`)
   ul.hidden = false
 }
 
