@@ -4,11 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610061200'
-import { chanceDe, NIVEIS } from './chances.js?v=202610061200'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610061200'
-import { FLORIPA } from './floripa.js?v=202610061200'
-import { corPartido, corTexto } from './cores.js?v=202610061200'
+import { calcularVagas } from './vagas.js?v=202610061300'
+import { chanceDe, NIVEIS } from './chances.js?v=202610061300'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610061300'
+import { FLORIPA } from './floripa.js?v=202610061300'
+import { corPartido, corTexto } from './cores.js?v=202610061300'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -3676,34 +3676,35 @@ async function compartilharCard(card) {
   g.font = fonte(500, 30)
   g.fillText(corta(card.subtitulo, W - 128), 64, 430)
   let y = 456
-  const LIM = H - 150
+  const FAIXA = 190
+  const LIM = H - FAIXA - (card.rodape ? 76 : 44)
   // blocos de números
   const tiles = (card.tiles || []).slice(0, 6)
   if (tiles.length) {
-    const tw = (W - 96 - 16) / 2, th = 140
+    const tw = (W - 96 - 16) / 2, th = 122
     tiles.forEach((t, i) => {
-      const x = 48 + (i % 2) * (tw + 16), yy = y + Math.floor(i / 2) * (th + 14)
+      const x = 48 + (i % 2) * (tw + 16), yy = y + Math.floor(i / 2) * (th + 12)
       caixa(x, yy, tw, th)
       g.fillStyle = t.cor || cor
       g.fillRect(x, yy + 22, 8, th - 44)
       g.fillStyle = '#5f6b65'
       g.font = fonte(600, 26)
-      g.fillText(corta(t.rot, tw - 60), x + 32, yy + 44)
+      g.fillText(corta(t.rot, tw - 60), x + 32, yy + 40)
       g.fillStyle = '#17201b'
-      g.font = fonte(800, 50)
-      g.fillText(corta(t.valor, tw - 60), x + 32, yy + 100)
+      g.font = fonte(800, 46)
+      g.fillText(corta(t.valor, tw - 60), x + 32, yy + 88)
       if (t.sub) {
         g.fillStyle = t.corSub || '#5f6b65'
-        g.font = fonte(600, 22)
-        g.fillText(corta(t.sub, tw - 60), x + 32, yy + 128)
+        g.font = fonte(600, 21)
+        g.fillText(corta(t.sub, tw - 60), x + 32, yy + 112)
       }
     })
-    y += Math.ceil(tiles.length / 2) * (th + 14) + 4
+    y += Math.ceil(tiles.length / 2) * (th + 12) + 2
   }
   // lista
   for (const [i, l] of (card.linhas || []).entries()) {
     const temBarras = l.barras?.length
-    const h = temBarras ? 104 : 84
+    const h = temBarras ? 92 : 74
     if (y + h > LIM) break
     caixa(48, y, W - 96, h)
     let xn = 72
@@ -3711,49 +3712,49 @@ async function compartilharCard(card) {
     if (l.ponto) {
       g.fillStyle = l.ponto
       g.beginPath()
-      g.arc(86, y + 30, 13, 0, 2 * Math.PI)
+      g.arc(86, y + 28, 13, 0, 2 * Math.PI)
       g.fill()
       xn = 116
     } else if (card.numerar !== false) {
       g.fillStyle = '#5f6b65'
       g.font = fonte(800, 30)
-      g.fillText(`${i + 1}º`, 72, y + 40)
+      g.fillText(`${i + 1}º`, 72, y + 36)
       xn = 132
     }
     if (fl) {
-      fotoCirculo(g, fl, xn + 28, y + h / 2 - 2, 28, l.corBarra || cor, 3)
-      xn += 70
+      fotoCirculo(g, fl, xn + 25, y + h / 2 - 2, 25, l.corBarra || cor, 3)
+      xn += 64
     }
     g.fillStyle = '#17201b'
     g.font = fonte(700, 32)
-    g.fillText(corta(l.nome, W - xn - 72 - 370), xn, y + 38)
+    g.fillText(corta(l.nome, W - xn - 72 - 370), xn, y + 33)
     g.fillStyle = '#5f6b65'
     g.font = fonte(500, 24)
-    g.fillText(corta(l.extra || '', W - xn - 72 - 370), xn, y + 68)
+    g.fillText(corta(l.extra || '', W - xn - 72 - 370), xn, y + 60)
     g.textAlign = 'right'
     g.fillStyle = '#17201b'
     g.font = fonte(800, 36)
-    g.fillText(corta(l.valor ?? '', 360), W - 72, y + 40)
+    g.fillText(corta(l.valor ?? '', 360), W - 72, y + 36)
     if (l.dir2) {
       g.font = fonte(600, 24)
       g.fillStyle = l.corDir2 || '#5f6b65'
-      g.fillText(corta(l.dir2, 360), W - 72, y + 68)
+      g.fillText(corta(l.dir2, 360), W - 72, y + 60)
     }
     g.textAlign = 'left'
     if (temBarras) {
       l.barras.forEach((b, k) => {
         g.fillStyle = '#e7ece9'
-        g.fillRect(xn, y + 78 + k * 11, W - xn - 72, 7)
+        g.fillRect(xn, y + 70 + k * 10, W - xn - 72, 6)
         g.fillStyle = b.cor
-        g.fillRect(xn, y + 78 + k * 11, (W - xn - 72) * Math.max(0, Math.min(1, b.frac)), 7)
+        g.fillRect(xn, y + 70 + k * 10, (W - xn - 72) * Math.max(0, Math.min(1, b.frac)), 6)
       })
     } else if (l.frac != null) {
       g.fillStyle = l.corBarra || cor
       g.globalAlpha = 0.9
-      g.fillRect(xn, y + 76, (W - xn - 72) * Math.max(0, Math.min(1, l.frac)), 4)
+      g.fillRect(xn, y + 66, (W - xn - 72) * Math.max(0, Math.min(1, l.frac)), 4)
       g.globalAlpha = 1
     }
-    y += h + 10
+    y += h + 8
   }
   // barras empilhadas
   if (card.legenda?.length) {
@@ -3773,15 +3774,15 @@ async function compartilharCard(card) {
     y += 46
   }
   for (const p of card.pilhas || []) {
-    if (y + 78 > LIM) break
-    caixa(48, y, W - 96, 78)
+    if (y + 64 > LIM) break
+    caixa(48, y, W - 96, 64)
     g.fillStyle = '#17201b'
     g.font = fonte(700, 28)
-    g.fillText(corta(p.nome, 600), 72, y + 32)
+    g.fillText(corta(p.nome, 600), 72, y + 28)
     g.fillStyle = '#5f6b65'
     g.font = fonte(500, 22)
     g.textAlign = 'right'
-    g.fillText(corta(p.extra || '', 340), W - 72, y + 32)
+    g.fillText(corta(p.extra || '', 340), W - 72, y + 28)
     g.textAlign = 'left'
     let x = 72
     const larg = W - 144
@@ -3789,60 +3790,79 @@ async function compartilharCard(card) {
       const w = larg * s.frac
       if (w < 1) continue
       g.fillStyle = s.cor
-      g.fillRect(x, y + 44, Math.max(1, w - 2), 24)
+      g.fillRect(x, y + 37, Math.max(1, w - 2), 20)
       if (w > 70 && s.txt) {
         g.fillStyle = '#fff'
         g.font = fonte(800, 20)
         g.textAlign = 'center'
-        g.fillText(s.txt, x + w / 2, y + 63)
+        g.fillText(s.txt, x + w / 2, y + 53)
         g.textAlign = 'left'
       }
       x += w
     }
-    y += 86
+    y += 70
   }
-  // rodapé
+  // fonte e resumo, acima da faixa do criador
+  g.textAlign = 'right'
+  g.fillStyle = '#5f6b65'
+  g.font = fonte(500, 22)
+  g.fillText(corta(card.fonte || `Fonte: TSE · ${card.turno ? `boletins de urna · ${card.turno}º turno` : 'divulgação de resultados'}`, W - 128), W - 64, H - FAIXA - 18)
+  g.textAlign = 'left'
   if (card.rodape) {
     g.fillStyle = '#17201b'
-    g.font = fonte(600, 28)
-    g.fillText(corta(card.rodape, W - 128), 64, H - 114)
+    g.font = fonte(600, 26)
+    g.fillText(corta(card.rodape, W - 128), 64, H - FAIXA - 52)
   }
+  // faixa do criador: foto grande, @ e Instagram
+  const gf = g.createLinearGradient(0, H - FAIXA, W, H)
+  gf.addColorStop(0, '#0b3d1f')
+  gf.addColorStop(1, '#0a4a8a')
+  g.fillStyle = gf
+  g.fillRect(0, H - FAIXA, W, FAIXA)
+  g.fillStyle = '#ffdf00'
+  g.fillRect(0, H - FAIXA, W, 6)
   const foto = await new Promise((ok) => {
     const im = new Image()
     im.onload = () => ok(im)
     im.onerror = () => ok(null)
     im.src = `img/maicon-combat.jpg?v=${VERSAO}`
   })
-  let xArroba = 64
+  const cyF = H - FAIXA / 2 + 3
+  let xT = 64
   if (foto) {
-    const r = 38, cx = 64 + r, cy = H - 56
-    g.save()
-    g.beginPath()
-    g.arc(cx, cy, r + 5, 0, 2 * Math.PI)
-    g.fillStyle = '#ffdf00'
-    g.fill()
-    g.beginPath()
-    g.arc(cx, cy, r, 0, 2 * Math.PI)
-    g.clip()
-    const lado = Math.min(foto.naturalWidth, foto.naturalHeight)
-    g.drawImage(foto, (foto.naturalWidth - lado) / 2, (foto.naturalHeight - lado) / 2, lado, lado, cx - r, cy - r, 2 * r, 2 * r)
-    g.restore()
-    xArroba = 64 + 2 * r + 20
+    fotoCirculo(g, foto, 64 + 62, cyF, 62, '#ffdf00', 7)
+    xT = 64 + 124 + 30
   }
-  g.fillStyle = '#0b7a45'
-  g.font = fonte(800, 34)
-  g.fillText('@maiconcombat', xArroba, H - 44)
+  g.fillStyle = '#ffffff'
+  g.font = fonte(800, 52)
+  g.fillText('@maiconcombat', xT, cyF - 6)
+  // ícone do Instagram (contorno) + endereço
+  const ix = xT, iy = cyF + 18, il = 34
+  g.strokeStyle = '#ffdf00'
+  g.lineWidth = 4
+  g.beginPath()
+  g.roundRect(ix, iy, il, il, 10)
+  g.stroke()
+  g.beginPath()
+  g.arc(ix + il / 2, iy + il / 2, 8, 0, 2 * Math.PI)
+  g.stroke()
+  g.fillStyle = '#ffdf00'
+  g.beginPath()
+  g.arc(ix + il - 8, iy + 8, 2.6, 0, 2 * Math.PI)
+  g.fill()
+  g.font = fonte(700, 30)
+  g.fillText('instagram.com/maiconcombat', ix + il + 14, iy + 28)
   g.textAlign = 'right'
-  g.fillStyle = '#5f6b65'
-  g.font = fonte(500, 24)
-  g.fillText(corta(card.fonte || `Fonte: TSE · ${card.turno ? `boletins de urna · ${card.turno}º turno` : 'divulgação de resultados'}`, W - xArroba - 330), W - 64, H - 46)
+  g.fillStyle = 'rgba(255,255,255,.75)'
+  g.font = fonte(600, 22)
+  g.fillText('maiconcombat.com.br', W - 64, cyF - 12)
   g.textAlign = 'left'
   const blob = await new Promise((ok) => cv.toBlob(ok, 'image/png'))
   const nome = `${nomeArquivo(card.nome || 'apuracao')}-${nomeArquivo(card.titulo || 'card')}.png`
   const arq = new File([blob], nome, { type: 'image/png' })
   if (navigator.canShare?.({ files: [arq] })) {
     try {
-      await navigator.share({ files: [arq], title: `${card.nome} · ${card.titulo}` })
+      await navigator.share({ files: [arq], title: `${card.nome} · ${card.titulo}`, text: `${card.nome} · ${card.titulo}\nPor @maiconcombat · https://www.instagram.com/maiconcombat/` })
       return
     } catch (e) {
       if (e?.name === 'AbortError') return
@@ -4548,7 +4568,7 @@ function renderTransfPro() {
       <h3>🔀 Para onde foram os eleitores de cada candidato do 1º turno</h3>
       ${leg}
       ${linhas.join('')}
-      <div class="exportar">${botaoCard('pro-transf', { exclusivo: true, turno: 2, nome: sel.rot.replace(' · ', ' SC · '), cor: dest[0]?.cor, sub: `No 2º turno: ${R.destinos.map((d, j) => `${dest[j].nome.split(' ')[0]} ${fmt.format(R.votos2[j])}`).join(' · ')}`,
+      <div class="exportar">${botaoCard('pro-transf', { exclusivo: true, turno: 2, chapeu: `ELEIÇÕES ${sel.ano} · SANTA CATARINA`, nome: sel.rot.replace(' · ', ' SC · '), cor: dest[0]?.cor, sub: `No 2º turno: ${R.destinos.map((d, j) => `${dest[j].nome.split(' ')[0]} ${fmt.format(R.votos2[j])}`).join(' · ')}`,
         titulo: 'Para onde foram os votos do 1º turno', subtitulo: `Estimativa seção a seção (${fmt.format(R.secoes)} seções)`,
         legenda: dest.map((d) => ({ cor: d.cor, txt: d.nome })),
         pilhas: R.origens.map((o, i) => ({ nome: votavelTransf(sel.ano, id1, o).nome, extra: `${fmt.format(R.votos1[i])} votos`, segs: R.T[i].map((v, j) => ({ frac: v, cor: dest[j].cor, txt: v >= 0.08 ? `${Math.round(100 * v)}%` : '' })) })),
