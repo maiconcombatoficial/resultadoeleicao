@@ -611,3 +611,43 @@ html.com-detalhe, html.com-detalhe body { overflow: hidden; }
   background: var(--cartao); border: 1px solid var(--linha); border-radius: 12px; padding: 10px 14px; box-shadow: var(--sombra);
 }
 .atalhos-toggle.aberto { border-color: var(--verde); }
+
+/* ---------- comparação ---------- */
+.botao.comparar { width: 100%; margin-top: 4px; }
+#comp-busca {
+  width: 100%; font: inherit; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--linha); background: var(--fundo); color: var(--texto); margin-bottom: 10px;
+}
+.comp-lista { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 4px; }
+.comp-lista button {
+  width: 100%; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 8px; align-items: center;
+  font: inherit; color: var(--texto); text-align: left; cursor: pointer;
+  background: var(--fundo); border: 1px solid var(--linha); border-left: 5px solid var(--cor); border-radius: 10px; padding: 8px 10px;
+}
+.comp-nome { min-width: 0; overflow-wrap: anywhere; }
+.comp-topo { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px; align-items: start; }
+.comp-lado { display: grid; justify-items: center; text-align: center; gap: 4px; min-width: 0; padding-top: 6px; border-top: 5px solid var(--cor); border-radius: 10px; }
+.comp-lado .foto { width: 64px; height: 64px; }
+.comp-nome-g { font-size: 1rem; overflow-wrap: anywhere; line-height: 1.2; }
+.comp-selos { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
+.comp-vs { align-self: center; font-size: 1.6rem; font-weight: 800; color: var(--mudo); }
+.comp-veredito {
+  margin: 12px 0; padding: 10px 12px; border-radius: 10px; text-align: center; overflow-wrap: anywhere;
+  background: color-mix(in srgb, var(--cor) 14%, var(--cartao)); border: 1px solid color-mix(in srgb, var(--cor) 40%, var(--linha));
+}
+.comp-tabela { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.comp-tabela th { font-size: 0.72rem; color: var(--mudo); text-transform: uppercase; letter-spacing: 0.03em; font-weight: 700; padding: 8px 4px; text-align: center; }
+.comp-tabela td { width: 36%; text-align: center; font-weight: 800; font-size: 1.05rem; padding: 8px 4px; border-radius: 8px; overflow-wrap: anywhere; }
+.comp-tabela tr + tr > * { border-top: 1px solid var(--linha); }
+.comp-tabela td.vence, .comp-mun td.vence { color: var(--eleito); background: var(--eleito-fundo); }
+.comp-placar { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; font-size: 0.9rem; }
+.comp-placar > span[style] { border-left: 4px solid var(--cor); padding-left: 6px; }
+.duelo { display: flex; height: 6px; border-radius: 999px; overflow: hidden; margin-top: 5px; background: var(--fundo); gap: 2px; }
+.duelo span { display: block; height: 100%; }
+.duelo span.b { background-image: repeating-linear-gradient(135deg, rgb(255 255 255 / 35%) 0 3px, transparent 3px 6px); }
+.comp-mun th.dir { max-width: 90px; overflow-wrap: anywhere; }
+.grafico .linha.tracejada { stroke-dasharray: 6 4; }
+.leg-tracejada { background-image: repeating-linear-gradient(90deg, transparent 0 3px, var(--cartao) 3px 5px); }
+.grafico .legenda { margin: 4px 0; }
+.comp-mun th.dir { white-space: normal; text-align: right; font-size: 0.68rem; line-height: 1.2; width: 26%; }
+.comp-mun td.dir { width: 26%; }

@@ -4,10 +4,10 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610050147'
-import { chanceDe, NIVEIS } from './chances.js?v=202610050147'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610050147'
-import { corPartido, corTexto } from './cores.js?v=202610050147'
+import { calcularVagas } from './vagas.js?v=202610050204'
+import { chanceDe, NIVEIS } from './chances.js?v=202610050204'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610050204'
+import { corPartido, corTexto } from './cores.js?v=202610050204'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -1895,6 +1895,7 @@ function abrirDetalhe({ aba, abr, sqcand }) {
 function fecharDetalhe(voltarHistorico = true) {
   if (!estado.detalhe) return
   estado.detalhe.ctrlPorMun?.abort()
+  estado.detalhe.ctrlComp?.abort()
   estado.detalhe = null
   detalheEl.hidden = true
   detalheEl.innerHTML = ''
@@ -2017,10 +2018,11 @@ function blocoDisputa(d, c, aba) {
 function renderDetalhe() {
   const det = estado.detalhe
   if (!det) return
-  const focoBusca = document.activeElement?.id === 'det-busca-mun' ? document.activeElement.selectionStart : null
+  const idFoco = ['det-busca-mun', 'comp-busca'].includes(document.activeElement?.id) ? document.activeElement.id : null
+  const focoBusca = idFoco ? document.activeElement.selectionStart : null
   renderDetalheConteudo()
   if (focoBusca != null) {
-    const el = document.getElementById('det-busca-mun')
+    const el = document.getElementById(idFoco)
     el?.focus()
     el?.setSelectionRange(focoBusca, focoBusca)
   }
@@ -2039,6 +2041,15 @@ function renderDetalheConteudo() {
   const c = d.candidatos.find((x) => x.sqcand === det.sqcand)
   if (!c) {
     detalheEl.innerHTML = `<div class="det-corpo">${voltar}<div class="cartao vazio">Candidato não encontrado nesta apuração.</div></div>`
+    return
+  }
+  if (det.escolhendo) {
+    detalheEl.innerHTML = `<div class="det-corpo">${voltar}${escolherComparacao(d, c)}</div>`
+    return
+  }
+  const c2 = det.comp && d.candidatos.find((x) => x.sqcand === det.comp.sqcand)
+  if (c2) {
+    detalheEl.innerHTML = `<div class="det-corpo">${voltar}${renderComparacao(d, c, c2, aba)}</div>`
     return
   }
   const cor = corPartido(c.partido)
@@ -2087,6 +2098,7 @@ function renderDetalheConteudo() {
         <div><span class="fav-rot">Posição</span><strong>${pos}º</strong><span class="mudo">de ${total}</span></div>
       </div>
       <p class="nota">${fmtPct.format(d.secoes.percentual)}% das seções apuradas · dados do TSE de ${esc(d.atualizadoEm || '—')}</p>
+      <button type="button" class="botao comparar" data-comparar>⚖️ Comparar com outro candidato</button>
     </section>
     <section class="cartao"><h3>Tendência</h3>${tendTxt}
       ${graficoLinha(ptsPct, { cor, fmtY: (v) => `${fmtPct.format(v)}%`, titulo: '% dos votos válidos' })}
@@ -2251,6 +2263,213 @@ async function alternarZonas(cd) {
   if (estado.detalhe === det) renderDetalhe()
 }
 
+/* ---------------- comparação entre dois candidatos ---------------- */
+
+function serieDe(det, sqcand) {
+  const sessao = historicoSessao.get(`${det.aba}|${det.abr}|${chaveLocal(det.mun)}|${sqcand}`) || []
+  if (det.mun) return sessao
+  const guardada = historico[idFav(det.aba, det.abr, sqcand)] || []
+  return guardada.length >= sessao.length ? guardada : sessao
+}
+
+function escolherComparacao(d, c) {
+  const det = estado.detalhe
+  const termo = semAcento((det.buscaComp || '').trim())
+  const lista = d.candidatos
+    .filter((x) => x !== c && x.valido)
+    .filter((x) => !termo || semAcento(`${x.nome} ${x.nomeCompleto} ${x.partido} ${x.numero}`).includes(termo))
+    .slice(0, termo ? 60 : 25)
+  const favs = d.candidatos.filter((x) => x !== c && ehFavorito(det.aba, det.abr, x.sqcand))
+  const item = (x) => {
+    const cor = corPartido(x.partido)
+    return `<li><button type="button" data-comp-sq="${esc(x.sqcand)}" style="${estiloCor(cor)}">
+      <span class="pos">${d.candidatos.indexOf(x) + 1}º</span>
+      <span class="comp-nome"><strong>${esc(x.nome)}</strong> ${pill(x.partido, cor)}</span>
+      <span class="mudo">${fmt.format(x.votos)}</span></button></li>`
+  }
+  return `<section class="cartao">
+    <h3>⚖️ Comparar ${esc(c.nome)} com…</h3>
+    <input id="comp-busca" type="search" placeholder="Buscar por nome, partido ou número…" value="${esc(det.buscaComp || '')}" autocomplete="off">
+    ${favs.length && !termo ? `<p class="atalhos-rot">❤️ Acompanhados</p><ul class="comp-lista">${favs.map(item).join('')}</ul><p class="atalhos-rot">Mais votados</p>` : ''}
+    <ul class="comp-lista">${lista.map(item).join('') || '<li class="nota">Nenhum candidato encontrado.</li>'}</ul>
+    <button type="button" class="botao secundario" data-sair-comp>Cancelar</button>
+  </section>`
+}
+
+// Duas séries no mesmo gráfico; a segunda tracejada (identidade não depende só da cor).
+function graficoDuplo(series, { fmtY, zero = false, titulo }) {
+  const validas = series.filter((s) => s.pontos.length > 1)
+  if (!validas.length) return ''
+  const W = 320, H = 130, ML = 6, MR = 6, MT = 16, MB = 18
+  const todos = validas.flatMap((s) => s.pontos)
+  const x0 = Math.min(...todos.map((p) => p.x)), x1 = Math.max(...todos.map((p) => p.x))
+  let y0 = zero ? 0 : Math.min(...todos.map((p) => p.y)), y1 = Math.max(...todos.map((p) => p.y))
+  if (y1 === y0) { y0 -= Math.abs(y0) * 0.05 || 1; y1 += Math.abs(y1) * 0.05 || 1 }
+  const pad = zero ? 0 : (y1 - y0) * 0.12
+  const lo = y0 - pad, hi = y1 + pad
+  const X = (v) => (x1 === x0 ? W / 2 : ML + ((v - x0) / (x1 - x0)) * (W - ML - MR))
+  const Y = (v) => MT + (1 - (v - lo) / (hi - lo)) * (H - MT - MB)
+  const linhas = validas
+    .map((s, i) => {
+      const pts = s.pontos.map((p) => `${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join(' ')
+      const u = s.pontos[s.pontos.length - 1]
+      const alvos = s.pontos
+        .map((p) => `<circle class="alvo" cx="${X(p.x).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="7" data-dica="${esc(`<strong>${esc(s.nome)}</strong><br>${fmtY(p.y)} com ${fmtPct.format(p.x)}% apurado`)}"></circle>`)
+        .join('')
+      return `<polyline class="linha ${i ? 'tracejada' : ''}" style="--cor:${s.cor}" points="${pts}"></polyline>
+        <circle class="ponta" style="--cor:${s.cor}" cx="${X(u.x).toFixed(1)}" cy="${Y(u.y).toFixed(1)}" r="4.5"></circle>${alvos}`
+    })
+    .join('')
+  return `<figure class="grafico">
+    <figcaption>${esc(titulo)}</figcaption>
+    <ul class="legenda">${validas.map((s, i) => `<li><i class="${i ? 'leg-tracejada' : ''}" style="background:${s.cor}"></i>${esc(s.nome)}</li>`).join('')}</ul>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(titulo)}">
+      <line class="grade" x1="${ML}" x2="${W - MR}" y1="${Y(y1).toFixed(1)}" y2="${Y(y1).toFixed(1)}"></line>
+      <line class="grade" x1="${ML}" x2="${W - MR}" y1="${Y(y0).toFixed(1)}" y2="${Y(y0).toFixed(1)}"></line>
+      <text class="rot" x="${ML}" y="${(Y(y1) - 4).toFixed(1)}">${esc(fmtY(y1))}</text>
+      <text class="rot" x="${ML}" y="${(Y(y0) - 4).toFixed(1)}">${esc(fmtY(y0))}</text>
+      ${linhas}
+      <text class="rot" x="${ML}" y="${H - 4}">${fmtPct.format(x0)}% apurado</text>
+      <text class="rot" x="${W - MR}" y="${H - 4}" text-anchor="end">${fmtPct.format(x1)}% apurado</text>
+    </svg>
+  </figure>`
+}
+
+function renderComparacao(d, a, b, aba) {
+  const det = estado.detalhe
+  const corA = corPartido(a.partido)
+  let corB = corPartido(b.partido)
+  const pa = d.candidatos.indexOf(a) + 1, pb = d.candidatos.indexOf(b) + 1
+  const lider = a.votos >= b.votos ? a : b
+  const outro = lider === a ? b : a
+  const dif = lider.votos - outro.votos
+  const sa = serieDe(det, a.sqcand), sb = serieDe(det, b.sqcand)
+  const ganho = (s) => (s.length > 1 ? s[s.length - 1][1] - s[s.length - 2][1] : 0)
+  const ga = ganho(sa), gb = ganho(sb)
+  // diferença ao longo do tempo (pontos em que os dois foram lidos com o mesmo % apurado)
+  const mapaB = new Map(sb.map((p) => [p[0], p]))
+  const difSerie = sa.filter((p) => mapaB.has(p[0])).map((p) => ({ x: p[0], y: p[1] - mapaB.get(p[0])[1] }))
+  let tendDif = ''
+  if (difSerie.length > 2) {
+    const ini = difSerie[Math.max(0, difSerie.length - 6)].y, fim = difSerie[difSerie.length - 1].y
+    const quemA = fim >= 0 ? a : b
+    const abrindo = Math.abs(fim) > Math.abs(ini)
+    tendDif = `<p class="tend ${abrindo ? 'tend-alta' : 'tend-queda'}"><span class="tend-icone">${abrindo ? '↔️' : '🔜'}</span><span><strong>${
+      abrindo ? 'Diferença aumentando' : 'Diferença diminuindo'
+    }</strong> nas últimas atualizações: de ${fmt.format(Math.abs(ini))} para ${fmt.format(Math.abs(fim))} votos, com ${esc(quemA.nome)} na frente.</span></p>`
+  }
+  const lado = (c, cor, pos, g) => `<div class="comp-lado" style="${estiloCor(cor)}">
+      ${foto(c, cor)}
+      <strong class="comp-nome-g">${esc(c.nome)}</strong>
+      <div>${pill(c.partido, cor)}</div>
+      <div class="comp-selos">${selo(c)} ${seloChance(d, c, aba, true)}</div>
+    </div>`
+  const linha = (rot, va, vb, maiorMelhor = true, fmtv = (v) => v) => {
+    const vence = va === vb ? 0 : (va > vb) === maiorMelhor ? 1 : 2
+    return `<tr><td class="${vence === 1 ? 'vence' : ''}">${fmtv(va)}</td><th>${rot}</th><td class="${vence === 2 ? 'vence' : ''}">${fmtv(vb)}</td></tr>`
+  }
+  const ptsPct = (s) => s.filter((p) => p[3] != null).map((p) => ({ x: p[0], y: p[3] }))
+  const ptsVot = (s) => s.map((p) => ({ x: p[0], y: p[1] }))
+  return `<section class="cartao comp-cabeca">
+      <div class="comp-topo">${lado(a, corA, pa, ga)}<span class="comp-vs">×</span>${lado(b, corB, pb, gb)}</div>
+      <div class="comp-veredito" style="${estiloCor(corPartido(lider.partido))}">
+        ${dif === 0 ? 'Empatados' : `<strong>${esc(lider.nome)}</strong> está <strong>${fmt.format(dif)}</strong> votos à frente (${fmtPct.format(Math.abs(a.percentual - b.percentual))} p.p.)`}
+      </div>
+      <table class="comp-tabela"><tbody>
+        ${linha('Votos', a.votos, b.votos, true, (v) => fmt.format(v))}
+        ${linha('% dos válidos', a.percentual, b.percentual, true, (v) => `${fmtPct.format(v)}%`)}
+        ${linha('Posição', pa, pb, false, (v) => `${v}º`)}
+        ${ga || gb ? linha('Ganho na última atualização', ga, gb, true, (v) => `+${fmt.format(v)}`) : ''}
+      </tbody></table>
+      <p class="nota">${fmtPct.format(d.secoes.percentual)}% das seções apuradas${det.mun ? ` · ${esc(det.mun.nm)}` : ''}. Em verde, quem leva vantagem em cada linha.</p>
+      <div class="pm-botoes"><button type="button" class="botao secundario" data-trocar-comp>Trocar candidato</button>
+        <button type="button" class="botao secundario" data-sair-comp>Sair da comparação</button></div>
+    </section>
+    <section class="cartao"><h3>Evolução</h3>${tendDif}
+      ${graficoDuplo([{ nome: a.nome, cor: corA, pontos: ptsPct(sa) }, { nome: b.nome, cor: corB, pontos: ptsPct(sb) }], { fmtY: (v) => `${fmtPct.format(v)}%`, titulo: '% dos votos válidos' })}
+      ${graficoDuplo([{ nome: a.nome, cor: corA, pontos: ptsVot(sa) }, { nome: b.nome, cor: corB, pontos: ptsVot(sb) }], { fmtY: (v) => fmt.format(Math.round(v)), zero: true, titulo: 'Votos acumulados' })}
+      ${sa.length < 2 || sb.length < 2 ? '<p class="nota">Os gráficos aparecem depois de algumas atualizações com votos novos.</p>' : ''}
+    </section>
+    ${det.abr === UF || aba?.id === 'presidente' ? secaoCompMunicipios(det, a, b, corA, corB) : ''}`
+}
+
+function secaoCompMunicipios(det, a, b, corA, corB) {
+  const cm = det.comp.porMun
+  const botoes = `<div class="pm-botoes">
+      ${[['regiao', 'Grande Florianópolis'], ['maiores', 'Maiores cidades'], ['todos', 'Todos + regiões']]
+        .map(([k, r]) => `<button type="button" class="botao ${cm?.escopo === k ? '' : 'secundario'}" data-comp-mun="${k}">${r}</button>`)
+        .join('')}</div>`
+  if (!cm) return `<section class="cartao"><h3>📍 Onde cada um é mais forte</h3><p class="nota">Compara os votos dos dois em cada município (arquivos do TSE).</p>${botoes}</section>`
+  const agrupar = cm.escopo === 'todos' && !cm.carregando ? cm.agrupar || 'mun' : 'mun'
+  let linhas = cm.linhas
+  if (agrupar === 'meso') {
+    const g = new Map()
+    for (const l of cm.linhas) {
+      const k = MUN_REG.get(l.cd)?.meso || '?'
+      const x = g.get(k) || { nm: MESORREGIOES[k] || 'Outros', a: 0, b: 0 }
+      x.a += l.a
+      x.b += l.b
+      g.set(k, x)
+    }
+    linhas = [...g.values()]
+  }
+  linhas = [...linhas].sort((x, y) => y.a + y.b - (x.a + x.b))
+  const venceA = cm.linhas.filter((l) => l.a > l.b).length, venceB = cm.linhas.filter((l) => l.b > l.a).length
+  const limite = cm.verTodos || agrupar !== 'mun' ? linhas.length : 40
+  return `<section class="cartao"><h3>📍 Onde cada um é mais forte</h3>${botoes}
+    ${cm.escopo === 'todos' && !cm.carregando ? `<div class="segmentado" role="group"><button type="button" data-comp-agrupar="mun" aria-pressed="${agrupar === 'mun'}">Municípios</button><button type="button" data-comp-agrupar="meso" aria-pressed="${agrupar === 'meso'}">Regiões</button></div>` : ''}
+    ${cm.carregando ? `<p class="nota">Consultando ${cm.feitos} de ${cm.total} municípios…</p>` : `<p class="comp-placar"><span style="${estiloCor(corA)}">${esc(a.nome)}: <strong>${venceA}</strong></span> × <span style="${estiloCor(corB)}">${esc(b.nome)}: <strong>${venceB}</strong></span> <span class="mudo">municípios na frente</span></p>`}
+    <table class="tabela comp-mun"><thead><tr><th>${agrupar === 'meso' ? 'Região' : 'Município'}</th><th class="dir">${esc(a.nome)}</th><th class="dir">${esc(b.nome)}</th></tr></thead><tbody>${linhas
+      .slice(0, limite)
+      .map((l) => {
+        const tot = l.a + l.b || 1
+        return `<tr><td>${esc(l.nm)}<div class="duelo"><span style="width:${(100 * l.a) / tot}%;background:${corA}"></span><span class="b" style="width:${(100 * l.b) / tot}%;background:${corB}"></span></div></td>
+          <td class="dir ${l.a > l.b ? 'vence' : ''}">${fmt.format(l.a)}</td><td class="dir ${l.b > l.a ? 'vence' : ''}">${fmt.format(l.b)}</td></tr>`
+      })
+      .join('')}</tbody></table>
+    ${linhas.length > limite ? `<button type="button" class="botao secundario" data-comp-ver-todos>Mostrar todos os ${linhas.length}</button>` : ''}
+  </section>`
+}
+
+async function carregarCompMunicipios(escopo) {
+  const det = estado.detalhe
+  if (!det?.comp) return
+  const aba = ABAS.find((x) => x.id === det.aba)
+  const lista = await municipios(aba)
+  const porCd = new Map(lista.map((m) => [m.cd, m]))
+  const alvo =
+    escopo === 'regiao'
+      ? lista.filter((m) => NUCLEO.has(chaveNome(m.nm)) || EXPANSAO.has(chaveNome(m.nm)))
+      : escopo === 'maiores'
+        ? MUNICIPIOS_SC.slice(0, 15).map(([cd, , nm]) => porCd.get(cd) || { cd, nm })
+        : lista
+  det.ctrlComp?.abort()
+  const ctrl = new AbortController()
+  det.ctrlComp = ctrl
+  const cm = { escopo, carregando: true, feitos: 0, total: alvo.length, linhas: [] }
+  det.comp.porMun = cm
+  renderDetalhe()
+  let ultimo = 0
+  await emLotes(alvo, 6, async (m) => {
+    try {
+      const d = await buscar(aba, UF, TURNO, ctrl.signal, { cd: m.cd, nm: m.nm })
+      const va = d.candidatos.find((x) => x.sqcand === det.sqcand)?.votos || 0
+      const vb = d.candidatos.find((x) => x.sqcand === det.comp.sqcand)?.votos || 0
+      cm.linhas.push({ cd: m.cd, nm: m.nm, a: va, b: vb })
+    } catch (err) {
+      if (err.name === 'AbortError') throw err
+    }
+    cm.feitos++
+    if (estado.detalhe === det && Date.now() - ultimo > 600) {
+      ultimo = Date.now()
+      renderDetalhe()
+    }
+  }, ctrl.signal).catch(() => {})
+  if (ctrl.signal.aborted) return
+  cm.carregando = false
+  if (estado.detalhe === det) renderDetalhe()
+}
+
 detalheEl.addEventListener('click', (ev) => {
   if (ev.target.closest('[data-fechar]') || ev.target === detalheEl) return fecharDetalhe()
   const favBtn = ev.target.closest('[data-fav]')
@@ -2258,6 +2477,37 @@ detalheEl.addEventListener('click', (ev) => {
     tratarFav(favBtn)
     renderDetalhe()
     return
+  }
+  const det = estado.detalhe
+  if (ev.target.closest('[data-comparar]') || ev.target.closest('[data-trocar-comp]')) {
+    det.escolhendo = true
+    det.buscaComp = ''
+    detalheEl.scrollTop = 0
+    return renderDetalhe()
+  }
+  const compSq = ev.target.closest('[data-comp-sq]')
+  if (compSq) {
+    det.escolhendo = false
+    det.comp = { sqcand: compSq.dataset.compSq, porMun: null }
+    detalheEl.scrollTop = 0
+    return renderDetalhe()
+  }
+  if (ev.target.closest('[data-sair-comp]')) {
+    det.escolhendo = false
+    det.ctrlComp?.abort()
+    det.comp = null
+    return renderDetalhe()
+  }
+  const cmBtn = ev.target.closest('[data-comp-mun]')
+  if (cmBtn) return carregarCompMunicipios(cmBtn.dataset.compMun)
+  const cagBtn = ev.target.closest('[data-comp-agrupar]')
+  if (cagBtn && det.comp?.porMun) {
+    det.comp.porMun.agrupar = cagBtn.dataset.compAgrupar
+    return renderDetalhe()
+  }
+  if (ev.target.closest('[data-comp-ver-todos]') && det.comp?.porMun) {
+    det.comp.porMun.verTodos = true
+    return renderDetalhe()
   }
   const pmBtn = ev.target.closest('[data-por-mun]')
   if (pmBtn) return carregarPorMunicipio(pmBtn.dataset.porMun)
@@ -2274,6 +2524,10 @@ detalheEl.addEventListener('click', (ev) => {
   }
 })
 detalheEl.addEventListener('input', (ev) => {
+  if (ev.target.id === 'comp-busca' && estado.detalhe) {
+    estado.detalhe.buscaComp = ev.target.value
+    return renderDetalhe()
+  }
   if (ev.target.id !== 'det-busca-mun' || !estado.detalhe?.porMun) return
   estado.detalhe.porMun.busca = ev.target.value
   renderDetalhe()
