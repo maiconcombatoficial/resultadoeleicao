@@ -4,11 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610052300'
-import { chanceDe, NIVEIS } from './chances.js?v=202610052300'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610052300'
-import { FLORIPA } from './floripa.js?v=202610052300'
-import { corPartido, corTexto } from './cores.js?v=202610052300'
+import { calcularVagas } from './vagas.js?v=202610060820'
+import { chanceDe, NIVEIS } from './chances.js?v=202610060820'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610060820'
+import { FLORIPA } from './floripa.js?v=202610060820'
+import { corPartido, corTexto } from './cores.js?v=202610060820'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -2860,7 +2860,7 @@ function renderSobre() {
         <li><strong>2026 por seção e bairro:</strong> boletins de urna de cada seção do 1º turno, publicados pelo TSE em "Dados de urna", somados pelo bairro do local de votação.</li>
         <li><strong>Bairros dos locais de votação:</strong> cadastro de locais de votação do TSE (2022 e 2026); em Florianópolis, a lista do TRE-SC.</li>
         <li><strong>Regiões e população:</strong> IBGE.</li>
-        <li><strong>🔒 Análises:</strong> perfil do eleitorado por seção (TSE, 2026), coordenadas dos locais de votação (TSE), mapa base © OpenStreetMap / CARTO e estimativa de transferência de votos entre turnos, seção a seção. Os dados desta área são criptografados e só abrem com usuário e senha.</li>
+        <li><strong>🔒 Análises:</strong> perfil do eleitorado por seção (TSE, 2026), coordenadas dos locais de votação (TSE), mapa base © OpenStreetMap e estimativa de transferência de votos entre turnos, seção a seção. Os dados desta área são criptografados e só abrem com usuário e senha.</li>
       </ul>
       <p class="nota">Projeto independente, sem vínculo com a Justiça Eleitoral. Projeções e chances de reverter são estimativas do app; vale sempre o resultado oficial do TSE.</p>
     </section>`
@@ -4127,9 +4127,19 @@ async function montarMapaPro() {
   const mapa = L.map(div, { zoomControl: true, attributionControl: true, preferCanvas: true })
   PRO.mapa = mapa
   mapa.attributionControl.setPrefix('<a href="https://leafletjs.com">Leaflet</a>')
-  L.tileLayer(`https://{s}.basemaps.cartocdn.com/${escuro ? 'dark_all' : 'light_all'}/{z}/{x}/{y}{r}.png`, {
-    maxZoom: 18, subdomains: 'abcd', attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  // mapa base sem chave de API: OpenStreetMap; se os blocos falharem, troca para o mapa cinza da Esri
+  div.classList.toggle('mapa-escuro', escuro)
+  const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
   }).addTo(mapa)
+  let falhas = 0
+  osm.on('tileerror', () => {
+    if (++falhas !== 4 || PRO.mapa !== mapa) return
+    mapa.removeLayer(osm)
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 16, attribution: 'Mapa &copy; Esri, HERE, Garmin, &copy; OpenStreetMap',
+    }).addTo(mapa)
+  })
   const max = Math.max(1, ...pts.map((p) => p.tam))
   const rMax = PRO.mun ? 22 : 26
   const bounds = []
