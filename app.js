@@ -4,11 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610051700'
-import { chanceDe, NIVEIS } from './chances.js?v=202610051700'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610051700'
-import { FLORIPA } from './floripa.js?v=202610051700'
-import { corPartido, corTexto } from './cores.js?v=202610051700'
+import { calcularVagas } from './vagas.js?v=202610051800'
+import { chanceDe, NIVEIS } from './chances.js?v=202610051800'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610051800'
+import { FLORIPA } from './floripa.js?v=202610051800'
+import { corPartido, corTexto } from './cores.js?v=202610051800'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -1164,6 +1164,7 @@ conteudo.addEventListener('click', (ev) => {
     if (h('[data-h22-vergrupos]')) return ((X.verGrupos = true), renderizar())
   }
   if (h('[data-h22-todos-est]')) return ((B26.verTodos = true), renderizar())
+  if (h('[data-csv-local]') && X.csv) return baixarCSV(X.csv)
   const h22Btn = ev.target.closest('[data-h22]')
   if (h22Btn) {
     X.sel = h22Btn.dataset.h22
@@ -1223,6 +1224,13 @@ conteudo.addEventListener('click', (ev) => {
   }
 })
 
+conteudo.addEventListener('click', async (ev) => {
+  if (!ev.target.closest('[data-instalar]') || !pedidoInstalar) return
+  pedidoInstalar.prompt()
+  await pedidoInstalar.userChoice.catch(() => {})
+  pedidoInstalar = null
+  renderizar()
+})
 conteudo.addEventListener('change', (ev) => {
   if (ev.target.dataset?.pref === '2022') definirMostrar2022(ev.target.checked)
 })
@@ -2684,6 +2692,8 @@ detalheEl.addEventListener('click', (ev) => {
     return renderDetalhe()
   }
   if (det && ev.target.closest('[data-pro-abrir]')) return abrirAnalises(det)
+  if (det?.bai?.export && ev.target.closest('[data-bai-csv]')) return baixarCSV(det.bai.export.csv)
+  if (det?.bai?.export && ev.target.closest('[data-bai-card]')) return compartilharCard(det.bai.export.card)
   if (det?.bai) {
     if (ev.target.closest('[data-bai-sc]')) return ((det.bai.mun = null), (det.bai.todos = false), renderDetalhe())
     const modo = ev.target.closest('[data-bai-modo]')
@@ -2781,6 +2791,15 @@ function renderSobre() {
         <a class="botao criador-link" href="https://maiconcombat.com.br" target="_blank" rel="noopener">🌐 maiconcombat.com.br ↗</a>
         <a class="botao criador-link insta" href="https://www.instagram.com/maiconcombat/" target="_blank" rel="noopener">📷 Instagram @maiconcombat ↗</a>
       </div>
+    </section>
+    <section class="cartao"><h3>📲 Instalar como aplicativo</h3>
+      ${matchMedia('(display-mode: standalone)').matches
+        ? '<p>✅ O app já está instalado neste aparelho.</p>'
+        : pedidoInstalar
+          ? '<p>Coloque o app na tela inicial: abre mais rápido, em tela cheia, e funciona sem internet com os últimos dados vistos.</p><button type="button" class="botao" data-instalar>📲 Instalar o app</button>'
+          : `<p>Coloque o app na tela inicial: abre mais rápido e em tela cheia.</p><ul class="det-lista">
+              <li><strong>iPhone (Safari):</strong> toque em <strong>Compartilhar</strong> (□↑) e depois em <strong>Adicionar à Tela de Início</strong>.</li>
+              <li><strong>Android (Chrome):</strong> menu <strong>⋮</strong> → <strong>Instalar app</strong> (ou "Adicionar à tela inicial").</li></ul>`}
     </section>
     <section class="cartao"><h3>⚙️ Preferências</h3>
       ${interruptor('2022', PREF.mostrar2022, 'Mostrar dados de 2022', 'Aba "📅 2022", comparação 2022 × 2026 na ficha de cada candidato e % de 2022 nas tabelas por município.')}
@@ -3107,6 +3126,23 @@ function renderLocal(X, el) {
     })
     .sort((a, b) => (X.foco != null ? b.g.foco - a.g.foco : b.g.validos - a.g.validos))
   const maxLinhas = X.verGrupos ? linhasGrupo.length : grupo === 'secao' ? 100 : 300
+  // planilha da tabela atual (todas as linhas)
+  const rotuloSimples = (k) => {
+    if (grupo === 'zona') return `${Number(k)}ª zona`
+    if (grupo === 'bairro') return k
+    if (grupo === 'local') return tituloLocal((arq.locais[k] || [k])[0])
+    return `Seção ${k.split('-')[1]} (${Number(k.split('-')[0])}ª zona)`
+  }
+  X.csv = {
+    nome: `${nomeArquivo(L.nm)}-${el.ano}-${nomeArquivo(ROTULO_ELEICAO[el.id] || ROTULO_26[el.id] || el.id)}-${grupo}${focoInfo ? '-' + nomeArquivo(focoInfo.nome) : ''}.csv`,
+    cab: [{ zona: 'Zona', local: 'Local de votação', bairro: 'Bairro', secao: 'Seção' }[grupo], ...(grupo === 'local' || grupo === 'secao' ? ['Bairro', 'Zona'] : []), 'Votos válidos', '1º colocado', 'Partido do 1º', 'Votos do 1º', ...(focoInfo ? [`Votos de ${focoInfo.nome}`, `% de ${focoInfo.nome}`, 'Posição'] : [])],
+    linhas: linhasGrupo.map(({ g, nrTop, vTop }) => {
+      const top = nrTop != null ? nomeVotavel(el, nrTop) : null
+      const loc = grupo === 'secao' ? arq.secoes[g.chave] : g.chave
+      const pos = focoInfo && !focoInfo.legenda ? posicaoNoGrupo(g, X.foco) : null
+      return [rotuloSimples(g.chave), ...(grupo === 'local' || grupo === 'secao' ? [bairroDoLocal(arq, loc), `${Number(String(g.chave).split('-')[0])}ª`] : []), g.validos, top?.nome || '', top?.partido || '', vTop, ...(focoInfo ? [g.foco, pctDe(g.foco, g.validos), pos ? `${pos.p}º de ${pos.n}` : ''] : [])]
+    }),
+  }
   return `<section class="cartao">
       <h3>📍 ${esc(L.nm)} · ${el.ano}</h3>
       <div class="atalhos-chips migalhas">${migalhas}</div>
@@ -3143,6 +3179,7 @@ function renderLocal(X, el) {
         })
         .join('')}</tbody></table>
       ${linhasGrupo.length > maxLinhas ? `<button type="button" class="botao secundario" data-h22-vergrupos>Mostrar todas as ${fmt.format(linhasGrupo.length)} ${grupo === 'secao' ? 'seções' : 'linhas'}</button>` : ''}
+      <div class="exportar"><button type="button" class="botao secundario" data-csv-local>⬇️ Baixar planilha (CSV)</button></div>
       <p class="nota">Toque numa linha para entrar nela. Fonte: TSE, ${el.ano === 2026 ? 'boletins de urna de cada seção (2026)' : 'votação por seção eleitoral (2022)'}. Bairros pelo cadastro de locais de votação ${floripa ? 'do TRE-SC' : `do TSE (${el.ano})`}.</p>
     </section>`
 }
@@ -3331,6 +3368,121 @@ function porBairro(arq, elId, cargo, nr) {
   return new Map(ag.grupos.map((g) => [g.chave, g]))
 }
 
+/* ---------------- planilha (CSV) e card para compartilhar ---------------- */
+
+function baixarArquivo(nome, blob) {
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = nome
+  document.body.append(a)
+  a.click()
+  setTimeout(() => (URL.revokeObjectURL(a.href), a.remove()), 1500)
+}
+// CSV no padrão do Excel em português: separador ";", vírgula decimal e BOM UTF-8
+function baixarCSV({ nome, cab, linhas }) {
+  const q = (v) => (typeof v === 'number' ? String(Math.round(v * 100) / 100).replace('.', ',') : `"${String(v ?? '').replace(/"/g, '""')}"`)
+  const txt = '﻿' + [cab, ...linhas].map((l) => l.map(q).join(';')).join('\r\n')
+  baixarArquivo(nome, new Blob([txt], { type: 'text/csv;charset=utf-8' }))
+}
+const nomeArquivo = (s) => semAcento(s).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60)
+
+// Card (1080×1350, formato retrato do Instagram) com os bairros do candidato.
+async function compartilharCard(card) {
+  const W = 1080, H = 1350
+  const cv = document.createElement('canvas')
+  cv.width = W
+  cv.height = H
+  const g = cv.getContext('2d')
+  const fonte = (peso, tam) => `${peso} ${tam}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`
+  const corta = (txt, max) => {
+    let t = String(txt)
+    if (g.measureText(t).width <= max) return t
+    while (t.length > 1 && g.measureText(t + '…').width > max) t = t.slice(0, -1)
+    return t + '…'
+  }
+  g.fillStyle = '#f4f7f5'
+  g.fillRect(0, 0, W, H)
+  const grad = g.createLinearGradient(0, 0, W, 300)
+  grad.addColorStop(0, '#006b2d')
+  grad.addColorStop(0.5, '#009c3b')
+  grad.addColorStop(1, '#0a5ea8')
+  g.fillStyle = grad
+  g.fillRect(0, 0, W, 300)
+  g.fillStyle = '#ffdf00'
+  g.fillRect(0, 300, W, 10)
+  g.fillStyle = 'rgba(255,255,255,.85)'
+  g.font = fonte(600, 30)
+  g.fillText('APURAÇÃO 2026 · SANTA CATARINA', 64, 76)
+  g.fillStyle = '#fff'
+  g.font = fonte(800, 66)
+  g.fillText(corta(card.nome, W - 128), 64, 160)
+  g.font = fonte(500, 34)
+  g.fillText(corta(card.sub, W - 128), 64, 222)
+  g.fillStyle = card.cor
+  g.fillRect(64, 256, 120, 12)
+  g.fillStyle = '#17201b'
+  g.font = fonte(800, 44)
+  g.fillText(corta(card.titulo, W - 128), 64, 384)
+  g.fillStyle = '#5f6b65'
+  g.font = fonte(500, 30)
+  g.fillText(corta(card.subtitulo, W - 128), 64, 430)
+  const linhas = card.linhas.slice(0, 8)
+  const max = Math.max(1, ...linhas.map((l) => l.v))
+  let y = 468
+  linhas.forEach((l, i) => {
+    g.fillStyle = '#ffffff'
+    g.beginPath()
+    g.roundRect(48, y, W - 96, 84, 18)
+    g.fill()
+    g.fillStyle = '#5f6b65'
+    g.font = fonte(800, 30)
+    g.fillText(`${i + 1}º`, 72, y + 40)
+    g.fillStyle = '#17201b'
+    g.font = fonte(700, 32)
+    g.fillText(corta(l.nome, 560), 132, y + 38)
+    g.fillStyle = '#5f6b65'
+    g.font = fonte(500, 24)
+    g.fillText(corta(l.extra || '', 560), 132, y + 68)
+    g.textAlign = 'right'
+    g.fillStyle = '#17201b'
+    g.font = fonte(800, 36)
+    g.fillText(fmt.format(l.v), W - 72, y + 40)
+    g.font = fonte(600, 24)
+    g.fillStyle = l.va ? COR_VAR[l.va.cls] || '#5f6b65' : '#5f6b65'
+    g.fillText(l.va ? l.va.txt : `${fmtPct.format(l.pct)}% do bairro`, W - 72, y + 68)
+    g.textAlign = 'left'
+    g.fillStyle = card.cor
+    g.globalAlpha = 0.9
+    g.fillRect(132, y + 76, (W - 132 - 72) * (l.v / max), 4)
+    g.globalAlpha = 1
+    y += 94
+  })
+  if (card.rodape) {
+    g.fillStyle = '#17201b'
+    g.font = fonte(600, 28)
+    g.fillText(corta(card.rodape, W - 128), 64, H - 104)
+  }
+  g.fillStyle = '#0b7a45'
+  g.font = fonte(800, 34)
+  g.fillText('@maiconcombat', 64, H - 44)
+  g.textAlign = 'right'
+  g.fillStyle = '#5f6b65'
+  g.font = fonte(500, 24)
+  g.fillText('Fonte: TSE · boletins de urna · 1º turno', W - 64, H - 46)
+  const blob = await new Promise((ok) => cv.toBlob(ok, 'image/png'))
+  const nome = `${nomeArquivo(card.nome)}-bairros.png`
+  const arq = new File([blob], nome, { type: 'image/png' })
+  if (navigator.canShare?.({ files: [arq] })) {
+    try {
+      await navigator.share({ files: [arq], title: `${card.nome} · ${card.titulo}` })
+      return
+    } catch (e) {
+      if (e?.name === 'AbortError') return
+    }
+  }
+  baixarArquivo(nome, blob)
+}
+
 // variação 2022 → 2026 num bairro: verde (alta forte), azul (alta), laranja (queda), vermelho (queda forte)
 function variacao(v26, v22) {
   if (v22 == null) return null
@@ -3383,6 +3535,7 @@ function secaoBairros(det, c, aba) {
   let modos = ''
   let corpo = ''
   let corpo22 = ''
+  B.export = null
   if (!B.mun) {
     const idx = arquivoAno(`dados2026/bairros-${elId}.json`, re)
     const x = idx.valor?.c[nr]
@@ -3393,6 +3546,15 @@ function secaoBairros(det, c, aba) {
     else {
       const lista = x[B.modo] || x.v
       const max = Math.max(1, ...lista.map((e) => Math.max(e[1], tem22 ? e[2] || 0 : 0)))
+      const rot = { v: 'mais votos', p: 'maior %', up: 'onde mais cresceu desde 2022', dn: 'onde mais caiu desde 2022' }[B.modo] || 'mais votos'
+      const itens = lista.map(([bi, v, v22]) => {
+        const [cd, nome, val] = idx.valor.b[bi]
+        return { nome, mun: NOME_MUN.get(cd) || cd, v, pct: pctDe(v, val), v22: tem22 ? v22 || 0 : null, va: tem22 ? variacao(v, v22 || 0) : null }
+      })
+      B.export = {
+        csv: { nome: `${nomeArquivo(c.nome)}-bairros-sc.csv`, cab: ['Bairro', 'Município', 'Votos 2026', '% do bairro', ...(tem22 ? ['Votos 2022', 'Diferença'] : [])], linhas: itens.map((i) => [i.nome, i.mun, i.v, i.pct, ...(tem22 ? [i.v22, i.v - i.v22] : [])]) },
+        card: { nome: c.nome, cor, sub: `${c.partido} · nº ${c.numero} · ${aba.rotulo.replace(/ SC$/, '')}`, titulo: 'Bairros onde foi mais votado', subtitulo: `Santa Catarina · ${rot}`, linhas: itens.map((i) => ({ ...i, extra: i.mun + (i.va ? ` · 2022: ${fmt.format(i.v22)}` : '') })), rodape: tem22 ? `Desde 2022: cresceu em ${fmt.format(x.s[0])} bairros e caiu em ${fmt.format(x.s[1])}` : '' },
+      }
       corpo = (tem22 ? resumoVar(x.s[0], x.s[1], ROTULO_ELEICAO[x.e22]) + legendaVar(cor) : '') +
         tabela(lista.map(([bi, v, v22]) => {
           const [cd, nome, val] = idx.valor.b[bi]
@@ -3422,6 +3584,11 @@ function secaoBairros(det, c, aba) {
       const lim = B.todos ? vis.length : 15
       const max = Math.max(1, ...vis.slice(0, lim).map((l) => Math.max(l.v, m22 ? l.v22 : 0)))
       const sobe = linhas.filter((l) => l.v > l.v22).length, cai = linhas.filter((l) => l.v < l.v22).length
+      const rot = { v: 'mais votos', p: 'maior %', up: 'onde mais cresceu desde 2022', dn: 'onde mais caiu desde 2022' }[B.modo] || 'mais votos'
+      B.export = {
+        csv: { nome: `${nomeArquivo(c.nome)}-bairros-${nomeArquivo(B.mun.nm)}.csv`, cab: ['Bairro', 'Votos 2026', '% do bairro', 'Posição no bairro', ...(m22 ? ['Votos 2022', 'Diferença'] : [])], linhas: vis.map((l) => [l.k, l.v, pctDe(l.v, l.val), l.pos ? `${l.pos.p}º de ${l.pos.n}` : '', ...(m22 ? [l.v22, l.v - l.v22] : [])]) },
+        card: { nome: c.nome, cor, sub: `${c.partido} · nº ${c.numero} · ${aba.rotulo.replace(/ SC$/, '')}`, titulo: `Bairros de ${B.mun.nm}`, subtitulo: rot, linhas: vis.map((l) => ({ nome: l.k, v: l.v, pct: pctDe(l.v, l.val), va: m22 ? variacao(l.v, l.v22) : null, extra: [l.pos ? `${l.pos.p}º no bairro` : '', m22 ? `2022: ${fmt.format(l.v22)}` : ''].filter(Boolean).join(' · ') })), rodape: m22 ? `Desde 2022: cresceu em ${fmt.format(sobe)} bairros e caiu em ${fmt.format(cai)}` : '' },
+      }
       corpo = (m22 ? resumoVar(sobe, cai, ROTULO_ELEICAO[p22.el.id]) + legendaVar(cor) : '') +
         (vis.length
           ? tabela(vis.slice(0, lim).map((l) => linha(l.k, '', l.v, l.val, B.mun.cd, l.k, `<div class="cand-meta">${l.pos?.p === 1 ? '🏆 ' : ''}${textoPosicao(l.pos)} no bairro</div>` + (m22 ? blocoVariacao(l.v, l.v22, max, cor) : ''))).join('')) +
@@ -3437,6 +3604,7 @@ function secaoBairros(det, c, aba) {
       .map(([bi, v]) => { const [cd, nome, val] = i22.valor.b[bi]; return `<li>${esc(nome)} <span class="mudo">· ${esc(NOME_MUN.get(cd) || cd)} · ${fmt.format(v)} votos (${fmtPct.format(pctDe(v, val))}%)</span></li>` }).join('')}</ol></div>`
   }
   return `<section class="cartao bai"><h3>🏘️ Bairros onde foi mais votado</h3>${escolha}${modos}${corpo}${corpo22}
+    ${B.export && (B.mun ? secoesAno(2026, B.mun.cd) : true) ? `<div class="exportar"><button type="button" class="botao" data-bai-card>📸 Compartilhar imagem</button><button type="button" class="botao secundario" data-bai-csv>⬇️ Planilha (CSV)</button></div>` : ''}
     <button type="button" class="botao secundario pro-atalho" data-pro-abrir>🔒 Mapa, perfil do eleitor e abstenção</button>
     <p class="nota">Fonte: boletins de urna do 1º turno (TSE) e cadastro de locais de votação. 2022 ligado pelo nome completo do candidato. Toque num bairro para ver os locais e seções.</p></section>`
 }
@@ -3860,6 +4028,16 @@ function abrirAnalises(det) {
 }
 
 /* ---------------- início ---------------- */
+
+// instalar como app (PWA): service worker com rede primeiro
+if ('serviceWorker' in navigator && !DEMO) navigator.serviceWorker.register('sw.js').catch(() => {})
+let pedidoInstalar = null
+window.addEventListener('beforeinstallprompt', (ev) => {
+  ev.preventDefault()
+  pedidoInstalar = ev
+  if (estado.aba.tipo === 'sobre') renderizar()
+})
+
 
 if (DEMO) {
   $('#aviso-demo').hidden = false
