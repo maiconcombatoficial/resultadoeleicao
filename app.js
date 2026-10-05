@@ -4,11 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610061500'
-import { chanceDe, NIVEIS } from './chances.js?v=202610061500'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610061500'
-import { FLORIPA } from './floripa.js?v=202610061500'
-import { corPartido, corTexto } from './cores.js?v=202610061500'
+import { calcularVagas } from './vagas.js?v=202610061600'
+import { chanceDe, NIVEIS } from './chances.js?v=202610061600'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610061600'
+import { FLORIPA } from './floripa.js?v=202610061600'
+import { corPartido, corTexto } from './cores.js?v=202610061600'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -2769,6 +2769,12 @@ detalheEl.addEventListener('click', (ev) => {
     return renderDetalhe()
   }
   if (det && ev.target.closest('[data-pro-abrir]')) return abrirAnalises(det)
+  const btCar = ev.target.closest('[data-bai-carrossel]')
+  if (btCar && det?.bai?.carrossel) {
+    const cards = det.bai.carrossel()
+    btCar.disabled = true
+    return compartilharCarrossel(cards, `${cards[0].nome} · ${cards[0].titulo}`, btCar).finally(() => (btCar.disabled = false))
+  }
   if (det?.bai?.export && ev.target.closest('[data-bai-csv]')) return baixarCSV(det.bai.export.csv)
   if (det?.bai) {
     if (ev.target.closest('[data-bai-sc]')) return ((det.bai.mun = null), (det.bai.todos = false), (det.bai.painel = false), renderDetalhe())
@@ -3631,6 +3637,45 @@ function fotoCirculo(g, im, cx, cy, r, aro = '#ffffff', larg = 6) {
 }
 
 async function compartilharCard(card) {
+  const { blob, nome } = await desenharCard(card)
+  const arq = new File([blob], nome, { type: 'image/png' })
+  if (navigator.canShare?.({ files: [arq] })) {
+    try {
+      await navigator.share({ files: [arq], title: `${card.nome} · ${card.titulo}`, text: `${card.nome} · ${card.titulo}\nPor @maiconcombat · https://www.instagram.com/maiconcombat/` })
+      return
+    } catch (e) {
+      if (e?.name === 'AbortError') return
+    }
+  }
+  baixarArquivo(nome, blob)
+}
+
+// Carrossel: várias imagens compartilhadas de uma vez (Instagram aceita até 20); sem suporte, baixa uma a uma
+async function compartilharCarrossel(cards, titulo, botao) {
+  const total = cards.length
+  const rotulo = botao?.innerHTML
+  const arqs = []
+  for (const [i, card] of cards.entries()) {
+    if (botao) botao.innerHTML = `⏳ Gerando ${i + 1} de ${total}…`
+    const { blob, nome } = await desenharCard({ ...card, pagina: `${i + 1}/${total}` })
+    arqs.push(new File([blob], `${String(i + 1).padStart(2, '0')}-${nome}`, { type: 'image/png' }))
+  }
+  if (botao) botao.innerHTML = rotulo
+  if (navigator.canShare?.({ files: arqs })) {
+    try {
+      await navigator.share({ files: arqs, title: titulo, text: `${titulo}\nPor @maiconcombat · https://www.instagram.com/maiconcombat/` })
+      return
+    } catch (e) {
+      if (e?.name === 'AbortError') return
+    }
+  }
+  for (const a of arqs) {
+    baixarArquivo(a.name, a)
+    await new Promise((ok) => setTimeout(ok, 350))
+  }
+}
+
+async function desenharCard(card) {
   const W = 1080, H = 1350
   const fotosTopo = (await Promise.all((card.fotos || (card.foto ? [card.foto] : [])).slice(0, 2).map(carregarImagem))).filter(Boolean)
   const fotosLinha = await Promise.all((card.linhas || []).slice(0, 8).map((l) => carregarImagem(l.foto)))
@@ -3686,7 +3731,15 @@ async function compartilharCard(card) {
   // título
   g.fillStyle = '#17201b'
   g.font = fonte(800, 44)
-  g.fillText(corta(card.titulo, W - 128), 64, 384)
+  g.fillText(corta(card.titulo, W - 128 - (card.pagina ? 150 : 0)), 64, 384)
+  if (card.pagina) {
+    g.font = fonte(800, 26)
+    const t = card.pagina
+    const w = g.measureText(t).width + 32
+    caixa(W - 64 - w, 350, w, 44, 22, '#17201b')
+    g.fillStyle = '#ffffff'
+    g.fillText(t, W - 64 - w + 16, 381)
+  }
   g.fillStyle = '#5f6b65'
   g.font = fonte(500, 30)
   g.fillText(corta(card.subtitulo, W - 128), 64, 430)
@@ -3718,6 +3771,46 @@ async function compartilharCard(card) {
   }
   // lista
   for (const [i, l] of (card.linhas || []).entries()) {
+    if (l.par) {
+      // bairro com 2022 e 2026 alinhados: nome + variação, e duas barras rotuladas
+      const h = 92
+      if (y + h > LIM) break
+      caixa(48, y, W - 96, h)
+      const x0 = 72
+      g.textAlign = 'right'
+      g.font = fonte(800, 24)
+      g.fillStyle = l.corDir2 || '#5f6b65'
+      const wv = l.dir2 ? g.measureText(l.dir2).width : 0
+      if (l.dir2) g.fillText(l.dir2, W - 72, y + 30)
+      g.textAlign = 'left'
+      g.fillStyle = '#17201b'
+      g.font = fonte(800, 28)
+      const nm = corta(l.nome, W - x0 - 72 - wv - 24)
+      g.fillText(nm, x0, y + 30)
+      if (l.extra) {
+        const wn = g.measureText(nm).width
+        g.fillStyle = '#5f6b65'
+        g.font = fonte(500, 20)
+        const resto = W - x0 - 72 - wv - 40 - wn
+        if (resto > 80) g.fillText(corta(l.extra, resto), x0 + wn + 14, y + 30)
+      }
+      const mx = l.par.max || 1
+      ;[['2022', l.par.v22, '#a5aca8', 56, false], ['2026', l.par.v26, l.corBarra || cor, 80, true]].forEach(([rot, v, c, dy, forte]) => {
+        g.fillStyle = forte ? '#17201b' : '#5f6b65'
+        g.font = fonte(forte ? 800 : 600, 20)
+        g.fillText(rot, x0, y + dy)
+        const bx = x0 + 70, bw = W - 72 - 120 - bx
+        caixa(bx, y + dy - 14, bw, 14, 7, '#eef2f0')
+        if (v > 0) caixa(bx, y + dy - 14, Math.max(8, (bw * v) / mx), 14, 7, c)
+        g.textAlign = 'right'
+        g.fillStyle = '#17201b'
+        g.font = fonte(forte ? 800 : 500, forte ? 26 : 22)
+        g.fillText(fmt.format(v), W - 72, y + dy + 2)
+        g.textAlign = 'left'
+      })
+      y += h + 8
+      continue
+    }
     const temBarras = l.barras?.length
     const h = temBarras ? 92 : 74
     if (y + h > LIM) break
@@ -3873,17 +3966,7 @@ async function compartilharCard(card) {
   g.fillText('maiconcombat.com.br', W - 64, cyF - 12)
   g.textAlign = 'left'
   const blob = await new Promise((ok) => cv.toBlob(ok, 'image/png'))
-  const nome = `${nomeArquivo(card.nome || 'apuracao')}-${nomeArquivo(card.titulo || 'card')}.png`
-  const arq = new File([blob], nome, { type: 'image/png' })
-  if (navigator.canShare?.({ files: [arq] })) {
-    try {
-      await navigator.share({ files: [arq], title: `${card.nome} · ${card.titulo}`, text: `${card.nome} · ${card.titulo}\nPor @maiconcombat · https://www.instagram.com/maiconcombat/` })
-      return
-    } catch (e) {
-      if (e?.name === 'AbortError') return
-    }
-  }
-  baixarArquivo(nome, blob)
+  return { blob, nome: `${nomeArquivo(card.nome || 'apuracao')}-${nomeArquivo(card.titulo || 'card')}.png` }
 }
 
 // linhas de bairros no formato da lista do card
@@ -4029,6 +4112,36 @@ function secaoBairros(det, c, aba) {
       (vis.length > lim ? `<button type="button" class="botao secundario" data-bai-todos>Mostrar todos (${fmt.format(vis.length)})</button>` : '') +
       `<p class="nota">${r.nota || ''}</p>`
     const tit = `${nomeNivel} · ${lugar}`
+    // carrossel: capa + todas as linhas (na visão por zona, os bairros de cada zona), 6 por imagem
+    const POR = 6
+    const linhaCar = (x, max) => ({ nome: x.nome, extra: [x.sub, x.pos ? `${x.pos.p}º de ${x.pos.n}` : ''].filter(Boolean).join(' · '), corBarra: cor,
+      ...(tem22 ? { par: { v22: x.v22, v26: x.v, max }, dir2: variacao(x.v, x.v22)?.txt || '', corDir2: COR_VAR[variacao(x.v, x.v22)?.cls] } : { valor: fmt.format(x.v), dir2: `${fmtPct.format(pctDe(x.v, x.val))}%`, frac: x.v / max }) })
+    const baseCar = { turno: turnoDe(elId), foto: c.foto, nome: c.nome, cor, sub: `${c.partido} · nº ${c.numero} · ${aba.rotulo.replace(/ SC$/, '')}` }
+    const montarCarrossel = () => {
+      let grupos
+      if (B.grupo === 'zona') {
+        const rz = dadosBairrosFicha({ ...B, zonasTodas: true }, elId, aba, nr, p22, () => {})
+        grupos = (rz.linhas || []).sort((a, b) => b.v - a.v).map((z) => ({ titulo: z.nome, sub: z.sub, z, itens: (z.filhos || []).filter((f) => f.v > 0 || (tem22 && f.v22 > 0)) }))
+      } else grupos = [{ titulo: tit, itens: vis }]
+      const total26 = ls.reduce((a, l) => a + l.v, 0), total22 = ls.reduce((a, l) => a + l.v22, 0)
+      const vaT = tem22 ? variacao(total26, total22) : null
+      const capa = { ...baseCar, titulo: `${B.grupo === 'zona' ? 'Zonas e bairros' : nomeNivel} · ${lugar}`, subtitulo: tem22 ? `2022 × 2026 · ${grupos.reduce((a, g) => a + g.itens.length, 0)} ${B.grupo === 'zona' ? 'bairros' : nomeNivel.toLowerCase()}` : rotOrdem,
+        tiles: [{ rot: `Votos em ${lugar}`, valor: fmt.format(total26), sub: tem22 ? `2022: ${fmt.format(total22)} · ${vaT?.txt || ''}` : '', corSub: vaT ? COR_VAR[vaT.cls] : null },
+          ...(B.grupo === 'zona' ? grupos.slice(0, 5).map((g) => { const va = tem22 ? variacao(g.z.v, g.z.v22) : null; return { rot: g.titulo, valor: fmt.format(g.z.v), sub: [g.z.pos ? `${g.z.pos.p}º na zona` : '', va?.txt].filter(Boolean).join(' · '), corSub: va ? COR_VAR[va.cls] : null } }) : [])],
+        linhas: B.grupo === 'zona' ? [] : vis.slice(0, 3).map((x) => linhaCar(x, Math.max(1, ...vis.slice(0, 3).map((y) => Math.max(y.v, y.v22 || 0))))),
+        rodape: tem22 ? `Desde 2022: cresceu em ${fmt.format(sobe)} e caiu em ${fmt.format(cai)} ${nomeNivel.toLowerCase()}` : '' }
+      const paginas = [capa]
+      for (const g of grupos) {
+        const max = Math.max(1, ...g.itens.map((x) => Math.max(x.v, tem22 ? x.v22 : 0)))
+        const nPag = Math.max(1, Math.ceil(g.itens.length / POR))
+        for (let k = 0; k < nPag && paginas.length < 20; k++) {
+          paginas.push({ ...baseCar, titulo: g.titulo, subtitulo: `${B.grupo === 'zona' ? 'Bairros da zona' : rotOrdem}${nPag > 1 ? ` · parte ${k + 1} de ${nPag}` : ''}${tem22 ? ' · 2022 × 2026' : ''}`, numerar: false,
+            linhas: g.itens.slice(k * POR, (k + 1) * POR).map((x) => linhaCar(x, max)) })
+        }
+      }
+      return paginas
+    }
+    B.carrossel = montarCarrossel
     B.export = {
       csv: { nome: `${nomeArquivo(c.nome)}-${nomeArquivo(nomeNivel)}-${nomeArquivo(lugar)}.csv`, cab: [nomeNivel.replace(/s$/, '').replace('Municípi', 'Município').replace('Seçõe', 'Seção').replace('Locai', 'Local'), 'Onde', 'Votos 2026', '% do lugar', 'Posição', ...(tem22 ? ['Votos 2022', 'Diferença'] : [])],
         linhas: vis.flatMap((l) => [[l.nome, l.sub || '', l.v, pctDe(l.v, l.val), l.pos ? `${l.pos.p}º de ${l.pos.n}` : '', ...(tem22 ? [l.v22, l.v - l.v22] : [])],
@@ -4036,10 +4149,11 @@ function secaoBairros(det, c, aba) {
       card: { turno: turnoDe(elId), foto: c.foto, nome: c.nome, cor, sub: `${c.partido} · nº ${c.numero} · ${aba.rotulo.replace(/ SC$/, '')}`, titulo: tit, subtitulo: rotOrdem,
         linhas: linhasBairroCard(vis.map((l) => ({ nome: l.nome, v: l.v, pct: pctDe(l.v, l.val), va: tem22 ? variacao(l.v, l.v22) : null, extra: [l.sub, l.pos ? `${l.pos.p}º de ${l.pos.n}` : '', tem22 ? `2022: ${fmt.format(l.v22)}` : ''].filter(Boolean).join(' · ') }))),
         rodape: tem22 ? `Desde 2022: cresceu em ${fmt.format(sobe)} e caiu em ${fmt.format(cai)} ${nomeNivel.toLowerCase()}` : '' },
+      paginas: Math.min(20, 1 + Math.ceil(vis.length / POR)),
     }
   }
   return `<section class="cartao bai"><h3>🏘️ Onde foi mais votado</h3>${controles}${corpo}
-    ${B.export ? `<div class="exportar">${botaoCard('ficha-bairros', B.export.card)}<button type="button" class="botao secundario" data-bai-csv>⬇️ Planilha (CSV)</button></div>` : ''}
+    ${B.export ? `<div class="exportar">${botaoCard('ficha-bairros', B.export.card)}<button type="button" class="botao" data-bai-carrossel>🎞️ ${B.grupo === 'zona' ? 'Carrossel: zonas e todos os bairros' : `Carrossel com todos (${B.export.paginas} imagens)`}</button><button type="button" class="botao secundario" data-bai-csv>⬇️ Planilha (CSV)</button></div>` : ''}
     <button type="button" class="botao secundario pro-atalho" data-pro-abrir>🔒 Mapa, perfil do eleitor e abstenção</button>
     <p class="nota">Fonte: boletins de urna do ${turnoDe(elId)}º turno (TSE) e cadastro de locais de votação. 2022 ligado pelo nome completo do candidato. Toque numa linha para abrir na aba Bairros.</p></section>`
 }
