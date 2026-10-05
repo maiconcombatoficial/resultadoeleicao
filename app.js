@@ -4,11 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610061100'
-import { chanceDe, NIVEIS } from './chances.js?v=202610061100'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610061100'
-import { FLORIPA } from './floripa.js?v=202610061100'
-import { corPartido, corTexto } from './cores.js?v=202610061100'
+import { calcularVagas } from './vagas.js?v=202610061200'
+import { chanceDe, NIVEIS } from './chances.js?v=202610061200'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610061200'
+import { FLORIPA } from './floripa.js?v=202610061200'
+import { corPartido, corTexto } from './cores.js?v=202610061200'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -1643,7 +1643,7 @@ function cardLista(d) {
     chapeu: `APURAÇÃO 2026 · ${onde.toUpperCase()}`, nome: aba.rotulo.replace(/ SC$/, ''), cor: corPartido(lista[0]?.partido),
     sub: `${onde} · ${d.final ? 'resultado final' : `${fmtPct.format(d.secoes.percentual)}% das seções apuradas`}`,
     titulo: aba.tipo === 'prop' ? 'Mais votados' : 'Resultado', subtitulo: d.atualizadoEm ? `Dados do TSE de ${d.atualizadoEm}` : '',
-    linhas: lista.map((c) => ({ nome: c.nome, extra: `${c.partido} · nº ${c.numero}${c.eleito ? ' · ✔ eleito (TSE)' : c.projecao && !c.tseDefinido ? ' · ★ eleito pela projeção' : ''}`, valor: fmt.format(c.votos), dir2: `${fmtPct.format(c.percentual)}%`, frac: c.percentual / max, corBarra: corPartido(c.partido) })),
+    linhas: lista.map((c) => ({ foto: c.foto, nome: c.nome, extra: `${c.partido} · nº ${c.numero}${c.eleito ? ' · ✔ eleito (TSE)' : c.projecao && !c.tseDefinido ? ' · ★ eleito pela projeção' : ''}`, valor: fmt.format(c.votos), dir2: `${fmtPct.format(c.percentual)}%`, frac: c.percentual / max, corBarra: corPartido(c.partido) })),
   }
 }
 
@@ -2355,7 +2355,7 @@ function cardFicha(det, d, c, aba, pos, total) {
   const idx = aba?.cargo && ARQ_ANO.get(`dados2026/bairros-${eleicaoDoCargo(aba.cargo)}.json`)?.valor
   const x = idx?.c[Number(c.numero)]
   if (x) linhas = linhasBairroCard(x.v.slice(0, 3).map(([bi, v, v22]) => { const [cd, nome, val] = idx.b[bi]; return { nome, extra: NOME_MUN.get(cd) || cd, v, pct: pctDe(v, val), va: v22 != null && PREF.mostrar2022 ? variacao(v, v22) : null } }))
-  return { nome: c.nome, cor, sub: `${c.partido} · nº ${c.numero} · ${aba ? aba.rotulo.replace(/ SC$/, '') : ''}${det.mun ? ` · ${det.mun.nm}` : ''}`, titulo: 'Desempenho na apuração', subtitulo: situ || (d.atualizadoEm ? `Dados do TSE de ${d.atualizadoEm}` : ''), tiles, linhas, numerar: true, rodape: linhas.length ? 'Bairros onde foi mais votado (boletins de urna)' : '' }
+  return { foto: c.foto, nome: c.nome, cor, sub: `${c.partido} · nº ${c.numero} · ${aba ? aba.rotulo.replace(/ SC$/, '') : ''}${det.mun ? ` · ${det.mun.nm}` : ''}`, titulo: 'Desempenho na apuração', subtitulo: situ || (d.atualizadoEm ? `Dados do TSE de ${d.atualizadoEm}` : ''), tiles, linhas, numerar: true, rodape: linhas.length ? 'Bairros onde foi mais votado (boletins de urna)' : '' }
 }
 
 // Votos do candidato por município (região ou estado todo) e, sob demanda, por zona.
@@ -2635,7 +2635,7 @@ function renderComparacao(d, a, b, aba) {
       <div class="pm-botoes"><button type="button" class="botao secundario" data-trocar-comp>Trocar candidato</button>
         <button type="button" class="botao secundario" data-sair-comp>Sair da comparação</button></div>
       <div class="exportar">${botaoCard('comparacao', {
-        nome: `${a.nome} × ${b.nome}`, cor: corA, sub: `${aba ? aba.rotulo.replace(/ SC$/, '') : ''}${det.mun ? ` · ${det.mun.nm}` : ''} · ${fmtPct.format(d.secoes.percentual)}% apurado`,
+        nome: `${a.nome} × ${b.nome}`, cor: corA, fotos: [b.foto, a.foto], sub: `${aba ? aba.rotulo.replace(/ SC$/, '') : ''}${det.mun ? ` · ${det.mun.nm}` : ''} · ${fmtPct.format(d.secoes.percentual)}% apurado`,
         titulo: 'Comparação', subtitulo: dif === 0 ? 'Empatados' : `${lider.nome} está ${fmt.format(dif)} votos à frente`,
         tiles: [
           { rot: `${a.nome} · votos`, valor: fmt.format(a.votos), cor: corA }, { rot: `${b.nome} · votos`, valor: fmt.format(b.votos), cor: corB },
@@ -3287,14 +3287,14 @@ function cardLocal(X, el, L, arq, grupo, linhasGrupo, ranking, ag, focoInfo, rot
   if (focoInfo && !focoInfo.legenda) {
     const ls = [...linhasGrupo].sort((a, b) => b.g.foco - a.g.foco).filter((x) => x.g.foco > 0).slice(0, 8)
     const max = Math.max(1, ...ls.map((x) => x.g.foco))
-    return { ...base, nome: focoInfo.nome, cor: corPartido(focoInfo.partido), sub: `${focoInfo.partido} · ${ROTULO_ELEICAO[el.id] || ROTULO_26[el.id] || el.nome}`, titulo: `Onde foi mais votado · ${nomeGrupo}`, subtitulo: onde,
+    return { ...base, foto: focoInfo.c?.foto, nome: focoInfo.nome, cor: corPartido(focoInfo.partido), sub: `${focoInfo.partido} · ${ROTULO_ELEICAO[el.id] || ROTULO_26[el.id] || el.nome}`, titulo: `Onde foi mais votado · ${nomeGrupo}`, subtitulo: onde,
       linhas: ls.map(({ g, nrTop }) => { const pos = posicaoNoGrupo(g, X.foco); return { nome: rotuloSimples(g.chave), extra: pos ? `${pos.p}º de ${pos.n}${pos.p > 1 && nrTop != null ? ` · 1º: ${nomeVotavel(el, nrTop).nome}` : ' · 🏆 1º lugar'}` : '', valor: fmt.format(g.foco), dir2: `${fmtPct.format(pctDe(g.foco, g.validos))}%`, frac: g.foco / max } }) }
   }
   const top = ranking.slice(0, 8)
   const max = Math.max(1, ...top.map(([, v]) => v))
   const n0 = top[0] ? nomeVotavel(el, top[0][0]) : null
   return { ...base, nome: onde, cor: corPartido(n0?.partido), sub: `${ROTULO_ELEICAO[el.id] || ROTULO_26[el.id] || el.nome} · ${fmt.format(ag.validos)} votos válidos`, titulo: 'Mais votados aqui', subtitulo: `${fmt.format(ag.secoes)} seções`,
-    linhas: top.map(([nr, v]) => { const n = nomeVotavel(el, nr); return { nome: n.nome, extra: n.partido, valor: fmt.format(v), dir2: `${fmtPct.format(pctDe(v, ag.validos))}%`, frac: v / max, corBarra: corPartido(n.partido) } }) }
+    linhas: top.map(([nr, v]) => { const n = nomeVotavel(el, nr); return { foto: n.c?.foto, nome: n.nome, extra: n.partido, valor: fmt.format(v), dir2: `${fmtPct.format(pctDe(v, ag.validos))}%`, frac: v / max, corBarra: corPartido(n.partido) } }) }
 }
 
 function seletorLocal(X) {
@@ -3585,8 +3585,40 @@ document.addEventListener('click', (ev) => {
   compartilharCard(CARDS.get(b.dataset.card))
 }, true)
 
+// baixa uma imagem com CORS (a foto do TSE libera o domínio do app) para poder desenhar no canvas
+function carregarImagem(url) {
+  if (!url) return Promise.resolve(null)
+  return fetch(url, { mode: 'cors' })
+    .then((r) => (r.ok ? r.blob() : null))
+    .then((b) => b && new Promise((ok) => {
+      const im = new Image()
+      im.onload = () => ok(im)
+      im.onerror = () => ok(null)
+      im.src = URL.createObjectURL(b)
+    }))
+    .catch(() => null)
+}
+// desenha uma imagem recortada em círculo, com aro
+function fotoCirculo(g, im, cx, cy, r, aro = '#ffffff', larg = 6) {
+  g.save()
+  g.beginPath()
+  g.arc(cx, cy, r + larg, 0, 2 * Math.PI)
+  g.fillStyle = aro
+  g.fill()
+  g.beginPath()
+  g.arc(cx, cy, r, 0, 2 * Math.PI)
+  g.clip()
+  const lado = Math.min(im.naturalWidth, im.naturalHeight)
+  // fotos de candidato são retratos: corta mais perto do topo
+  const y0 = im.naturalHeight > im.naturalWidth ? (im.naturalHeight - lado) * 0.2 : (im.naturalHeight - lado) / 2
+  g.drawImage(im, (im.naturalWidth - lado) / 2, y0, lado, lado, cx - r, cy - r, 2 * r, 2 * r)
+  g.restore()
+}
+
 async function compartilharCard(card) {
   const W = 1080, H = 1350
+  const fotosTopo = (await Promise.all((card.fotos || (card.foto ? [card.foto] : [])).slice(0, 2).map(carregarImagem))).filter(Boolean)
+  const fotosLinha = await Promise.all((card.linhas || []).slice(0, 8).map((l) => carregarImagem(l.foto)))
   const cv = document.createElement('canvas')
   cv.width = W
   cv.height = H
@@ -3618,20 +3650,22 @@ async function compartilharCard(card) {
   g.fillRect(0, 300, W, 10)
   g.fillStyle = 'rgba(255,255,255,.85)'
   g.font = fonte(600, 30)
-  g.fillText(corta(card.chapeu || 'APURAÇÃO 2026 · SANTA CATARINA', card.exclusivo ? W - 420 : W - 128), 64, 76)
+  g.fillText(corta(card.chapeu || 'APURAÇÃO 2026 · SANTA CATARINA', card.exclusivo ? W - 420 : W - 128 - ((card.fotos || card.foto) ? 220 : 0)), 64, 76)
   if (card.exclusivo) {
     g.font = fonte(800, 24)
     const t = 'ANÁLISE EXCLUSIVA'
     const w = g.measureText(t).width + 36
-    caixa(W - 64 - w, 46, w, 44, 22, '#ffdf00')
+    caixa(W - 64 - w, 26, w, 40, 20, '#ffdf00')
     g.fillStyle = '#0b3d1f'
-    g.fillText(t, W - 64 - w + 18, 77)
+    g.fillText(t, W - 64 - w + 18, 54)
   }
+  const reservaFoto = fotosTopo.length ? (fotosTopo.length > 1 ? 330 : 210) : 0
   g.fillStyle = '#fff'
-  g.font = fonte(800, card.nome && card.nome.length > 22 ? 54 : 66)
-  g.fillText(corta(card.nome, W - 128), 64, 160)
+  g.font = fonte(800, fotosTopo.length > 1 ? 40 : card.nome && card.nome.length > 22 ? 54 : 66)
+  g.fillText(corta(card.nome, W - 128 - reservaFoto), 64, 160)
   g.font = fonte(500, 34)
-  g.fillText(corta(card.sub, W - 128), 64, 222)
+  g.fillText(corta(card.sub, W - 128 - reservaFoto), 64, 222)
+  fotosTopo.forEach((im, i) => fotoCirculo(g, im, W - 64 - 88 - i * 150, 176, 88, i ? '#ffdf00' : '#ffffff', 6))
   g.fillStyle = cor
   g.fillRect(64, 256, 120, 12)
   // título
@@ -3673,6 +3707,7 @@ async function compartilharCard(card) {
     if (y + h > LIM) break
     caixa(48, y, W - 96, h)
     let xn = 72
+    const fl = fotosLinha[i]
     if (l.ponto) {
       g.fillStyle = l.ponto
       g.beginPath()
@@ -3684,6 +3719,10 @@ async function compartilharCard(card) {
       g.font = fonte(800, 30)
       g.fillText(`${i + 1}º`, 72, y + 40)
       xn = 132
+    }
+    if (fl) {
+      fotoCirculo(g, fl, xn + 28, y + h / 2 - 2, 28, l.corBarra || cor, 3)
+      xn += 70
     }
     g.fillStyle = '#17201b'
     g.font = fonte(700, 32)
@@ -3942,7 +3981,7 @@ function secaoBairros(det, c, aba) {
     B.export = {
       csv: { nome: `${nomeArquivo(c.nome)}-${nomeArquivo(nomeNivel)}-${nomeArquivo(lugar)}.csv`, cab: [nomeNivel.replace(/s$/, '').replace('Municípi', 'Município').replace('Seçõe', 'Seção').replace('Locai', 'Local'), 'Onde', 'Votos 2026', '% do lugar', 'Posição', ...(tem22 ? ['Votos 2022', 'Diferença'] : [])],
         linhas: vis.map((l) => [l.nome, l.sub || '', l.v, pctDe(l.v, l.val), l.pos ? `${l.pos.p}º de ${l.pos.n}` : '', ...(tem22 ? [l.v22, l.v - l.v22] : [])]) },
-      card: { turno: turnoDe(elId), nome: c.nome, cor, sub: `${c.partido} · nº ${c.numero} · ${aba.rotulo.replace(/ SC$/, '')}`, titulo: tit, subtitulo: rotOrdem,
+      card: { turno: turnoDe(elId), foto: c.foto, nome: c.nome, cor, sub: `${c.partido} · nº ${c.numero} · ${aba.rotulo.replace(/ SC$/, '')}`, titulo: tit, subtitulo: rotOrdem,
         linhas: linhasBairroCard(vis.map((l) => ({ nome: l.nome, v: l.v, pct: pctDe(l.v, l.val), va: tem22 ? variacao(l.v, l.v22) : null, extra: [l.sub, l.pos ? `${l.pos.p}º de ${l.pos.n}` : '', tem22 ? `2022: ${fmt.format(l.v22)}` : ''].filter(Boolean).join(' · ') }))),
         rodape: tem22 ? `Desde 2022: cresceu em ${fmt.format(sobe)} e caiu em ${fmt.format(cai)} ${nomeNivel.toLowerCase()}` : '' },
     }
@@ -4215,7 +4254,7 @@ function seletorMunPro(extra = '') {
 // cabeçalho dos cards das análises (candidato selecionado)
 function baseCardPro(el, extra = {}) {
   const c = el?.porNumero?.get(String(PRO.cand))
-  return { exclusivo: true, turno: turnoDe(PRO.sel), nome: c?.nome || 'Análises', cor: corPartido(c?.partido), sub: c ? `${c.partido} · nº ${c.numero} · ${ROTULO_26[PRO.sel]}` : ROTULO_26[PRO.sel], ...extra }
+  return { exclusivo: true, turno: turnoDe(PRO.sel), foto: c?.foto, nome: c?.nome || 'Análises', cor: corPartido(c?.partido), sub: c ? `${c.partido} · nº ${c.numero} · ${ROTULO_26[PRO.sel]}` : ROTULO_26[PRO.sel], ...extra }
 }
 
 /* ---- mapa ---- */
