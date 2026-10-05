@@ -801,3 +801,5 @@ td .leg-ponto { margin-right: 4px; vertical-align: middle; }
 .abst-barra { height: 5px; border-radius: 3px; background: var(--fundo); margin-top: 4px; max-width: 220px; }
 .abst-barra span { display: block; height: 100%; border-radius: 3px; background: #2a78d6; }
 @media (prefers-color-scheme: dark) { .abst-barra span { background: #5598e7; } .perfil-barra { filter: brightness(1.5); } }
+.exportar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.exportar .botao { flex: 1 1 160px; }
