@@ -835,3 +835,4 @@ td .leg-ponto { margin-right: 4px; vertical-align: middle; }
 .cmp-trilho span { display: block; height: 100%; border-radius: 5px; }
 .cmp-num { text-align: right; font-variant-numeric: tabular-nums; }
 .cmp-linha .cand-meta { margin-top: 4px; }
+.cmp-total { font-variant-numeric: tabular-nums; flex: none; }

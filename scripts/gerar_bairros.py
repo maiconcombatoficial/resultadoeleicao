@@ -160,6 +160,23 @@ for el, cands in por_el.items():
     json.dump(out, open(os.path.join(DIR, f'bairros-{el}.json'), 'w'), ensure_ascii=False, separators=(',', ':'))
     log(el, 'candidatos', len(c_fin), 'bairros', len(remap))
 
+# votos de cada candidato por município (para a ficha: "por município" em SC inteira)
+for el in novos:
+    prop = el.endswith(('c6', 'c7'))
+    validos, cand = collections.Counter(), collections.defaultdict(collections.Counter)
+    for cd, arq in arquivos.items():
+        for zs, arr in arq['votos'].get(el, {}).items():
+            for i in range(0, len(arr), 2):
+                nr, v = arr[i], arr[i + 1]
+                if nr in (95, 96, 97):
+                    continue
+                validos[cd] += v
+                if prop and nr < 100:
+                    continue
+                cand[nr][cd] += v
+    json.dump({'validos': validos, 'c': cand}, open(os.path.join(DIR, f'municipios-{el}.json'), 'w'), separators=(',', ':'))
+    log('municípios', el, len(cand))
+
 # índice das eleições com dados por seção
 ids = sorted(f[8:-5] for f in os.listdir(DIR) if f.startswith('bairros-') and f.endswith('.json'))
 json.dump({'eleicoes': ids}, open(os.path.join(DIR, 'indice.json'), 'w'))
