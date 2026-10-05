@@ -4,11 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610061900'
-import { chanceDe, NIVEIS } from './chances.js?v=202610061900'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610061900'
-import { FLORIPA } from './floripa.js?v=202610061900'
-import { corPartido, corTexto } from './cores.js?v=202610061900'
+import { calcularVagas } from './vagas.js?v=202610062000'
+import { chanceDe, NIVEIS } from './chances.js?v=202610062000'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610062000'
+import { FLORIPA } from './floripa.js?v=202610062000'
+import { corPartido, corTexto } from './cores.js?v=202610062000'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -1644,6 +1644,7 @@ function cardLista(d) {
     chapeu: `APURAÇÃO 2026 · ${onde.toUpperCase()}`, nome: aba.rotulo.replace(/ SC$/, ''), cor: corPartido(lista[0]?.partido),
     sub: `${onde} · ${d.final ? 'resultado final' : `${fmtPct.format(d.secoes.percentual)}% das seções apuradas`}`,
     titulo: aba.tipo === 'prop' ? 'Mais votados' : 'Resultado', subtitulo: d.atualizadoEm ? `Dados do TSE de ${d.atualizadoEm}` : '',
+    total: totalCard(`Votos válidos · ${onde}`, d.votos.validos),
     linhas: lista.map((c) => ({ foto: c.foto, nome: c.nome, extra: `${c.partido} · nº ${c.numero}${c.eleito ? ' · ✔ eleito (TSE)' : c.projecao && !c.tseDefinido ? ' · ★ eleito pela projeção' : ''}`, valor: fmt.format(c.votos), dir2: `${fmtPct.format(c.percentual)}%`, frac: c.percentual / max, corBarra: corPartido(c.partido) })),
   }
 }
@@ -3380,13 +3381,14 @@ function cardLocal(X, el, L, arq, grupo, linhasGrupo, ranking, ag, focoInfo, rot
   if (focoInfo && !focoInfo.legenda) {
     const ls = [...linhasGrupo].sort((a, b) => b.g.foco - a.g.foco).filter((x) => x.g.foco > 0).slice(0, 8)
     const max = Math.max(1, ...ls.map((x) => x.g.foco))
-    return { ...base, foto: focoInfo.c?.foto, nome: focoInfo.nome, cor: corPartido(focoInfo.partido), sub: `${focoInfo.partido} · ${ROTULO_ELEICAO[el.id] || ROTULO_26[el.id] || el.nome}`, titulo: `Onde foi mais votado · ${nomeGrupo}`, subtitulo: onde,
+    const somaFoco = linhasGrupo.reduce((a, x) => a + x.g.foco, 0)
+    return { ...base, total: { ...totalCard(onde, somaFoco), sub: `${fmtPct.format(pctDe(somaFoco, ag.validos))}% dos válidos · em ${linhasGrupo.filter((x) => x.g.foco > 0).length} ${{ zona: 'zonas', local: 'locais', bairro: 'bairros', secao: 'seções' }[grupo]}` }, foto: focoInfo.c?.foto, nome: focoInfo.nome, cor: corPartido(focoInfo.partido), sub: `${focoInfo.partido} · ${ROTULO_ELEICAO[el.id] || ROTULO_26[el.id] || el.nome}`, titulo: `Mais votos · ${nomeGrupo}`, subtitulo: onde,
       linhas: ls.map(({ g, nrTop }) => { const pos = posicaoNoGrupo(g, X.foco); return { nome: rotuloSimples(g.chave), extra: pos ? `${pos.p}º de ${pos.n}${pos.p > 1 && nrTop != null ? ` · 1º: ${nomeVotavel(el, nrTop).nome}` : ' · 🏆 1º lugar'}` : '', valor: fmt.format(g.foco), dir2: `${fmtPct.format(pctDe(g.foco, g.validos))}%`, frac: g.foco / max } }) }
   }
   const top = ranking.slice(0, 8)
   const max = Math.max(1, ...top.map(([, v]) => v))
   const n0 = top[0] ? nomeVotavel(el, top[0][0]) : null
-  return { ...base, nome: onde, cor: corPartido(n0?.partido), sub: `${ROTULO_ELEICAO[el.id] || ROTULO_26[el.id] || el.nome} · ${fmt.format(ag.validos)} votos válidos`, titulo: 'Mais votados aqui', subtitulo: `${fmt.format(ag.secoes)} seções`,
+  return { ...base, total: { ...totalCard(`Votos válidos · ${onde}`, ag.validos), sub: `brancos ${fmt.format(ag.brancos)} · nulos ${fmt.format(ag.nulos)}` }, nome: onde, cor: corPartido(n0?.partido), sub: `${ROTULO_ELEICAO[el.id] || ROTULO_26[el.id] || el.nome} · ${fmt.format(ag.validos)} votos válidos`, titulo: 'Mais votados aqui', subtitulo: `${fmt.format(ag.secoes)} seções`,
     linhas: top.map(([nr, v]) => { const n = nomeVotavel(el, nr); return { foto: n.c?.foto, nome: n.nome, extra: n.partido, valor: fmt.format(v), dir2: `${fmtPct.format(pctDe(v, ag.validos))}%`, frac: v / max, corBarra: corPartido(n.partido) } }) }
 }
 
@@ -3821,7 +3823,7 @@ async function desenharCard(card) {
   g.fillText(corta(card.subtitulo, W - 128), 64, 430)
   let y = 456
   const FAIXA = 190
-  const LIM = H - FAIXA - (card.rodape ? 76 : 44)
+  const LIM = H - FAIXA - (card.rodape ? 76 : 44) - (card.total ? 92 : 0)
   // blocos de números
   const tiles = (card.tiles || []).slice(0, 6)
   if (tiles.length) {
@@ -3986,6 +3988,27 @@ async function desenharCard(card) {
     }
     y += 70
   }
+  // total do que a imagem representa, logo depois da lista
+  if (card.total) {
+    const t = card.total
+    const ty = Math.min(y + 4, LIM + 8)
+    caixa(48, ty, W - 96, 80, 18, '#17201b')
+    g.fillStyle = '#ffdf00'
+    g.font = fonte(800, 22)
+    g.fillText('TOTAL', 72, ty + 32)
+    g.fillStyle = '#ffffff'
+    g.font = fonte(600, 24)
+    g.fillText(corta(t.rot, 450), 72, ty + 62)
+    g.textAlign = 'right'
+    g.font = fonte(800, 40)
+    g.fillText(corta(t.valor, 440), W - 72, ty + 42)
+    if (t.sub) {
+      g.font = fonte(700, 20)
+      g.fillStyle = t.corSub || '#cfd8d3'
+      g.fillText(corta(t.sub, 470), W - 72, ty + 68)
+    }
+    g.textAlign = 'left'
+  }
   // fonte e resumo, acima da faixa do criador
   g.textAlign = 'right'
   g.fillStyle = '#5f6b65'
@@ -4043,6 +4066,13 @@ async function desenharCard(card) {
   g.textAlign = 'left'
   const blob = await new Promise((ok) => cv.toBlob(ok, 'image/png'))
   return { blob, nome: `${nomeArquivo(card.nome || 'apuracao')}-${nomeArquivo(card.titulo || 'card')}.png` }
+}
+
+// faixa de total do card: votos do lugar e, se houver, 2022 com a variação
+function totalCard(rot, v, v22 = null, sufixo = 'votos') {
+  const va = v22 != null ? variacao(v, v22) : null
+  const variacaoClara = { 'var-alta-forte': '#7fe0ab', 'var-alta': '#8cbcff', 'var-novo': '#8cbcff', 'var-queda': '#ffbe6b', 'var-queda-forte': '#ff9b91' }
+  return { rot, valor: `${fmt.format(v)} ${sufixo}`, sub: v22 != null ? `2022: ${fmt.format(v22)}${va ? ` · ${va.txt}` : ''}` : '', corSub: va ? variacaoClara[va.cls] || null : null }
 }
 
 // linhas de bairros no formato da lista do card
@@ -4196,6 +4226,12 @@ function secaoBairros(det, c, aba) {
     const naComp = (l) => !(B.grupo === 'zona' && l.zonaKey && B.zonasFora.has(l.zonaKey))
     const visComp = vis.filter(naComp)
     const tit = `${nomeNivel} · ${lugar}`
+    // total que a imagem representa: em SC, o total do candidato; num lugar, a soma das linhas (zonas escolhidas)
+    const baseTot = B.grupo === 'zona' ? visComp : ls
+    const tv = B.mun ? baseTot.reduce((a, l) => a + l.v, 0) : c.votos
+    const tv22 = !tem22 ? null : B.mun ? baseTot.reduce((a, l) => a + l.v22, 0) : p22 ? p22.c.votos : null
+    const parcialZonas = B.grupo === 'zona' && visComp.length < vis.length
+    const totalFicha = totalCard(`Total em ${lugar}${parcialZonas ? ' · zonas escolhidas' : ''}`, tv, tv22)
     // carrossel: capa + todas as linhas (na visão por zona, os bairros de cada zona), 6 por imagem
     const POR = 6
     const linhaCar = (x, max) => ({ nome: x.nome, extra: [x.sub, x.pos ? `${x.pos.p}º de ${x.pos.n}` : ''].filter(Boolean).join(' · '), corBarra: cor,
@@ -4209,7 +4245,7 @@ function secaoBairros(det, c, aba) {
       } else grupos = [{ titulo: tit, itens: visComp }]
       const total26 = ls.reduce((a, l) => a + l.v, 0), total22 = ls.reduce((a, l) => a + l.v22, 0)
       const vaT = tem22 ? variacao(total26, total22) : null
-      const capa = { ...baseCar, titulo: `${B.grupo === 'zona' ? 'Zonas e bairros' : nomeNivel} · ${lugar}`, subtitulo: tem22 ? `2022 × 2026 · ${grupos.reduce((a, g) => a + g.itens.length, 0)} ${B.grupo === 'zona' ? 'bairros' : nomeNivel.toLowerCase()}` : rotOrdem,
+      const capa = { ...baseCar, total: totalFicha, titulo: `${B.grupo === 'zona' ? 'Zonas e bairros' : nomeNivel} · ${lugar}`, subtitulo: tem22 ? `2022 × 2026 · ${grupos.reduce((a, g) => a + g.itens.length, 0)} ${B.grupo === 'zona' ? 'bairros' : nomeNivel.toLowerCase()}` : rotOrdem,
         tiles: [{ rot: `Votos em ${lugar}`, valor: fmt.format(total26), sub: tem22 ? `2022: ${fmt.format(total22)} · ${vaT?.txt || ''}` : '', corSub: vaT ? COR_VAR[vaT.cls] : null },
           ...(B.grupo === 'zona' ? grupos.slice(0, 5).map((g) => { const va = tem22 ? variacao(g.z.v, g.z.v22) : null; return { rot: g.titulo, valor: fmt.format(g.z.v), sub: [g.z.pos ? `${g.z.pos.p}º na zona` : '', va?.txt].filter(Boolean).join(' · '), corSub: va ? COR_VAR[va.cls] : null } }) : [])],
         linhas: B.grupo === 'zona' ? [] : vis.slice(0, 3).map((x) => linhaCar(x, Math.max(1, ...vis.slice(0, 3).map((y) => Math.max(y.v, y.v22 || 0))))),
@@ -4219,7 +4255,7 @@ function secaoBairros(det, c, aba) {
         const max = Math.max(1, ...g.itens.map((x) => Math.max(x.v, tem22 ? x.v22 : 0)))
         const nPag = Math.max(1, Math.ceil(g.itens.length / POR))
         for (let k = 0; k < nPag && paginas.length < 20; k++) {
-          paginas.push({ ...baseCar, titulo: g.titulo, subtitulo: `${B.grupo === 'zona' ? 'Bairros da zona' : rotOrdem}${nPag > 1 ? ` · parte ${k + 1} de ${nPag}` : ''}${tem22 ? ' · 2022 × 2026' : ''}`, numerar: false,
+          paginas.push({ ...baseCar, total: g.z ? totalCard(`Total na ${g.titulo.replace(/ · .*/, '')}`, g.z.v, tem22 ? g.z.v22 : null) : totalFicha, titulo: g.titulo, subtitulo: `${B.grupo === 'zona' ? 'Bairros da zona' : rotOrdem}${nPag > 1 ? ` · parte ${k + 1} de ${nPag}` : ''}${tem22 ? ' · 2022 × 2026' : ''}`, numerar: false,
             linhas: g.itens.slice(k * POR, (k + 1) * POR).map((x) => linhaCar(x, max)) })
         }
       }
@@ -4230,7 +4266,7 @@ function secaoBairros(det, c, aba) {
       csv: { nome: `${nomeArquivo(c.nome)}-${nomeArquivo(nomeNivel)}-${nomeArquivo(lugar)}.csv`, cab: [nomeNivel.replace(/s$/, '').replace('Municípi', 'Município').replace('Seçõe', 'Seção').replace('Locai', 'Local'), 'Onde', 'Votos 2026', '% do lugar', 'Posição', ...(tem22 ? ['Votos 2022', 'Diferença'] : [])],
         linhas: visComp.flatMap((l) => [[l.nome, l.sub || '', l.v, pctDe(l.v, l.val), l.pos ? `${l.pos.p}º de ${l.pos.n}` : '', ...(tem22 ? [l.v22, l.v - l.v22] : [])],
           ...(l.filhos || []).map((f) => [`${l.nome} › ${f.nome}`, l.sub || '', f.v, pctDe(f.v, f.val), f.pos ? `${f.pos.p}º de ${f.pos.n}` : '', ...(tem22 ? [f.v22, f.v - f.v22] : [])])]) },
-      card: { turno: turnoDe(elId), foto: c.foto, nome: c.nome, cor, sub: `${c.partido} · nº ${c.numero} · ${aba.rotulo.replace(/ SC$/, '')}`, titulo: tit, subtitulo: rotOrdem,
+      card: { turno: turnoDe(elId), foto: c.foto, nome: c.nome, cor, sub: `${c.partido} · nº ${c.numero} · ${aba.rotulo.replace(/ SC$/, '')}`, titulo: tit, subtitulo: rotOrdem, total: totalFicha,
         linhas: linhasBairroCard(visComp.map((l) => ({ nome: l.nome, v: l.v, pct: pctDe(l.v, l.val), v22: tem22 ? l.v22 : null, va: tem22 ? variacao(l.v, l.v22) : null, extra: [l.sub, l.pos ? `${l.pos.p}º de ${l.pos.n}` : ''].filter(Boolean).join(' · ') }))),
         rodape: tem22 ? `Desde 2022: cresceu em ${fmt.format(sobe)} e caiu em ${fmt.format(cai)} ${nomeNivel.toLowerCase()}` : '' },
       paginas: Math.min(20, 1 + Math.ceil(visComp.length / POR)),
@@ -4622,11 +4658,14 @@ function cardMapaPro(el, pts) {
   const onde = PRO.mun ? NOME_MUN.get(PRO.mun) || '' : 'Santa Catarina'
   const top = [...pts].sort((a, b) => b.valor - a.valor).slice(0, 8)
   const max = Math.max(1, ...top.map((p) => p.valor))
+  const somaV = pts.reduce((a, p) => a + p.valor, 0)
+  const tem22m = pts.some((p) => p.v22 != null)
   if (PRO.camada === 'abst') {
-    return { exclusivo: true, turno: 1, nome: `Abstenção · ${onde}`, cor: '#1c5cab', sub: PRO.mun ? 'Por local de votação' : 'Por município', titulo: 'Onde mais eleitores faltaram', subtitulo: '% de aptos que não votaram',
+    const ap = pts.reduce((a, p) => a + p.l[4], 0), cp = pts.reduce((a, p) => a + p.l[5], 0)
+    return { exclusivo: true, turno: 1, total: { rot: `Ausentes · ${onde}`, valor: `${fmt.format(ap - cp)}`, sub: `${fmtPct.format(pctDe(ap - cp, ap))}% de ${fmt.format(ap)} aptos` }, nome: `Abstenção · ${onde}`, cor: '#1c5cab', sub: PRO.mun ? 'Por local de votação' : 'Por município', titulo: 'Onde mais eleitores faltaram', subtitulo: '% de aptos que não votaram',
       linhas: top.map((p) => ({ ponto: p.cor, nome: p.nome, extra: `${p.sub ? p.sub + ' · ' : ''}${fmt.format(p.l[4] - p.l[5])} ausentes de ${fmt.format(p.l[4])}`, valor: `${fmtPct.format(p.valor)}%`, frac: p.valor / max, corBarra: p.cor })) }
   }
-  return baseCardPro(el, { titulo: `Mapa de votos · ${onde}`, subtitulo: PRO.mun ? 'Locais de votação com mais votos' : 'Municípios com mais votos',
+  return baseCardPro(el, { total: totalCard(`Total em ${onde}`, somaV, tem22m ? pts.reduce((a, p) => a + (p.v22 || 0), 0) : null), titulo: `Mapa de votos · ${onde}`, subtitulo: PRO.mun ? 'Locais de votação com mais votos' : 'Municípios com mais votos',
     linhas: top.map((p) => {
       const extra = [p.sub, p.pos ? `${p.pos.p}º no local` : ''].filter(Boolean).join(' · ')
       // com 2022: barras alinhadas (2022 cinza × 2026 na cor do candidato), como no app
@@ -4772,7 +4811,7 @@ function renderAbstPro() {
           <td class="dir"><strong>${fmtPct.format(g.abst)}%</strong></td><td class="dir">${fmtPct.format(g.pbr)}%<div class="cand-meta">${fmtPct.format(g.pnu)}%</div></td></tr>`)
         .join('')}</tbody></table>
       ${vis.length > lim ? `<button type="button" class="botao secundario" data-pro-abst-todos>Mostrar todos (${vis.length})</button>` : ''}
-      <div class="exportar">${botaoCard('pro-abst', { exclusivo: true, turno: PRO.turnoAbst || 1, nome: `Abstenção · ${PRO.mun ? NOME_MUN.get(PRO.mun) || '' : 'Santa Catarina'}`, cor: '#1c5cab',
+      <div class="exportar">${botaoCard('pro-abst', { exclusivo: true, turno: PRO.turnoAbst || 1, total: { rot: `Ausentes · ${PRO.mun ? NOME_MUN.get(PRO.mun) || '' : 'Santa Catarina'}`, valor: fmt.format(tot.aptos - tot.comp), sub: `${fmtPct.format(pctDe(tot.aptos - tot.comp, tot.aptos))}% de ${fmt.format(tot.aptos)} aptos · brancos ${fmtPct.format(pctDe(tot.br, tot.comp))}% · nulos ${fmtPct.format(pctDe(tot.nu, tot.comp))}%` }, nome: `Abstenção · ${PRO.mun ? NOME_MUN.get(PRO.mun) || '' : 'Santa Catarina'}`, cor: '#1c5cab',
         sub: `${fmtPct.format(pctDe(tot.aptos - tot.comp, tot.aptos))}% de abstenção · ${fmt.format(tot.aptos - tot.comp)} ausentes`,
         titulo: { abst: 'Maior abstenção', aus: 'Mais eleitores ausentes', menor: 'Menor abstenção', br: 'Mais votos brancos', nu: 'Mais votos nulos' }[PRO.ordem] || 'Abstenção',
         subtitulo: `${PRO.mun ? 'Bairros' : 'Municípios'} · brancos e nulos: ${ROTULO_26[PRO.cargoAbst] || ''}`,
