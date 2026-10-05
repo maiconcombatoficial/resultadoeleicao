@@ -579,3 +579,29 @@ html.com-detalhe, html.com-detalhe body { overflow: hidden; }
 .pm-zona td:first-child { padding-left: 18px; }
 .pm-tabela td:first-child { width: 100%; }
 .det-voltar { flex: none; white-space: nowrap; }
+
+/* ---------- atalhos de local ---------- */
+.atalhos { background: var(--cartao); border: 1px solid var(--linha); border-radius: 14px; padding: 12px; display: grid; gap: 12px; box-shadow: var(--sombra); }
+.atalhos-grupo { display: grid; gap: 6px; min-width: 0; }
+.atalhos-rot { font-size: 0.8rem; font-weight: 800; color: var(--mudo); text-transform: uppercase; letter-spacing: 0.03em; }
+.atalhos-rot small { text-transform: none; font-weight: 600; letter-spacing: 0; }
+.atalhos-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.atalho {
+  font: inherit; font-size: 0.85rem; font-weight: 700; color: var(--texto); cursor: pointer;
+  background: var(--fundo); border: 1.5px solid var(--linha); border-radius: 999px; padding: 6px 12px;
+  min-height: 36px; transition: border-color 0.15s, background 0.15s;
+}
+.atalho:hover { border-color: var(--verde); }
+.atalho.ativo { background: var(--verde); border-color: var(--verde); color: #fff; }
+.atalho.regiao { border-color: color-mix(in srgb, #0a5ea8 45%, var(--linha)); color: #0a5ea8; }
+.atalho.regiao.ativo { background: #0a5ea8; border-color: #0a5ea8; color: #fff; }
+@media (prefers-color-scheme: dark) { .atalho.regiao { color: #8cbcff; } }
+.micros summary { cursor: pointer; font-size: 0.85rem; font-weight: 700; color: #0a5ea8; margin-top: 4px; list-style: none; }
+.micros summary::-webkit-details-marker { display: none; }
+.micro-grupo { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+.micro-grupo > span { width: 100%; font-size: 0.75rem; font-weight: 700; color: var(--mudo); }
+.atalhos-abrir {
+  justify-self: start; font: inherit; font-size: 0.85rem; font-weight: 700; color: var(--primaria); cursor: pointer;
+  background: none; border: 1px dashed var(--linha); border-radius: 999px; padding: 6px 12px; max-width: 100%; text-align: left;
+}
+.segmentado { flex-wrap: wrap; max-width: 100%; }
