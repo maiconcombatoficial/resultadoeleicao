@@ -851,3 +851,4 @@ td .leg-ponto { margin-right: 4px; vertical-align: middle; }
 .zona-bairros .cmp-linha { padding: 8px 0; }
 .zona-bairros .cmp-linha:last-child { border-bottom: 0; }
 @media (prefers-color-scheme: dark) { .link-zonas[aria-expanded="true"] { color: #08200f; } }
+.zonas-comp { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: var(--fundo); display: grid; gap: 6px; }
