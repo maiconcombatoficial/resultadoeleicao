@@ -4,11 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610051400'
-import { chanceDe, NIVEIS } from './chances.js?v=202610051400'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610051400'
-import { FLORIPA } from './floripa.js?v=202610051400'
-import { corPartido, corTexto } from './cores.js?v=202610051400'
+import { calcularVagas } from './vagas.js?v=202610051500'
+import { chanceDe, NIVEIS } from './chances.js?v=202610051500'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610051500'
+import { FLORIPA } from './floripa.js?v=202610051500'
+import { corPartido, corTexto } from './cores.js?v=202610051500'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -3056,6 +3056,16 @@ function rotuloGrupo(arq, grupo, chave) {
   return `Seção ${sec}<div class="cand-meta">${esc(tituloLocal(l[0]))} · ${Number(z)}ª zona</div>`
 }
 
+// posição de um candidato num grupo (zona, bairro, local, seção): 1 + quantos tiveram mais votos que ele
+function posicaoNoGrupo(g, nr) {
+  if (nr == null || !g.top.has(nr)) return null
+  const v = g.top.get(nr)
+  let p = 1
+  for (const x of g.top.values()) if (x > v) p++
+  return { p, n: g.top.size, v }
+}
+const textoPosicao = (pos) => (pos ? `<span class="pos-foco ${pos.p === 1 ? 'pos-1' : pos.p <= 3 ? 'pos-top' : ''}">${pos.p}º de ${pos.n}</span>` : '<span class="mudo">sem votos</span>')
+
 // Explorador de um município: zonas › locais › bairros › seções. X é o estado (H22 para 2022, B26 para 2026).
 function renderLocal(X, el) {
   const L = X.local
@@ -3119,9 +3129,12 @@ function renderLocal(X, el) {
         .map(({ g, nrTop, vTop }) => {
           const top = nrTop != null ? nomeVotavel(el, nrTop) : null
           const alvo = grupo === 'zona' ? `data-h22-zona="${g.chave}"` : grupo === 'local' ? `data-h22-local="${esc(g.chave)}"` : grupo === 'bairro' ? `data-h22-bairro="${esc(g.chave)}"` : `data-h22-secao="${esc(g.chave)}"`
+          const pos = focoInfo && !focoInfo.legenda ? posicaoNoGrupo(g, X.foco) : null
+          const foiTop = pos?.p === 1 && nrTop === X.foco
           return `<tr class="clicavel" ${alvo}><td>${rotuloGrupo(arq, grupo, g.chave)}
-              ${top ? `<div class="cand-meta">🏆 ${esc(top.nome)} ${pill(top.partido)} ${fmtPct.format(pctDe(vTop, g.validos))}%</div>` : ''}</td>
-            <td class="dir">${focoInfo ? `<strong>${fmt.format(g.foco)}</strong><div class="cand-meta">${fmtPct.format(pctDe(g.foco, g.validos))}%</div>` : fmt.format(g.validos)}</td></tr>`
+              ${top ? `<div class="cand-meta">🏆 ${esc(top.nome)} ${pill(top.partido)} ${fmtPct.format(pctDe(vTop, g.validos))}%</div>` : ''}
+              ${focoInfo && !focoInfo.legenda && !foiTop ? `<div class="cand-meta">📍 ${esc(focoInfo.nome)}: ${pos && top ? `${fmt.format(vTop - pos.v)} votos atrás do 1º` : 'sem votos aqui'}</div>` : ''}</td>
+            <td class="dir">${focoInfo ? `<strong>${fmt.format(g.foco)}</strong><div class="cand-meta">${fmtPct.format(pctDe(g.foco, g.validos))}%</div>${!focoInfo.legenda ? `<div class="cand-meta">${textoPosicao(pos)}</div>` : ''}` : fmt.format(g.validos)}</td></tr>`
         })
         .join('')}</tbody></table>
       ${linhasGrupo.length > maxLinhas ? `<button type="button" class="botao secundario" data-h22-vergrupos>Mostrar todas as ${fmt.format(linhasGrupo.length)} ${grupo === 'secao' ? 'seções' : 'linhas'}</button>` : ''}
@@ -3397,7 +3410,7 @@ function secaoBairros(det, c, aba) {
       // bairros com voto em 2026 ou em 2022
       const chaves = new Set([...m.values()].filter((g) => g.foco > 0).map((g) => g.chave))
       if (m22) for (const g of m22.values()) if (g.foco > 0) chaves.add(g.chave)
-      const linhas = [...chaves].map((k) => ({ k, v: m.get(k)?.foco || 0, val: m.get(k)?.validos || 0, v22: v22(k) }))
+      const linhas = [...chaves].map((k) => ({ k, v: m.get(k)?.foco || 0, val: m.get(k)?.validos || 0, v22: v22(k), pos: m.get(k) ? posicaoNoGrupo(m.get(k), nr) : null }))
       const ord = { v: (a, b) => b.v - a.v, p: (a, b) => pctDe(b.v, b.val) - pctDe(a.v, a.val), up: (a, b) => b.v - b.v22 - (a.v - a.v22), dn: (a, b) => a.v - a.v22 - (b.v - b.v22) }
       linhas.sort(ord[B.modo] || ord.v)
       const vis = B.modo === 'up' ? linhas.filter((l) => l.v > l.v22) : B.modo === 'dn' ? linhas.filter((l) => l.v < l.v22) : linhas.filter((l) => l.v > 0)
@@ -3406,7 +3419,7 @@ function secaoBairros(det, c, aba) {
       const sobe = linhas.filter((l) => l.v > l.v22).length, cai = linhas.filter((l) => l.v < l.v22).length
       corpo = (m22 ? resumoVar(sobe, cai, ROTULO_ELEICAO[p22.el.id]) + legendaVar(cor) : '') +
         (vis.length
-          ? tabela(vis.slice(0, lim).map((l) => linha(l.k, '', l.v, l.val, B.mun.cd, l.k, m22 ? blocoVariacao(l.v, l.v22, max, cor) : '')).join('')) +
+          ? tabela(vis.slice(0, lim).map((l) => linha(l.k, '', l.v, l.val, B.mun.cd, l.k, `<div class="cand-meta">${l.pos?.p === 1 ? '🏆 ' : ''}${textoPosicao(l.pos)} no bairro</div>` + (m22 ? blocoVariacao(l.v, l.v22, max, cor) : ''))).join('')) +
             (vis.length > lim ? `<button type="button" class="botao secundario" data-bai-todos>Mostrar os ${vis.length} bairros</button>` : '')
           : `<p class="nota">${B.modo === 'up' ? 'Não cresceu em nenhum bairro' : B.modo === 'dn' ? 'Não caiu em nenhum bairro' : 'Sem votos'} em ${esc(B.mun.nm)}.</p>`) +
         `<p class="nota">Total em ${esc(B.mun.nm)}: <strong>${fmt.format(linhas.reduce((a, l) => a + l.v, 0))}</strong> votos${m22 ? ` (2022: ${fmt.format(linhas.reduce((a, l) => a + l.v22, 0))})` : ''}.</p>`
