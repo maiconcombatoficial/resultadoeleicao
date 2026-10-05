@@ -4,11 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610061800'
-import { chanceDe, NIVEIS } from './chances.js?v=202610061800'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610061800'
-import { FLORIPA } from './floripa.js?v=202610061800'
-import { corPartido, corTexto } from './cores.js?v=202610061800'
+import { calcularVagas } from './vagas.js?v=202610061900'
+import { chanceDe, NIVEIS } from './chances.js?v=202610061900'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610061900'
+import { FLORIPA } from './floripa.js?v=202610061900'
+import { corPartido, corTexto } from './cores.js?v=202610061900'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -638,6 +638,7 @@ async function carregar() {
     const anterior = estado.dados && estado.dados.abrangencia === dados.abrangencia && estado.dados.mun?.cd === mun?.cd ? estado.dados : null
     estado.anterior = new Map((anterior?.candidatos || []).map((c) => [c.sqcand, c.votos]))
     estado.dados = dados
+    if (!mun && dados.projecao?.qe) (estado.qeSC ??= {})[aba.id] = dados.projecao.qe
     renderizar()
     statusEl.textContent = dados.final ? 'Apuração encerrada' : `Atualizado ${new Date().toLocaleTimeString('pt-BR')}`
     statusEl.className = 'status ok'
@@ -1765,10 +1766,10 @@ function tabelaPartidos(d) {
   const total = lista.reduce((a, g) => a + g.total, 0) || 1
   const max = Math.max(1, ...lista.map((g) => g.total))
   const comProj = !!d.projecao?.qe
-  return `<p class="nota">Votos de cada partido ou federação: nominais + legenda.${comProj ? ' "Vagas" é a projeção pelo cálculo do TSE.' : ''}
+  return `<p class="nota">Votos de cada partido ou federação: nominais + legenda.${comProj ? ` Quociente eleitoral: <strong>${fmt.format(d.projecao.qe)}</strong>. "QE" = quantos quocientes o partido fez; "QP" = quociente partidário (vagas diretas); "Vagas" = QP + sobras, pela projeção do cálculo do TSE.` : ''}
     Toque numa linha para ver os candidatos dela.</p>
     <table class="tabela">
-    <thead><tr><th>Partido / federação</th><th class="dir">Votos</th><th class="dir">%</th><th class="dir">${comProj ? 'Vagas' : 'Eleitos'}</th></tr></thead>
+    <thead><tr><th>Partido / federação</th><th class="dir">Votos</th><th class="dir">%</th>${comProj ? '<th class="dir" title="Quociente partidário: vagas diretas">QP</th>' : ''}<th class="dir">${comProj ? 'Vagas' : 'Eleitos'}</th></tr></thead>
     <tbody>
     ${lista
       .map(
@@ -1776,16 +1777,42 @@ function tabelaPartidos(d) {
         <td><div class="cand-linha">${pill(nomeCurto(g.nome), g.cor)}</div>
           <div class="cand-meta">${g.partidos.length > 1 || g.partidos[0] !== g.nome ? esc(g.partidos.join(', ')) + ' · ' : ''}${g.cands} candidatos${
             g.legenda ? ` · legenda ${fmt.format(g.legenda)}` : ''
-          }</div>
+          }${comProj ? ` · <strong>${fmtDec(g.total / d.projecao.qe)}</strong> QE` : ''}</div>
           <div class="barra fina"><span style="width:${(100 * g.total) / max}%"></span></div></td>
         <td class="dir">${fmt.format(g.total)}</td>
         <td class="dir">${fmtPct.format((100 * g.total) / total)}</td>
+        ${comProj ? `<td class="dir">${g.qp || '—'}</td>` : ''}
         <td class="dir"><strong>${comProj ? g.vagasProj || '—' : g.eleitos || '—'}</strong></td>
       </tr>`,
       )
       .join('')}
     </tbody></table>`
 }
+
+// Quadro sempre visível com o quociente eleitoral e quem já atingiu (abas de deputados, estado inteiro).
+function faixaQuociente(d) {
+  const r = d.projecao
+  const gs = [...estado.grupos].filter((g) => g.total > 0).sort((a, b) => b.total - a.total)
+  const atingiram = gs.filter((g) => g.total >= r.qe)
+  const perto = gs.filter((g) => g.total < r.qe && g.total >= 0.8 * r.qe)
+  const parcial = !d.final && !d.tseDefinido
+  return `<section class="cartao quociente">
+    <h3>📐 Quociente eleitoral: <span class="qe-num">${fmt.format(r.qe)}</span> votos</h3>
+    <p class="nota">${fmt.format(r.validos)} votos válidos (nominais + legenda) ÷ ${d.vagas} vagas${parcial ? ` · com ${fmtPct.format(d.secoes.percentual)}% das seções apuradas, ainda muda` : ''}.
+      Cada partido ou federação elege direto uma vaga para cada quociente que atingir: é o <strong>quociente partidário (QP)</strong>.</p>
+    <div class="calc-num">
+      <div><span>Quociente eleitoral</span><strong>${fmt.format(r.qe)}</strong><small>votos por vaga</small></div>
+      <div><span>Candidato precisa de</span><strong>${fmt.format(Math.ceil(0.1 * r.qe))}</strong><small>10% do QE para vaga por QP</small></div>
+      <div><span>Partido nas sobras</span><strong>${fmt.format(Math.ceil(0.8 * r.qe))}</strong><small>80% do QE</small></div>
+      <div><span>Atingiram o QE</span><strong>${atingiram.length}</strong><small>partidos/federações</small></div>
+    </div>
+    <ul class="qe-lista">${atingiram
+      .map((g) => `<li data-partido="${esc(g.nome)}" style="${estiloCor(g.cor)}">${pill(nomeCurto(g.nome), g.cor)} <span><strong>${fmtDec(g.total / r.qe)}</strong> QE → <strong>QP ${g.qp}</strong>${g.vagasProj > g.qp ? ` + ${g.vagasProj - g.qp} nas sobras` : ''}</span></li>`)
+      .join('')}${perto.map((g) => `<li class="qe-perto" data-partido="${esc(g.nome)}" style="${estiloCor(g.cor)}">${pill(nomeCurto(g.nome), g.cor)} <span>${fmtDec(g.total / r.qe)} QE · sem QP, disputa sobras${g.vagasProj ? ` (${g.vagasProj})` : ''}</span></li>`).join('')}</ul>
+    <p class="nota">QE = quantas vezes o partido fez o quociente eleitoral. Detalhes do cálculo, fase a fase, logo abaixo em "Como as ${d.vagas} vagas foram calculadas".</p>
+  </section>`
+}
+const fmtDec = (v) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 // Quadro com o passo a passo do cálculo das vagas.
 function cartaoCalculo(d) {
@@ -1955,7 +1982,7 @@ function renderProporcional(d) {
       : `${filtros}
          <input id="busca" type="search" placeholder="Buscar por nome, partido ou número…" value="${esc(estado.busca)}" autocomplete="off">
          <div id="lista">${listaProporcional()}</div>`
-  return `${bancada}
+  return `${!mun && d.projecao?.qe ? faixaQuociente(d) : mun && estado.qeSC?.[estado.aba.id] ? `<p class="nota">📐 Quociente eleitoral de SC: <strong>${fmt.format(estado.qeSC[estado.aba.id])}</strong> votos por vaga (a eleição de deputados é estadual; veja em "SC inteira").</p>` : ''}${bancada}
     <section class="cartao">
       <h3>Votos por partido / federação</h3>
       ${barraEmpilhada(fatias)}
@@ -2204,6 +2231,37 @@ function tendencia(serie) {
 
 const pp = (v) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${fmtPct.format(Math.abs(v))} p.p.`
 
+// Ficha de deputado: o quociente eleitoral, o do partido do candidato e a régua dos 10%.
+function secaoQuocienteFicha(d, c, det) {
+  const r = d.projecao
+  if (!r?.qe || det.mun) {
+    const qe = estado.qeSC?.[det.aba]
+    return qe ? `<section class="cartao quociente"><h3>📐 Quociente eleitoral</h3><p>Em SC: <strong>${fmt.format(qe)}</strong> votos por vaga. Abra a ficha em "SC inteira" para ver o quociente do partido.</p></section>` : ''
+  }
+  const g = r.grupos.find((x) => x.cands.some((y) => y.sqcand === c.sqcand))
+  if (!g) return ''
+  const posNoPartido = g.cands.findIndex((y) => y.sqcand === c.sqcand) + 1
+  const pctQE = (100 * c.votos) / r.qe
+  const passou10 = c.votos >= 0.1 * r.qe, passou20 = c.votos >= 0.2 * r.qe
+  const vagas = g.eleitos.length
+  const nome = nomeCurto(g.nome)
+  return `<section class="cartao quociente"><h3>📐 Quociente eleitoral e partidário</h3>
+    <div class="calc-num">
+      <div><span>Quociente eleitoral</span><strong>${fmt.format(r.qe)}</strong><small>votos por vaga em SC</small></div>
+      <div><span>${esc(nome)} fez</span><strong>${fmtDec(g.votos / r.qe)} QE</strong><small>${fmt.format(g.votos)} votos (nominais + legenda)</small></div>
+      <div><span>Quociente partidário</span><strong>${g.qp}</strong><small>vaga${g.qp === 1 ? '' : 's'} direta${g.qp === 1 ? '' : 's'} do partido</small></div>
+      <div><span>Vagas do partido</span><strong>${vagas}</strong><small>QP ${g.porQP} + sobras ${g.porMedia}</small></div>
+    </div>
+    <ul class="det-lista">
+      <li>${esc(c.nome)} tem <strong>${fmt.format(c.votos)}</strong> votos = <strong>${fmtPct.format(pctQE)}%</strong> do quociente eleitoral.</li>
+      <li>${passou10 ? '✅' : '❌'} ${passou10 ? 'Passou' : 'Não passou'} dos 10% do QE (<strong>${fmt.format(Math.ceil(0.1 * r.qe))}</strong> votos), mínimo para ocupar vaga do quociente partidário.${!passou10 ? ' Só pode entrar nas sobras finais.' : ''}</li>
+      <li>${passou20 ? '✅' : '➖'} ${passou20 ? 'Passou' : 'Não passou'} dos 20% do QE (<strong>${fmt.format(Math.ceil(0.2 * r.qe))}</strong>), exigido nas sobras da 2ª fase.</li>
+      <li>É o <strong>${posNoPartido}º</strong> mais votado de ${esc(nome)}: as ${vagas} vaga${vagas === 1 ? '' : 's'} do partido ${vagas === 1 ? 'vai' : 'vão'} para os mais votados da legenda.</li>
+    </ul>
+    <p class="nota">${d.tseDefinido || d.final ? 'Com o resultado final.' : `Projeção com ${fmtPct.format(d.secoes.percentual)}% das seções apuradas.`} Código Eleitoral, arts. 106 a 109.</p>
+  </section>`
+}
+
 function blocoDisputa(d, c, aba) {
   const pos = d.candidatos.indexOf(c) + 1
   const acima = d.candidatos[pos - 2]
@@ -2331,6 +2389,7 @@ function renderDetalheConteudo() {
     ${secaoBairros(det, c, aba)}
     <section class="cartao"><h3>${c.eleito || d.tseDefinido ? 'Situação oficial (TSE)' : 'Chance de reverter'}</h3>${textoChance(d, c, aba)}</section>
     <section class="cartao"><h3>Disputa</h3>${blocoDisputa(d, c, aba)}</section>
+    ${aba?.tipo === 'prop' ? secaoQuocienteFicha(d, c, det) : ''}
     ${vices}
     ${floripa}
   </div>`
@@ -3417,7 +3476,7 @@ function render2022() {
       <div class="resumo-titulo"><h2>Eleições 2022 · ${esc(el.nome)}${el.turno === 2 ? ' (2º turno)' : ''} · SC</h2><span class="selo final">Resultado oficial</span></div>
       ${pills}
       ${seletorLocal(H22)}
-      <p class="nota">${fmt.format(el.validos)} votos nominais válidos · ${el.candidatos.length} candidatos${prop ? ` · ${el.vagas} vagas` : ''}. Toque num candidato que concorre em 2026 para abrir a ficha atual.</p>
+      <p class="nota">${fmt.format(el.validos)} votos nominais válidos · ${el.candidatos.length} candidatos${prop ? ` · ${el.vagas} vagas` : ''}.${prop && el.qe ? ` <strong>📐 Quociente eleitoral de 2022: ${fmt.format(el.qe)}</strong> (${fmt.format(el.validosTotais)} válidos com legenda ÷ ${el.vagas}).` : ''} Toque num candidato que concorre em 2026 para abrir a ficha atual.</p>
     </section>
     ${H22.local ? renderLocal(H22, el) : `<section class="cartao"><h3>${prop ? `Eleitos em 2022 (${eleitos.length}) e onde estão em 2026` : 'Principais candidatos de 2022 e onde estão em 2026'}</h3>
       <ul class="h22-lista">${destaque.map(cartaoCand).join('')}</ul></section>

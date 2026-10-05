@@ -852,3 +852,7 @@ td .leg-ponto { margin-right: 4px; vertical-align: middle; }
 .zona-bairros .cmp-linha:last-child { border-bottom: 0; }
 @media (prefers-color-scheme: dark) { .link-zonas[aria-expanded="true"] { color: #08200f; } }
 .zonas-comp { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: var(--fundo); display: grid; gap: 6px; }
+.quociente h3 .qe-num { color: var(--primaria); }
+.qe-lista { list-style: none; padding: 0; margin: 10px 0 4px; display: grid; gap: 6px; }
+.qe-lista li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 10px; background: var(--fundo); border-left: 4px solid var(--cor, var(--linha)); cursor: pointer; font-size: 0.9rem; }
+.qe-lista li.qe-perto { opacity: 0.8; }
