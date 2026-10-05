@@ -4,11 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610062000'
-import { chanceDe, NIVEIS } from './chances.js?v=202610062000'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610062000'
-import { FLORIPA } from './floripa.js?v=202610062000'
-import { corPartido, corTexto } from './cores.js?v=202610062000'
+import { calcularVagas } from './vagas.js?v=202610062100'
+import { chanceDe, NIVEIS } from './chances.js?v=202610062100'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610062100'
+import { FLORIPA } from './floripa.js?v=202610062100'
+import { corPartido, corTexto } from './cores.js?v=202610062100'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -187,10 +187,15 @@ function aplicarProjecao(d) {
 /* ---------------- regiões de SC ---------------- */
 
 const POP = new Map(MUNICIPIOS_SC.map(([cd, , , pop]) => [cd, pop]))
-const MUN_REG = new Map(MUNICIPIOS_SC.map(([cd, , nm, pop, meso, micro]) => [cd, { cd, nm, pop, meso, micro }]))
+const MUN_REG = new Map(MUNICIPIOS_SC.map(([cd, , nm, pop, meso, micro]) => [cd, { cd, nm, pop, meso, micro, assoc: ASSOCIACAO_MUN[cd] }]))
 
 function regiao(id) {
   const [tipo, cod] = String(id).split(':')
+  if (tipo === 'assoc') {
+    if (!ASSOCIACOES[cod]) return null
+    const membros = MUNICIPIOS_SC.filter((m) => ASSOCIACAO_MUN[m[0]] === cod).map(([cd, , nm]) => ({ cd, nm }))
+    return { regiao: id, nm: `${cod} · ${ASSOCIACOES[cod]}`, membros }
+  }
   const nome = tipo === 'meso' ? MESORREGIOES[cod] : MICRORREGIOES[cod]
   if (!nome) return null
   const membros = MUNICIPIOS_SC.filter((m) => (tipo === 'meso' ? m[4] : m[5]) === cod).map(([cd, , nm]) => ({ cd, nm }))
@@ -976,6 +981,10 @@ function atalhosLocal(mun) {
         <button type="button" class="atalho regiao ${mun?.regiao === 'micro:42016' ? 'ativo' : ''}" data-regiao="micro:42016">Σ Soma da região</button></div></div>
     <div class="atalhos-grupo"><span class="atalhos-rot">🏙️ Maiores cidades</span>
       <div class="atalhos-chips">${maiores.map((m) => chip(m[0], m[2], ativo(m[0]))).join('')}</div></div>
+    <div class="atalhos-grupo"><span class="atalhos-rot">🤝 Associações de municípios <small>(FECAM · soma dos municípios)</small></span>
+      <div class="atalhos-chips">${Object.keys(ASSOCIACOES)
+        .map((sg) => `<button type="button" class="atalho regiao ${mun?.regiao === 'assoc:' + sg ? 'ativo' : ''}" data-regiao="assoc:${sg}" title="${esc(ASSOCIACOES[sg])}">${esc(sg)}</button>`)
+        .join('')}</div></div>
     <div class="atalhos-grupo"><span class="atalhos-rot">🗺️ Regiões <small>(soma dos municípios · IBGE)</small></span>
       <div class="atalhos-chips">${Object.entries(MESORREGIOES)
         .map(([cod, nome]) => `<button type="button" class="atalho regiao ${mun?.regiao === 'meso:' + cod ? 'ativo' : ''}" data-regiao="meso:${cod}">${esc(nome)}</button>`)
@@ -2451,7 +2460,7 @@ function secaoPorMunicipio(det, aba, cor) {
   const abasAgrupar =
     pm.escopo === 'todos' && !pm.carregando
       ? `<div class="segmentado" role="group" aria-label="Agrupar">
-          ${[['mun', 'Municípios'], ['meso', 'Regiões'], ['micro', 'Microrregiões']]
+          ${[['mun', 'Municípios'], ['assoc', 'Associações'], ['meso', 'Regiões'], ['micro', 'Microrregiões']]
             .map(([k, r]) => `<button type="button" data-agrupar="${k}" aria-pressed="${agrupar === k}">${r}</button>`)
             .join('')}</div>`
       : ''
@@ -2459,8 +2468,8 @@ function secaoPorMunicipio(det, aba, cor) {
     const grupos = new Map()
     for (const l of pm.linhas) {
       const info = MUN_REG.get(l.cd)
-      const chave = info ? (agrupar === 'meso' ? info.meso : info.micro) : '?'
-      const g = grupos.get(chave) || { nome: agrupar === 'meso' ? MESORREGIOES[chave] : MICRORREGIOES[chave] || 'Outros', meso: info && MESORREGIOES[info.meso], votos: 0, validos: 0, n: 0, top: null }
+      const chave = info ? (agrupar === 'meso' ? info.meso : agrupar === 'assoc' ? info.assoc : info.micro) : '?'
+      const g = grupos.get(chave) || { nome: agrupar === 'meso' ? MESORREGIOES[chave] : agrupar === 'assoc' ? `${chave} · ${ASSOCIACOES[chave] || ''}` : MICRORREGIOES[chave] || 'Outros', meso: info && MESORREGIOES[info.meso], votos: 0, validos: 0, n: 0, top: null }
       g.votos += l.votos
       g.validos += l.validos || 0
       ;(g.cds ??= []).push(l.cd)
@@ -2471,14 +2480,14 @@ function secaoPorMunicipio(det, aba, cor) {
     const lista = [...grupos.values()].sort((a, b) => b.votos - a.votos)
     const max = Math.max(1, ...lista.map((g) => g.votos))
     return `<section class="cartao"><h3>📍 Votos por município e zona</h3>${botoes}${abasAgrupar}
-      <table class="tabela pm-tabela"><thead><tr><th>${agrupar === 'meso' ? 'Região' : 'Microrregião'}</th><th class="dir">Votos</th><th class="dir">%</th></tr></thead><tbody>${lista
+      <table class="tabela pm-tabela"><thead><tr><th>${agrupar === 'meso' ? 'Região' : agrupar === 'assoc' ? 'Associação' : 'Microrregião'}</th><th class="dir">Votos</th><th class="dir">%</th></tr></thead><tbody>${lista
         .map(
           (g) => `<tr style="${estiloCor(cor)}"><td><strong>${esc(g.nome)}</strong><div class="cand-meta">${agrupar === 'micro' && g.meso ? esc(g.meso) + ' · ' : ''}${g.n} municípios · mais votos em ${esc(g.top.nm)}</div>
             <div class="barra fina"><span style="width:${(100 * g.votos) / max}%"></span></div></td>
             <td class="dir">${fmt.format(g.votos)}</td><td class="dir">${g.validos ? fmtPct.format((100 * g.votos) / g.validos) : '–'}%${linha2022Grupo(det, g.cds, g.validos ? (100 * g.votos) / g.validos : null)}</td></tr>`,
         )
         .join('')}</tbody></table>
-      <p class="nota">Regiões do IBGE. % = votos do candidato ÷ votos válidos da região. Total: <strong>${fmt.format(total)}</strong> votos.</p>
+      <p class="nota">${agrupar === 'assoc' ? 'Associações de municípios da FECAM' : 'Regiões do IBGE'}. % = votos do candidato ÷ votos válidos ${agrupar === 'assoc' ? 'da associação' : 'da região'}. Total: <strong>${fmt.format(total)}</strong> votos.</p>
     </section>`
   }
   return `<section class="cartao"><h3>📍 Votos por município e zona</h3>${botoes}${abasAgrupar}
@@ -2721,11 +2730,11 @@ function secaoCompMunicipios(det, a, b, corA, corB) {
   if (!cm) return `<section class="cartao"><h3>📍 Onde cada um é mais forte</h3><p class="nota">Compara os votos dos dois em cada município (arquivos do TSE).</p>${botoes}</section>`
   const agrupar = cm.escopo === 'todos' && !cm.carregando ? cm.agrupar || 'mun' : 'mun'
   let linhas = cm.linhas
-  if (agrupar === 'meso') {
+  if (agrupar === 'meso' || agrupar === 'assoc') {
     const g = new Map()
     for (const l of cm.linhas) {
-      const k = MUN_REG.get(l.cd)?.meso || '?'
-      const x = g.get(k) || { nm: MESORREGIOES[k] || 'Outros', a: 0, b: 0 }
+      const k = MUN_REG.get(l.cd)?.[agrupar] || '?'
+      const x = g.get(k) || { nm: agrupar === 'assoc' ? `${k} · ${ASSOCIACOES[k] || ''}` : MESORREGIOES[k] || 'Outros', a: 0, b: 0 }
       x.a += l.a
       x.b += l.b
       g.set(k, x)
@@ -2736,9 +2745,9 @@ function secaoCompMunicipios(det, a, b, corA, corB) {
   const venceA = cm.linhas.filter((l) => l.a > l.b).length, venceB = cm.linhas.filter((l) => l.b > l.a).length
   const limite = cm.verTodos || agrupar !== 'mun' ? linhas.length : 40
   return `<section class="cartao"><h3>📍 Onde cada um é mais forte</h3>${botoes}
-    ${cm.escopo === 'todos' && !cm.carregando ? `<div class="segmentado" role="group"><button type="button" data-comp-agrupar="mun" aria-pressed="${agrupar === 'mun'}">Municípios</button><button type="button" data-comp-agrupar="meso" aria-pressed="${agrupar === 'meso'}">Regiões</button></div>` : ''}
+    ${cm.escopo === 'todos' && !cm.carregando ? `<div class="segmentado" role="group"><button type="button" data-comp-agrupar="mun" aria-pressed="${agrupar === 'mun'}">Municípios</button><button type="button" data-comp-agrupar="assoc" aria-pressed="${agrupar === 'assoc'}">Associações</button><button type="button" data-comp-agrupar="meso" aria-pressed="${agrupar === 'meso'}">Regiões</button></div>` : ''}
     ${cm.carregando ? `<p class="nota">Consultando ${cm.feitos} de ${cm.total} municípios…</p>` : `<p class="comp-placar"><span style="${estiloCor(corA)}">${esc(a.nome)}: <strong>${venceA}</strong></span> × <span style="${estiloCor(corB)}">${esc(b.nome)}: <strong>${venceB}</strong></span> <span class="mudo">municípios na frente</span></p>`}
-    <table class="tabela comp-mun"><thead><tr><th>${agrupar === 'meso' ? 'Região' : 'Município'}</th><th class="dir">${esc(a.nome)}</th><th class="dir">${esc(b.nome)}</th></tr></thead><tbody>${linhas
+    <table class="tabela comp-mun"><thead><tr><th>${agrupar === 'meso' ? 'Região' : agrupar === 'assoc' ? 'Associação' : 'Município'}</th><th class="dir">${esc(a.nome)}</th><th class="dir">${esc(b.nome)}</th></tr></thead><tbody>${linhas
       .slice(0, limite)
       .map((l) => {
         const tot = l.a + l.b || 1
@@ -3000,7 +3009,7 @@ function renderSobre() {
         <li><strong>2022:</strong> arquivos oficiais do Portal de Dados Abertos do <a href="https://dadosabertos.tse.jus.br/dataset/resultados-2022" target="_blank" rel="noopener">TSE</a>: votação por candidato, município e zona, e votação por seção eleitoral (SC).</li>
         <li><strong>2026 por seção e bairro:</strong> boletins de urna de cada seção do 1º turno, publicados pelo TSE em "Dados de urna", somados pelo bairro do local de votação.</li>
         <li><strong>Bairros dos locais de votação:</strong> cadastro de locais de votação do TSE (2022 e 2026); em Florianópolis, a lista do TRE-SC.</li>
-        <li><strong>Regiões e população:</strong> IBGE.</li>
+        <li><strong>Regiões e população:</strong> IBGE. <strong>Associações de municípios (FECAM):</strong> Secretaria de Estado da Assistência Social de SC (sas.sc.gov.br).</li>
         <li><strong>🔒 Análises:</strong> perfil do eleitorado por seção (TSE, 2026), coordenadas dos locais de votação (TSE), mapa base © OpenStreetMap e estimativa de transferência de votos entre turnos, seção a seção. Os dados desta área são criptografados e só abrem com usuário e senha.</li>
       </ul>
       <p class="nota">Projeto independente, sem vínculo com a Justiça Eleitoral. Projeções e chances de reverter são estimativas do app; vale sempre o resultado oficial do TSE.</p>
@@ -4122,7 +4131,7 @@ function lugarBairros(id) {
   if (!id) return null
   if (String(id).includes(':')) {
     const r = regiao(id)
-    return r ? { id, nm: id === 'micro:42016' ? 'Grande Florianópolis' : r.nm.replace(/^Microrregião de /, 'Região de '), cds: r.membros.map((m) => m.cd) } : null
+    return r ? { id, nm: id === 'micro:42016' ? 'Grande Florianópolis' : id.startsWith('assoc:') ? id.slice(6) : r.nm.replace(/^Microrregião de /, 'Região de '), cds: r.membros.map((m) => m.cd) } : null
   }
   return { id, nm: NOME_MUN.get(id) || id, cds: [id] }
 }
@@ -4151,6 +4160,8 @@ function escolhaLugarBairros(B) {
         <div class="atalhos-chips">${gf.map((m) => chipM(m[0], m[2])).join('')}${chipR('micro:42016', 'Σ Região toda')}</div></div>
       <div class="atalhos-grupo"><span class="atalhos-rot">🏙️ Maiores cidades</span>
         <div class="atalhos-chips">${maiores.map((m) => chipM(m[0], m[2])).join('')}</div></div>
+      <div class="atalhos-grupo"><span class="atalhos-rot">🤝 Associações de municípios <small>(FECAM)</small></span>
+        <div class="atalhos-chips">${Object.keys(ASSOCIACOES).map((sg) => chipR('assoc:' + sg, sg)).join('')}</div></div>
       <div class="atalhos-grupo"><span class="atalhos-rot">🗺️ Regiões <small>(soma dos bairros · IBGE)</small></span>
         <div class="atalhos-chips">${Object.entries(MESORREGIOES).map(([cod, nome]) => chipR('meso:' + cod, nome)).join('')}</div>
         <details class="micros"><summary>Microrregiões (20) ▾</summary>
@@ -4170,10 +4181,10 @@ function secaoBairros(det, c, aba) {
   const parts22 = PREF.mostrar2022 && H22.resumo ? achar2022(c).filter((p) => p.el.turno === 1) : []
   const p22 = parts22.find((p) => p.el.cargo === aba.cargo) || parts22[0] || null
   // níveis: em SC, municípios ou bairros; num município ou região, zonas, bairros, locais ou seções
-  const niveis = B.mun ? [['zona', 'Zonas'], ['bairro', 'Bairros'], ['local', 'Locais'], ['secao', 'Seções']] : [['mun', 'Municípios'], ['bairro', 'Bairros']]
+  const niveis = B.mun ? [['zona', 'Zonas'], ['bairro', 'Bairros'], ['local', 'Locais'], ['secao', 'Seções']] : [['mun', 'Municípios'], ['assoc', 'Associações'], ['bairro', 'Bairros']]
   if (!niveis.some(([k]) => k === B.grupo)) B.grupo = 'bairro'
   const nomeNivel = Object.fromEntries(niveis)[B.grupo]
-  const naNivel = { mun: 'no município', zona: 'na zona', bairro: 'no bairro', local: 'no local', secao: 'na seção' }[B.grupo]
+  const naNivel = { mun: 'no município', assoc: 'na associação', zona: 'na zona', bairro: 'no bairro', local: 'no local', secao: 'na seção' }[B.grupo]
   const r = dadosBairrosFicha(B, elId, aba, nr, p22, re)
   const tem22 = !!r.com22
   if (!tem22 && (B.modo === 'up' || B.modo === 'dn')) B.modo = 'v'
@@ -4189,7 +4200,7 @@ function secaoBairros(det, c, aba) {
     const ls = r.linhas
     const ord = { v: (a, b) => b.v - a.v, p: (a, b) => pctDe(b.v, b.val) - pctDe(a.v, a.val), up: (a, b) => b.v - b.v22 - (a.v - a.v22), dn: (a, b) => a.v - a.v22 - (b.v - b.v22) }
     ls.sort(ord[B.modo] || ord.v)
-    const minVal = B.modo === 'p' && B.grupo !== 'secao' ? (B.grupo === 'mun' ? 1000 : 300) : 0
+    const minVal = B.modo === 'p' && B.grupo !== 'secao' ? (B.grupo === 'mun' || B.grupo === 'assoc' ? 1000 : 300) : 0
     const vis = B.modo === 'up' ? ls.filter((l) => l.v > l.v22) : B.modo === 'dn' ? ls.filter((l) => l.v < l.v22) : ls.filter((l) => l.v > 0 && l.val >= minVal)
     const lim = B.todos ? vis.length : 15
     // bairros de uma zona (sublista)
@@ -4206,7 +4217,7 @@ function secaoBairros(det, c, aba) {
           : `<div class="cmp-lista">${fs.map((f) => `<div class="cmp-linha clicavel" ${f.ir}><div class="cmp-topo"><div class="cmp-nome"><strong>${esc(f.nome)}</strong></div><strong class="cmp-total">${fmt.format(f.v)}</strong></div><div class="cand-meta">${metaF(f)}</div></div>`).join('')}</div>`
         : '<p class="nota">Sem votos nos bairros desta zona.</p>'}</div>`
     }
-    const metaDe = (l) => [l.pos ? `${l.pos.p === 1 ? '🏆 ' : ''}${l.pos.p}º de ${l.pos.n} ${naNivel}` : '', `${fmtPct.format(pctDe(l.v, l.val))}% dos votos ${B.grupo === 'mun' ? 'do município' : B.grupo === 'secao' ? 'da seção' : B.grupo === 'local' ? 'do local' : B.grupo === 'zona' ? 'da zona' : 'do bairro'}`].filter(Boolean).join(' · ')
+    const metaDe = (l) => [l.pos ? `${l.pos.p === 1 ? '🏆 ' : ''}${l.pos.p}º de ${l.pos.n} ${naNivel}` : '', `${fmtPct.format(pctDe(l.v, l.val))}% dos votos ${B.grupo === 'mun' ? 'do município' : B.grupo === 'assoc' ? 'da associação' : B.grupo === 'secao' ? 'da seção' : B.grupo === 'local' ? 'do local' : B.grupo === 'zona' ? 'da zona' : 'do bairro'}`].filter(Boolean).join(' · ')
     // o resumo conta todos os lugares (no índice de SC, vem pronto do estado inteiro)
     const [sobe, cai] = r.sobeCai || [ls.filter((l) => l.v > l.v22).length, ls.filter((l) => l.v < l.v22).length]
     const rotOrdem = { v: 'mais votos', p: 'maior %', up: 'onde mais cresceu desde 2022', dn: 'onde mais caiu desde 2022' }[B.modo]
@@ -4313,6 +4324,33 @@ function dadosBairrosFicha(B, elId, aba, nr, p22, re) {
       const m22 = mun2022(p22.el.id)
       if (!m22.valor) m22.then(re).catch(() => {})
       else v22de = m22.valor.cand[p22.c.sq] || {}
+    }
+    if (B.grupo === 'assoc') {
+      // soma dos municípios de cada associação (FECAM); posição contra a soma de cada candidato
+      if (!M.valor._assoc) {
+        const val = {}, cand = {}
+        for (const [cd, v] of Object.entries(M.valor.validos)) { const sg = ASSOCIACAO_MUN[cd]; if (sg) val[sg] = (val[sg] || 0) + v }
+        for (const [n, por] of Object.entries(M.valor.c)) {
+          const t = cand[n] = {}
+          for (const [cd, v] of Object.entries(por)) { const sg = ASSOCIACAO_MUN[cd]; if (sg) t[sg] = (t[sg] || 0) + v }
+        }
+        M.valor._assoc = { val, cand }
+      }
+      const A = M.valor._assoc
+      const meusA = A.cand[nr] || {}
+      const a22 = {}
+      if (v22de) for (const [cd, v] of Object.entries(v22de)) { const sg = ASSOCIACAO_MUN[cd]; if (sg) a22[sg] = (a22[sg] || 0) + v }
+      const linhas = Object.keys(ASSOCIACOES).map((sg) => {
+        const v = meusA[sg] || 0
+        let p = 1, n = 0
+        for (const outro of Object.values(A.cand)) {
+          const x = outro[sg] || 0
+          if (x > 0) n++
+          if (x > v) p++
+        }
+        return { nome: sg, sub: ASSOCIACOES[sg], v, val: A.val[sg] || 0, v22: a22[sg] || 0, pos: v ? { p, n } : null, ir: `data-bai-lugar="assoc:${esc(sg)}"` }
+      }).filter((l) => l.v || l.v22)
+      return { com22: !!v22de, linhas, aviso: p22 && !v22de && PREF.mostrar2022 ? 'Carregando 2022…' : '', nota: `Associações de municípios da FECAM (soma dos municípios de cada uma). Votou em ${fmt.format(linhas.filter((l) => l.v).length)} de ${Object.keys(ASSOCIACOES).length}. Toque numa associação para ver as zonas e bairros dela.` }
     }
     const cds = new Set([...Object.keys(meus), ...(v22de ? Object.keys(v22de) : [])])
     const linhas = [...cds].map((cd) => {
