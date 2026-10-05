@@ -4,11 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610050231'
-import { chanceDe, NIVEIS } from './chances.js?v=202610050231'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610050231'
-import { FLORIPA } from './floripa.js?v=202610050231'
-import { corPartido, corTexto } from './cores.js?v=202610050231'
+import { calcularVagas } from './vagas.js?v=202610050311'
+import { chanceDe, NIVEIS } from './chances.js?v=202610050311'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610050311'
+import { FLORIPA } from './floripa.js?v=202610050311'
+import { corPartido, corTexto } from './cores.js?v=202610050311'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -26,6 +26,7 @@ const ELEICOES = {
 const ABAS = [
   { id: 'favoritos', rotulo: '❤️ Acompanhados', tipo: 'fav', abrangencias: ['br'] },
   { id: 'municipios', rotulo: '📊 Municípios', tipo: 'mun', abrangencias: ['sc'] },
+  { id: 'h2022', rotulo: '📅 2022', tipo: 'h22', abrangencias: ['sc'] },
   { id: 'presidente', rotulo: 'Presidente', cargo: 1, eleicao: 'federal', tipo: 'maj', abrangencias: ['br', UF] },
   { id: 'senador', rotulo: 'Senado SC', cargo: 5, eleicao: 'estadual', tipo: 'maj', abrangencias: [UF], turno1: true },
   { id: 'depfed', rotulo: 'Dep. Federal SC', cargo: 6, eleicao: 'estadual', tipo: 'prop', abrangencias: [UF], turno1: true },
@@ -608,9 +609,10 @@ async function carregar() {
   const abr = abrAtual()
   statusEl.textContent = 'Atualizando…'
   statusEl.className = 'status carregando'
-  if (!estado.dados) conteudo.innerHTML = (aba.tipo === 'fav' || aba.tipo === 'mun' ? '' : cabecalhoAbrangencia()) + `<div class="cartao vazio">Carregando ${esc(aba.rotulo)}${munAtual() ? ` em ${esc(munAtual().nm)}` : ''}…${munAtual()?.regiao ? '<br><small id="progresso-regiao" class="mudo"></small>' : ''}</div>`
+  if (!estado.dados) conteudo.innerHTML = (aba.tipo === 'fav' || aba.tipo === 'mun' || aba.tipo === 'h22' ? '' : cabecalhoAbrangencia()) + `<div class="cartao vazio">Carregando ${esc(aba.rotulo)}${munAtual() ? ` em ${esc(munAtual().nm)}` : ''}…${munAtual()?.regiao ? '<br><small id="progresso-regiao" class="mudo"></small>' : ''}</div>`
   if (aba.tipo === 'fav') return carregarFavoritos(ctrl)
   if (aba.tipo === 'mun') return carregarPainelMunicipios(ctrl)
+  if (aba.tipo === 'h22') return carregar2022(ctrl)
   const mun = munAtual()
   try {
     const dados = await buscar(aba, abr, TURNO, ctrl.signal, mun)
@@ -1111,6 +1113,13 @@ conteudo.addEventListener('click', (ev) => {
     carregar()
     return
   }
+  const h22Btn = ev.target.closest('[data-h22]')
+  if (h22Btn) {
+    H22.sel = h22Btn.dataset.h22
+    H22.busca = ''
+    renderizar()
+    return
+  }
   const zonaBtn = ev.target.closest('[data-zona]')
   if (zonaBtn) {
     estado.buscaBairro = ''
@@ -1164,6 +1173,11 @@ conteudo.addEventListener('click', (ev) => {
 conteudo.addEventListener('input', (ev) => {
   if (ev.target.id === 'mun-busca') {
     mostrarSugestoes()
+    return
+  }
+  if (ev.target.id === 'h22-busca') {
+    H22.busca = ev.target.value
+    renderizar()
     return
   }
   if (ev.target.id === 'bairro-busca') {
@@ -1851,6 +1865,16 @@ function renderizar() {
     conteudo.innerHTML = renderFavoritos()
     return
   }
+  if (estado.aba.tipo === 'h22') {
+    const foco = document.activeElement?.id === 'h22-busca' ? document.activeElement.selectionStart : null
+    conteudo.innerHTML = render2022()
+    if (foco != null) {
+      const el = $('#h22-busca')
+      el?.focus()
+      el?.setSelectionRange(foco, foco)
+    }
+    return
+  }
   if (estado.aba.tipo === 'mun') {
     const busca = document.activeElement?.id === 'busca-mun'
     const pos = busca ? document.activeElement.selectionStart : null
@@ -2181,6 +2205,7 @@ function renderDetalheConteudo() {
       ${graficoLinha(ptsVot, { cor, fmtY: (v) => fmt.format(Math.round(v)), zero: true, titulo: 'Votos acumulados' })}
       ${ptsPos.length > 1 && new Set(ptsPos.map((p) => p.y)).size > 1 ? graficoLinha(ptsPos, { cor, fmtY: (v) => `${Math.round(-v)}º`, titulo: 'Posição (mais alto = melhor)' }) : ''}
     </section>
+    ${secao2022(c, d, aba)}
     <section class="cartao"><h3>${c.eleito || d.tseDefinido ? 'Situação oficial (TSE)' : 'Chance de reverter'}</h3>${textoChance(d, c, aba)}</section>
     <section class="cartao"><h3>Disputa</h3>${blocoDisputa(d, c, aba)}</section>
     ${vices}
@@ -2233,6 +2258,7 @@ function secaoPorMunicipio(det, aba, cor) {
       const g = grupos.get(chave) || { nome: agrupar === 'meso' ? MESORREGIOES[chave] : MICRORREGIOES[chave] || 'Outros', meso: info && MESORREGIOES[info.meso], votos: 0, validos: 0, n: 0, top: null }
       g.votos += l.votos
       g.validos += l.validos || 0
+      ;(g.cds ??= []).push(l.cd)
       g.n++
       if (!g.top || l.votos > g.top.votos) g.top = l
       grupos.set(chave, g)
@@ -2244,7 +2270,7 @@ function secaoPorMunicipio(det, aba, cor) {
         .map(
           (g) => `<tr style="${estiloCor(cor)}"><td><strong>${esc(g.nome)}</strong><div class="cand-meta">${agrupar === 'micro' && g.meso ? esc(g.meso) + ' · ' : ''}${g.n} municípios · mais votos em ${esc(g.top.nm)}</div>
             <div class="barra fina"><span style="width:${(100 * g.votos) / max}%"></span></div></td>
-            <td class="dir">${fmt.format(g.votos)}</td><td class="dir">${g.validos ? fmtPct.format((100 * g.votos) / g.validos) : '–'}%</td></tr>`,
+            <td class="dir">${fmt.format(g.votos)}</td><td class="dir">${g.validos ? fmtPct.format((100 * g.votos) / g.validos) : '–'}%${linha2022Grupo(det, g.cds, g.validos ? (100 * g.votos) / g.validos : null)}</td></tr>`,
         )
         .join('')}</tbody></table>
       <p class="nota">Regiões do IBGE. % = votos do candidato ÷ votos válidos da região. Total: <strong>${fmt.format(total)}</strong> votos.</p>
@@ -2258,7 +2284,7 @@ function secaoPorMunicipio(det, aba, cor) {
       .map(
         (l) => `<tr style="${estiloCor(cor)}"><td>${esc(l.nm)}<div class="cand-meta">${l.semDados ? 'sem dados ainda' : `${fmtPct.format(l.pst)}% apurado · ${l.pos}º no município`}</div>
           ${l.zonas.length > 1 ? `<button type="button" class="link-zonas" data-zonas-mun="${esc(l.cd)}">${pm.zonas[l.cd] ? 'ocultar zonas ▴' : `ver ${l.zonas.length} zonas ▾`}</button>` : l.zonas.length === 1 ? `<div class="cand-meta">zona única: ${Number(l.zonas[0])}ª</div>` : ''}</td>
-          <td class="dir">${fmt.format(l.votos)}</td><td class="dir">${fmtPct.format(l.pct)}%</td></tr>${linhaZonas(l)}`,
+          <td class="dir">${fmt.format(l.votos)}</td><td class="dir">${fmtPct.format(l.pct)}%${linha2022Mun(det, l.cd, l.pct)}</td></tr>${linhaZonas(l)}`,
       )
       .join('')}</tbody></table>
     ${linhas.length > limite ? `<button type="button" class="botao secundario" data-pm-ver-todos>Mostrar todos os ${linhas.length}</button>` : ''}
@@ -2287,6 +2313,7 @@ async function carregarPorMunicipio(escopo) {
         ? MUNICIPIOS_SC.slice(0, 15).map(([cd, , nm]) => porCd.get(cd) || { cd, nm, zonas: [] })
         : lista
   const pm = { escopo, carregando: true, feitos: 0, total: alvo.length, linhas: [], semDados: 0, zonas: {}, busca: '', t: Date.now() }
+  preparar2022Mun(det)
   det.porMun = pm
   renderDetalhe()
   const ctrl = new AbortController()
@@ -2623,6 +2650,243 @@ detalheEl.addEventListener('pointerdown', (ev) => {
   dicaTimer = setTimeout(() => (dica.hidden = true), 2500)
 })
 detalheEl.addEventListener('scroll', () => (dica.hidden = true), { passive: true })
+
+/* ---------------- eleições de 2022 (SC) ---------------- */
+
+// Resultado oficial de 2022 em SC (TSE, votacao_candidato_munzona_2022), em dados2022/.
+const VERSAO = new URL(import.meta.url).searchParams.get('v') || ''
+const H22 = { resumo: null, carregando: null, mun: new Map(), atual: null, atualT: 0, sel: 't1-c7', busca: '' }
+const chaveNomeCompleto = (s) => semAcento(s || '').replace(/[^a-z]/g, '')
+const ROTULO_ELEICAO = { 't1-c3': 'Governador · 1º turno', 't2-c3': 'Governador · 2º turno', 't1-c5': 'Senado', 't1-c6': 'Dep. Federal', 't1-c7': 'Dep. Estadual' }
+const ABA_DO_CARGO = { 3: 'governador', 5: 'senador', 6: 'depfed', 7: 'depest' }
+
+function resumo2022() {
+  if (H22.resumo) return Promise.resolve(H22.resumo)
+  H22.carregando ??= fetch(`dados2022/resumo.json?v=${VERSAO}`)
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+    .then((j) => {
+      H22.indice = new Map()
+      for (const el of j.eleicoes) {
+        el.id = `t${el.turno}-c${el.cargo}`
+        el.candidatos.forEach((x, i) => {
+          const c = { sq: x[0], numero: x[1], nome: x[2], nomeCompleto: x[3], partido: x[4], fed: x[5], votos: x[6], sit: x[7], pos: i + 1 }
+          el.candidatos[i] = c
+          const k = chaveNomeCompleto(c.nomeCompleto)
+          if (!H22.indice.has(k)) H22.indice.set(k, [])
+          H22.indice.get(k).push({ el, c })
+        })
+      }
+      H22.resumo = j
+      return j
+    })
+    .catch((e) => {
+      H22.carregando = null
+      throw e
+    })
+  return H22.carregando
+}
+
+function mun2022(id) {
+  if (!H22.mun.has(id)) {
+    const p = fetch(`dados2022/mun-${id}.json?v=${VERSAO}`).then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP'))))
+    p.catch(() => H22.mun.delete(id))
+    H22.mun.set(id, p)
+    p.then((j) => (p.valor = j)).catch(() => {})
+  }
+  return H22.mun.get(id)
+}
+
+// Participações de um candidato de 2026 em 2022 (pelo nome completo).
+function achar2022(c) {
+  if (!H22.resumo || !c?.nomeCompleto) return []
+  return H22.indice.get(chaveNomeCompleto(c.nomeCompleto)) || []
+}
+
+const pctDe = (v, tot) => (tot ? (100 * v) / tot : 0)
+const seta = (dp) => (Math.abs(dp) < 0.005 ? '＝' : dp > 0 ? `▲ ${fmtPct.format(dp)}` : `▼ ${fmtPct.format(-dp)}`)
+const situ2022 = (sit) =>
+  /^ELEITO/.test(sit) ? `<span class="tag eleito-tse"><b>✔ ${esc(sit.toLowerCase().replace(/^./, (m) => m.toUpperCase()))}</b></span>` : `<span class="tag nao-eleito">${esc(sit.toLowerCase().replace(/^./, (m) => m.toUpperCase()))}</span>`
+
+function secao2022(c, d, aba) {
+  if (DEMO) return ''
+  if (!H22.resumo) {
+    resumo2022().then(() => estado.detalhe && renderDetalhe()).catch(() => {})
+    return ''
+  }
+  const parts = achar2022(c)
+  if (!parts.length) return `<section class="cartao"><h3>📅 2022 × 2026</h3><p class="nota">Não encontrei ${esc(c.nome)} entre os candidatos de SC em 2022 (comparação pelo nome completo).</p></section>`
+  const linhas = parts
+    .sort((a, b) => a.el.turno - b.el.turno)
+    .map(({ el, c: v }) => {
+      const p22 = pctDe(v.votos, el.validos)
+      const mesmo = el.cargo === aba?.cargo && !d.mun
+      const agora = mesmo
+        ? `<div class="h22-agora">Agora (${fmtPct.format(d.secoes.percentual)}% apurado): <strong>${fmt.format(c.votos)}</strong> votos · ${fmtPct.format(c.percentual)}% <span class="h22-delta ${c.percentual >= p22 ? 'sobe' : 'desce'}">${seta(c.percentual - p22)} p.p.</span>
+           <br><span class="mudo">Já tem ${fmtPct.format(pctDe(c.votos, v.votos))}% dos votos que teve em 2022.</span></div>`
+        : ''
+      return `<div class="h22-item">
+        <p><strong>${esc(ROTULO_ELEICAO[el.id] || el.nome)}</strong> · ${pill(v.partido)} ${v.fed ? `<span class="mudo">(${esc(v.fed)})</span>` : ''}</p>
+        <p><strong>${fmt.format(v.votos)}</strong> votos · ${fmtPct.format(p22)}% · ${v.pos}º de ${el.candidatos.length} ${situ2022(v.sit)}</p>
+        ${el.cargo !== aba?.cargo ? `<p class="mudo">Em 2026 disputa outro cargo (${esc(aba?.rotulo || '')}).</p>` : ''}
+        ${agora}
+      </div>`
+    })
+    .join('')
+  return `<section class="cartao h22"><h3>📅 2022 × 2026</h3>${linhas}
+    <p class="nota">Resultado oficial de 2022 (TSE). % de 2022 = votos ÷ votos nominais válidos do cargo em SC. Comparação pelo nome completo.</p></section>`
+}
+
+// coluna "2022" na tabela de municípios da ficha
+function preparar2022Mun(det) {
+  if (DEMO) return
+  resumo2022()
+    .then(() => {
+      const d = dadosDetalhe()
+      const c = d?.candidatos.find((x) => x.sqcand === det.sqcand)
+      const p = achar2022(c).find((x) => x.el.turno === 1)
+      if (!p) return
+      det.h22 = { id: p.el.id, sq: p.c.sq, cargo: p.el.cargo }
+      return mun2022(p.el.id).then(() => estado.detalhe === det && renderDetalhe())
+    })
+    .catch(() => {})
+}
+function dados2022Det(det) {
+  const h = det?.h22
+  const j = h && H22.mun.get(h.id)?.valor
+  return j ? { j, cand: j.cand[h.sq] || {} } : null
+}
+function linha2022Mun(det, cd, pctAgora) {
+  const x = dados2022Det(det)
+  if (!x) return ''
+  const p22 = pctDe(x.cand[cd] || 0, x.j.validos[cd] || 0)
+  return `<div class="h22-mun">2022: ${fmtPct.format(p22)}% <span class="h22-delta ${pctAgora >= p22 ? 'sobe' : 'desce'}">${seta(pctAgora - p22)}</span></div>`
+}
+function linha2022Grupo(det, cds, pctAgora) {
+  const x = dados2022Det(det)
+  if (!x || !cds || pctAgora == null) return ''
+  const v = cds.reduce((a, cd) => a + (x.cand[cd] || 0), 0), t = cds.reduce((a, cd) => a + (x.j.validos[cd] || 0), 0)
+  const p22 = pctDe(v, t)
+  return `<div class="h22-mun">2022: ${fmtPct.format(p22)}% <span class="h22-delta ${pctAgora >= p22 ? 'sobe' : 'desce'}">${seta(pctAgora - p22)}</span></div>`
+}
+
+// aba 📅 2022
+async function carregar2022(ctrl) {
+  try {
+    await resumo2022()
+  } catch {
+    conteudo.innerHTML = '<div class="cartao vazio erro"><p>Não consegui carregar os dados de 2022.</p></div>'
+    return
+  }
+  estado.dados = { h22: true }
+  renderizar()
+  // quem de 2022 está na disputa de 2026 (estado inteiro)
+  if (!H22.atual || Date.now() - H22.atualT > 120_000) {
+    const mapa = new Map()
+    await Promise.allSettled(
+      Object.values(ABA_DO_CARGO).map(async (id) => {
+        const aba = ABAS.find((a) => a.id === id)
+        const d = await buscar(aba, UF, TURNO, ctrl.signal)
+        registrarSessao(aba.id, UF, null, d)
+        d.candidatos.forEach((c, i) => mapa.set(chaveNomeCompleto(c.nomeCompleto), { aba, c, d, pos: i + 1 }))
+      }),
+    )
+    if (ctrl.signal.aborted) return
+    if (mapa.size) {
+      H22.atual = mapa
+      H22.atualT = Date.now()
+    }
+  }
+  renderizar()
+  statusEl.textContent = 'Dados de 2022 · TSE'
+  statusEl.className = 'status ok'
+  if (estado.controlador === ctrl) agendar()
+}
+
+function atual2026(c22) {
+  return H22.atual?.get(chaveNomeCompleto(c22.nomeCompleto)) || null
+}
+
+function render2022() {
+  const j = H22.resumo
+  if (!j) return '<div class="cartao vazio">Carregando 2022…</div>'
+  const el = j.eleicoes.find((e) => e.id === H22.sel) || j.eleicoes[0]
+  const prop = el.cargo === 6 || el.cargo === 7
+  const pills = `<div class="segmentado h22-pills" role="group">${j.eleicoes
+    .map((e) => `<button type="button" data-h22="${e.id}" aria-pressed="${e.id === el.id}">${esc(ROTULO_ELEICAO[e.id] || e.nome)}</button>`)
+    .join('')}</div>`
+  const eleitos = el.candidatos.filter((c) => /^ELEITO/.test(c.sit))
+  const destaque = prop ? eleitos : el.candidatos.slice(0, Math.max(eleitos.length, el.cargo === 5 ? 4 : 4))
+  const st26 = (c) => {
+    const a = atual2026(c)
+    if (!a) return H22.atual ? '<span class="mudo">Não está na disputa de 2026 em SC</span>' : '<span class="mudo">consultando 2026…</span>'
+    const mesmo = a.aba.cargo === el.cargo
+    const p22 = pctDe(c.votos, el.validos)
+    return `<span class="h22-26">🔁 2026: <strong>${esc(a.aba.rotulo.replace(/ SC$/, ''))}</strong> ${pill(a.c.partido)} · ${a.pos}º · ${fmt.format(a.c.votos)} votos (${fmtPct.format(a.c.percentual)}%)${
+      mesmo ? ` <span class="h22-delta ${a.c.percentual >= p22 ? 'sobe' : 'desce'}">${seta(a.c.percentual - p22)} p.p.</span>` : ''
+    } ${selo(a.c)}</span>`
+  }
+  const cartaoCand = (c) => {
+    const a = atual2026(c)
+    const cor = corPartido(c.partido)
+    return `<li class="h22-cand" style="${estiloCor(cor)}" ${a ? attrCand(a.c, a.aba.id, UF) : ''}>
+      <div class="cand-linha"><span class="pos">${c.pos}º</span><span class="cand-nome">${esc(c.nome)}</span> ${pill(c.partido)} ${situ2022(c.sit)}</div>
+      <div class="cand-meta">${fmt.format(c.votos)} votos · ${fmtPct.format(pctDe(c.votos, el.validos))}%${c.fed ? ` · ${esc(c.fed)}` : ''}</div>
+      <div class="cand-meta">${st26(c)}</div>
+    </li>`
+  }
+  // partidos: 2022 × 2026 (votos nominais do mesmo cargo)
+  let partidos = ''
+  if (prop) {
+    const g22 = new Map()
+    for (const c of el.candidatos) {
+      const g = g22.get(c.partido) || { votos: 0, eleitos: 0 }
+      g.votos += c.votos
+      g.eleitos += /^ELEITO/.test(c.sit) ? 1 : 0
+      g22.set(c.partido, g)
+    }
+    let d26 = null
+    for (const v of H22.atual?.values() || []) if (v.aba.cargo === el.cargo) { d26 = v.d; break }
+    const g26 = new Map()
+    if (d26) for (const c of d26.candidatos) {
+      const g = g26.get(c.partido) || { votos: 0, vagas: 0 }
+      g.votos += c.valido ? c.votos : 0
+      g.vagas += c.eleito || (c.projecao && !c.tseDefinido) ? 1 : 0
+      g26.set(c.partido, g)
+    }
+    const tot22 = [...g22.values()].reduce((a, g) => a + g.votos, 0) || 1
+    const tot26 = [...g26.values()].reduce((a, g) => a + g.votos, 0) || 1
+    const siglas = [...new Set([...g22.keys(), ...g26.keys()])].sort((a, b) => (g22.get(b)?.votos || 0) - (g22.get(a)?.votos || 0))
+    partidos = `<section class="cartao"><h3>Partidos: 2022 × 2026</h3>
+      <p class="nota">% dos votos nominais do cargo. Vagas 2026 = eleitos pelo TSE ou, antes disso, a projeção do app${d26 ? ` (${fmtPct.format(d26.secoes.percentual)}% apurado)` : ''}.</p>
+      <table class="tabela h22-part"><thead><tr><th>Partido</th><th class="dir">2022</th><th class="dir">2026</th></tr></thead><tbody>${siglas
+        .filter((sg) => (g22.get(sg)?.votos || 0) / tot22 > 0.003 || (g26.get(sg)?.votos || 0) / tot26 > 0.003)
+        .map((sg) => {
+          const a = g22.get(sg), b = g26.get(sg)
+          const p22 = a ? pctDe(a.votos, tot22) : 0, p26 = b ? pctDe(b.votos, tot26) : 0
+          return `<tr style="${estiloCor(corPartido(sg))}"><td>${pill(sg)}</td>
+            <td class="dir">${fmtPct.format(p22)}%<div class="cand-meta">${a?.eleitos || 0} eleitos</div></td>
+            <td class="dir">${d26 ? `${fmtPct.format(p26)}% <span class="h22-delta ${p26 >= p22 ? 'sobe' : 'desce'}">${seta(p26 - p22)}</span><div class="cand-meta">${b?.vagas || 0} vagas</div>` : '–'}</td></tr>`
+        })
+        .join('')}</tbody></table>
+      <p class="nota">Partidos mudaram de nome ou se fundiram desde 2022; a comparação é pela sigla.</p></section>`
+  }
+  const termo = semAcento(H22.busca.trim())
+  const lista = el.candidatos.filter((c) => !termo || semAcento(`${c.nome} ${c.nomeCompleto} ${c.partido} ${c.numero}`).includes(termo))
+  return `<section class="cartao resumo">
+      <div class="resumo-titulo"><h2>Eleições 2022 · ${esc(el.nome)}${el.turno === 2 ? ' (2º turno)' : ''} · SC</h2><span class="selo final">Resultado oficial</span></div>
+      ${pills}
+      <p class="nota">${fmt.format(el.validos)} votos nominais válidos · ${el.candidatos.length} candidatos${prop ? ` · ${el.vagas} vagas` : ''}. Toque num candidato que concorre em 2026 para abrir a ficha atual.</p>
+    </section>
+    <section class="cartao"><h3>${prop ? `Eleitos em 2022 (${eleitos.length}) e onde estão em 2026` : 'Principais candidatos de 2022 e onde estão em 2026'}</h3>
+      <ul class="h22-lista">${destaque.map(cartaoCand).join('')}</ul></section>
+    ${partidos}
+    <section class="cartao"><h3>Todos os candidatos de 2022</h3>
+      <input id="h22-busca" type="search" placeholder="Buscar por nome, partido ou número…" value="${esc(H22.busca)}" autocomplete="off">
+      <ul class="h22-lista">${lista.slice(0, termo ? 200 : 60).map(cartaoCand).join('')}</ul>
+      ${lista.length > 60 && !termo ? `<p class="nota">Mostrando 60 de ${lista.length}. Use a busca.</p>` : ''}
+    </section>
+    <p class="nota centro">Fonte: TSE, votacao_candidato_munzona_2022 (SC), via espelho público do Portal de Dados Abertos.</p>`
+}
 
 /* ---------------- início ---------------- */
 

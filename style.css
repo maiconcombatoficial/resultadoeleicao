@@ -667,3 +667,24 @@ html.com-detalhe, html.com-detalhe body { overflow: hidden; }
 .busca-bairro { display: grid; gap: 8px; }
 .zonas .filtro { white-space: normal; text-align: left; }
 .zonas .filtro { flex: 0 1 auto; max-width: 100%; }
+
+/* ---------- 2022 × 2026 ---------- */
+.h22 { border-top: 5px solid #6d2c91; }
+.h22-item { display: grid; gap: 4px; padding: 8px 0; border-bottom: 1px solid var(--linha); }
+.h22-item:last-of-type { border-bottom: 0; }
+.h22-item p { margin: 0; overflow-wrap: anywhere; }
+.h22-agora { background: var(--fundo); border-radius: 10px; padding: 8px 10px; font-size: 0.9rem; }
+.h22-delta { font-weight: 800; font-size: 0.8rem; white-space: nowrap; }
+.h22-delta.sobe { color: var(--eleito); }
+.h22-delta.desce { color: var(--erro); }
+.h22-mun { font-size: 0.72rem; color: var(--mudo); white-space: nowrap; }
+.h22-pills { margin-top: 12px; }
+.h22-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.h22-cand { border: 1px solid var(--linha); border-left: 5px solid var(--cor); border-radius: 10px; padding: 8px 10px; display: grid; gap: 3px; min-width: 0; }
+.h22-cand .pos { text-align: left; min-width: 28px; }
+.h22-26 { overflow-wrap: anywhere; }
+#h22-busca {
+  width: 100%; font: inherit; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--linha); background: var(--fundo); color: var(--texto); margin-bottom: 10px;
+}
+.h22-part td:first-child { width: 100%; }
