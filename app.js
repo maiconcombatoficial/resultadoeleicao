@@ -4,9 +4,10 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610042309'
-import { chanceDe, NIVEIS } from './chances.js?v=202610042309'
-import { corPartido, corTexto } from './cores.js?v=202610042309'
+import { calcularVagas } from './vagas.js?v=202610050130'
+import { chanceDe, NIVEIS } from './chances.js?v=202610050130'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610050130'
+import { corPartido, corTexto } from './cores.js?v=202610050130'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -178,8 +179,65 @@ function aplicarProjecao(d) {
   return d
 }
 
+/* ---------------- regiões de SC ---------------- */
+
+const POP = new Map(MUNICIPIOS_SC.map(([cd, , , pop]) => [cd, pop]))
+const MUN_REG = new Map(MUNICIPIOS_SC.map(([cd, , nm, pop, meso, micro]) => [cd, { cd, nm, pop, meso, micro }]))
+
+function regiao(id) {
+  const [tipo, cod] = String(id).split(':')
+  const nome = tipo === 'meso' ? MESORREGIOES[cod] : MICRORREGIOES[cod]
+  if (!nome) return null
+  const membros = MUNICIPIOS_SC.filter((m) => (tipo === 'meso' ? m[4] : m[5]) === cod).map(([cd, , nm]) => ({ cd, nm }))
+  return { regiao: id, nm: tipo === 'meso' ? `Região ${nome}` : `Microrregião de ${nome}`, membros }
+}
+
+// Soma os resultados dos municípios de uma região (o TSE não publica arquivo por região).
+async function buscarRegiao(aba, turno, signal, reg) {
+  const partes = []
+  estado.progressoRegiao = { feitos: 0, total: reg.membros.length }
+  await emLotes(reg.membros, 6, async (m) => {
+    try {
+      partes.push(await buscarBruto(aba, UF, turno, signal, m))
+    } catch (err) {
+      if (err.name === 'AbortError') throw err
+    }
+    estado.progressoRegiao.feitos++
+    const el = document.getElementById('progresso-regiao')
+    if (el) el.textContent = `${estado.progressoRegiao.feitos} de ${estado.progressoRegiao.total} municípios`
+  }, signal)
+  if (signal?.aborted) throw new DOMException('abortado', 'AbortError')
+  if (!partes.length) throw new NaoDivulgado()
+  const base = partes[0]
+  const soma = (f) => partes.reduce((a, d) => a + (f(d) || 0), 0)
+  const votosPor = new Map()
+  for (const d of partes) for (const c of d.candidatos) votosPor.set(c.sqcand, (votosPor.get(c.sqcand) || 0) + c.votos)
+  const validos = soma((d) => d.votos.validos)
+  const candidatos = base.candidatos.map((c) => {
+    const votos = votosPor.get(c.sqcand) || 0
+    return { ...c, votos, pvap: null, percentual: validos ? (100 * votos) / validos : 0 }
+  })
+  candidatos.sort((a, b) => b.votos - a.votos || a.nome.localeCompare(b.nome, 'pt-BR'))
+  const ts = soma((d) => d.secoes.total), st = soma((d) => d.secoes.totalizadas)
+  const te = soma((d) => d.eleitorado.total), comp = soma((d) => d.eleitorado.comparecimento), abst = soma((d) => d.eleitorado.abstencao)
+  const tot = soma((d) => d.votos.total), br = soma((d) => d.votos.brancos), nu = soma((d) => d.votos.nulos)
+  const pc = (a, b) => (b ? (100 * a) / b : null)
+  return {
+    ...base,
+    abrangencia: UF,
+    atualizadoEm: partes.map((d) => d.atualizadoEm).sort().pop(),
+    final: partes.length === reg.membros.length && partes.every((d) => d.final),
+    secoes: { total: ts, totalizadas: st, percentual: pc(st, ts) || 0 },
+    eleitorado: { total: te, comparecimento: comp, pComparecimento: pc(comp, te), abstencao: abst, pAbstencao: pc(abst, te) },
+    votos: { total: tot, validos, pValidos: pc(validos, tot), brancos: br, pBrancos: pc(br, tot), nulos: nu, pNulos: pc(nu, tot) },
+    candidatos,
+    legenda: null,
+    regiaoInfo: { municipios: reg.membros.length, comDados: partes.length },
+  }
+}
+
 async function buscar(aba, abr, turno, signal, mun = null) {
-  const d = await buscarBruto(aba, abr, turno, signal, mun)
+  const d = mun?.regiao ? await buscarRegiao(aba, turno, signal, mun) : await buscarBruto(aba, abr, turno, signal, mun)
   const out = aba.tipo === 'prop' && !mun ? aplicarProjecao(d) : d
   if (DEMO && out.final && out.projecao) {
     // demonstração: no fim, simula a marcação oficial do TSE com o próprio cálculo
@@ -248,8 +306,12 @@ async function municipios(aba) {
           .sort((a, b) => a.nm.localeCompare(b.nm, 'pt-BR'))
       })
     p.then((lista) => municipiosProntos.set(ele, lista)).catch(() => {})
-    p.catch(() => municipiosCache.delete(ele))
-    municipiosCache.set(ele, p)
+    // sem a lista do TSE, usa a lista própria dos 295 municípios (códigos TSE, sem as zonas) e tenta de novo depois
+    const comReserva = p.catch(() => {
+      municipiosCache.delete(ele)
+      return MUNICIPIOS_SC.map(([cd, , nm]) => ({ cd, nm, capital: cd === '81051', zonas: [] })).sort((a, b) => a.nm.localeCompare(b.nm, 'pt-BR'))
+    })
+    municipiosCache.set(ele, comReserva)
   }
   return municipiosCache.get(ele)
 }
@@ -422,6 +484,7 @@ function munAtual() {
 
 function nomeLocal(d) {
   const mun = munAtual()
+  if (mun?.regiao) return `${mun.nm} (${mun.membros.length} municípios)`
   if (mun) return `${mun.nm} (SC)${mun.zona ? ` · ${Number(mun.zona)}ª zona` : ''}`
   return NOMES_ABR[d.abrangencia] || d.abrangencia.toUpperCase()
 }
@@ -440,6 +503,7 @@ function escolherZona(zona) {
 }
 
 function escolherMunicipio(mun) {
+  if (mun) estado.atalhos = false
   estado.mun = mun
   gravarLocal(`${PREFIXO}municipio:v1`, JSON.stringify(mun))
   estado.partido = null
@@ -496,7 +560,7 @@ async function carregar() {
   const abr = abrAtual()
   statusEl.textContent = 'Atualizando…'
   statusEl.className = 'status carregando'
-  if (!estado.dados) conteudo.innerHTML = (aba.tipo === 'fav' || aba.tipo === 'mun' ? '' : cabecalhoAbrangencia()) + `<div class="cartao vazio">Carregando ${esc(aba.rotulo)}${munAtual() ? ` em ${esc(munAtual().nm)}` : ''}…</div>`
+  if (!estado.dados) conteudo.innerHTML = (aba.tipo === 'fav' || aba.tipo === 'mun' ? '' : cabecalhoAbrangencia()) + `<div class="cartao vazio">Carregando ${esc(aba.rotulo)}${munAtual() ? ` em ${esc(munAtual().nm)}` : ''}…${munAtual()?.regiao ? '<br><small id="progresso-regiao" class="mudo"></small>' : ''}</div>`
   if (aba.tipo === 'fav') return carregarFavoritos(ctrl)
   if (aba.tipo === 'mun') return carregarPainelMunicipios(ctrl)
   const mun = munAtual()
@@ -773,10 +837,11 @@ function renderPainelMunicipios() {
 
 function agendar() {
   clearTimeout(estado.timer)
+  const intervalo = munAtual()?.regiao ? Math.max(INTERVALO_MS, 120_000) : INTERVALO_MS
   estado.timer = setTimeout(() => {
     if (document.hidden) agendar()
     else carregar()
-  }, INTERVALO_MS)
+  }, intervalo)
 }
 
 document.addEventListener('visibilitychange', () => {
@@ -824,11 +889,42 @@ function cabecalhoAbrangencia() {
       ${mun ? '<button type="button" class="local-limpar" data-mun-limpar aria-label="Voltar para o estado todo">✕</button>' : ''}
       <ul id="mun-sugestoes" class="sugestoes" hidden></ul>
     </div>
-  </div>${seletorZonas(mun)}`
+  </div>${seletorZonas(mun)}${atalhosLocal(mun)}`
+}
+
+const chip = (cd, nm, ativo) => `<button type="button" class="atalho ${ativo ? 'ativo' : ''}" data-mun-cd="${esc(cd)}" data-mun-nm="${esc(nm)}">${esc(nm)}</button>`
+
+function atalhosLocal(mun) {
+  const aberto = estado.atalhos ?? !mun
+  if (!aberto) return `<button type="button" class="atalhos-abrir" data-atalhos="1">⚡ Atalhos: Grande Florianópolis, maiores cidades e regiões ▾</button>`
+  const ativo = (cd) => mun && !mun.regiao && mun.cd === cd
+  const gf = GRANDE_FLORIPA.map((nm) => MUNICIPIOS_SC.find((m) => chaveNome(m[2]) === chaveNome(nm))).filter(Boolean)
+  const gfSet = new Set(gf.map((m) => m[0]))
+  const maiores = MUNICIPIOS_SC.filter((m) => !gfSet.has(m[0])).slice(0, 12)
+  const microsDe = (meso) => Object.keys(MICRORREGIOES).filter((mi) => MUNICIPIOS_SC.some((m) => m[4] === meso && m[5] === mi))
+  return `<div class="atalhos">
+    <div class="atalhos-grupo"><span class="atalhos-rot">🏝️ Grande Florianópolis</span>
+      <div class="atalhos-chips">${gf.map((m) => chip(m[0], m[2], ativo(m[0]))).join('')}
+        <button type="button" class="atalho regiao ${mun?.regiao === 'micro:42016' ? 'ativo' : ''}" data-regiao="micro:42016">Σ Soma da região</button></div></div>
+    <div class="atalhos-grupo"><span class="atalhos-rot">🏙️ Maiores cidades</span>
+      <div class="atalhos-chips">${maiores.map((m) => chip(m[0], m[2], ativo(m[0]))).join('')}</div></div>
+    <div class="atalhos-grupo"><span class="atalhos-rot">🗺️ Regiões <small>(soma dos municípios · IBGE)</small></span>
+      <div class="atalhos-chips">${Object.entries(MESORREGIOES)
+        .map(([cod, nome]) => `<button type="button" class="atalho regiao ${mun?.regiao === 'meso:' + cod ? 'ativo' : ''}" data-regiao="meso:${cod}">${esc(nome)}</button>`)
+        .join('')}</div>
+      <details class="micros" ${String(mun?.regiao || '').startsWith('micro:') && mun.regiao !== 'micro:42016' ? 'open' : ''}><summary>Microrregiões (20) ▾</summary>
+        ${Object.entries(MESORREGIOES)
+          .map(([cod, nome]) => `<div class="micro-grupo"><span>${esc(nome)}</span>${microsDe(cod)
+            .map((mi) => `<button type="button" class="atalho regiao ${mun?.regiao === 'micro:' + mi ? 'ativo' : ''}" data-regiao="micro:${mi}">${esc(MICRORREGIOES[mi])}</button>`)
+            .join('')}</div>`)
+          .join('')}
+      </details></div>
+    ${mun ? '<button type="button" class="atalhos-abrir" data-atalhos="0">Fechar atalhos ▴</button>' : ''}
+  </div>`
 }
 
 function seletorZonas(mun) {
-  if (!mun) return ''
+  if (!mun || mun.regiao) return ''
   const zonas = zonasDe(mun)
   if (!zonas.length) {
     // a lista ainda não chegou: carrega e redesenha
@@ -927,6 +1023,21 @@ conteudo.addEventListener('click', (ev) => {
   const ordemBtn = ev.target.closest('[data-ordem]')
   if (ordemBtn) {
     painel.ordem = ordemBtn.dataset.ordem
+    renderizar()
+    return
+  }
+  const regBtn = ev.target.closest('[data-regiao]')
+  if (regBtn) {
+    const reg = regiao(regBtn.dataset.regiao)
+    if (reg) {
+      estado.atalhos = false
+      escolherMunicipio(reg)
+    }
+    return
+  }
+  const atBtn = ev.target.closest('[data-atalhos]')
+  if (atBtn) {
+    estado.atalhos = atBtn.dataset.atalhos === '1'
     renderizar()
     return
   }
@@ -1724,7 +1835,7 @@ function tratarFav(favBtn) {
 
 // Enquanto o app está aberto, guarda a evolução de todos os candidatos vistos (só em memória).
 const historicoSessao = new Map()
-const chaveLocal = (mun) => (mun ? `${mun.cd}${mun.zona ? 'z' + mun.zona : ''}` : '')
+const chaveLocal = (mun) => (mun ? (mun.regiao ? `r${mun.regiao}` : `${mun.cd}${mun.zona ? 'z' + mun.zona : ''}`) : '')
 function registrarSessao(abaId, abr, mun, dados) {
   const pst = Math.round(dados.secoes.percentual * 100) / 100
   dados.candidatos.forEach((c, i) => {
@@ -1993,7 +2104,8 @@ function secaoPorMunicipio(det, aba, cor) {
   const pesado = aba?.tipo === 'prop'
   const botoes = `<div class="pm-botoes">
       <button type="button" class="botao ${pm?.escopo === 'regiao' ? '' : 'secundario'}" data-por-mun="regiao">Grande Florianópolis</button>
-      <button type="button" class="botao ${pm?.escopo === 'todos' ? '' : 'secundario'}" data-por-mun="todos">Todos os municípios de SC</button>
+      <button type="button" class="botao ${pm?.escopo === 'maiores' ? '' : 'secundario'}" data-por-mun="maiores">Maiores cidades</button>
+      <button type="button" class="botao ${pm?.escopo === 'todos' ? '' : 'secundario'}" data-por-mun="todos">Todos os municípios + regiões</button>
     </div>`
   if (!pm)
     return `<section class="cartao"><h3>📍 Votos por município e zona</h3>
@@ -2013,7 +2125,40 @@ function secaoPorMunicipio(det, aba, cor) {
       .map((zl) => `<tr class="pm-zona" style="${estiloCor(cor)}"><td>↳ ${Number(zl.zona)}ª zona<div class="cand-meta">${zl.semDados ? 'sem dados ainda' : `${fmtPct.format(zl.pst)}% apurado · ${zl.pos}º na zona`}</div></td><td class="dir">${fmt.format(zl.votos)}</td><td class="dir">${fmtPct.format(zl.pct)}%</td></tr>`)
       .join('')
   }
-  return `<section class="cartao"><h3>📍 Votos por município e zona</h3>${botoes}
+  const agrupar = pm.escopo === 'todos' && !pm.carregando ? pm.agrupar || 'mun' : 'mun'
+  const abasAgrupar =
+    pm.escopo === 'todos' && !pm.carregando
+      ? `<div class="segmentado" role="group" aria-label="Agrupar">
+          ${[['mun', 'Municípios'], ['meso', 'Regiões'], ['micro', 'Microrregiões']]
+            .map(([k, r]) => `<button type="button" data-agrupar="${k}" aria-pressed="${agrupar === k}">${r}</button>`)
+            .join('')}</div>`
+      : ''
+  if (agrupar !== 'mun') {
+    const grupos = new Map()
+    for (const l of pm.linhas) {
+      const info = MUN_REG.get(l.cd)
+      const chave = info ? (agrupar === 'meso' ? info.meso : info.micro) : '?'
+      const g = grupos.get(chave) || { nome: agrupar === 'meso' ? MESORREGIOES[chave] : MICRORREGIOES[chave] || 'Outros', meso: info && MESORREGIOES[info.meso], votos: 0, validos: 0, n: 0, top: null }
+      g.votos += l.votos
+      g.validos += l.validos || 0
+      g.n++
+      if (!g.top || l.votos > g.top.votos) g.top = l
+      grupos.set(chave, g)
+    }
+    const lista = [...grupos.values()].sort((a, b) => b.votos - a.votos)
+    const max = Math.max(1, ...lista.map((g) => g.votos))
+    return `<section class="cartao"><h3>📍 Votos por município e zona</h3>${botoes}${abasAgrupar}
+      <table class="tabela pm-tabela"><thead><tr><th>${agrupar === 'meso' ? 'Região' : 'Microrregião'}</th><th class="dir">Votos</th><th class="dir">%</th></tr></thead><tbody>${lista
+        .map(
+          (g) => `<tr style="${estiloCor(cor)}"><td><strong>${esc(g.nome)}</strong><div class="cand-meta">${agrupar === 'micro' && g.meso ? esc(g.meso) + ' · ' : ''}${g.n} municípios · mais votos em ${esc(g.top.nm)}</div>
+            <div class="barra fina"><span style="width:${(100 * g.votos) / max}%"></span></div></td>
+            <td class="dir">${fmt.format(g.votos)}</td><td class="dir">${g.validos ? fmtPct.format((100 * g.votos) / g.validos) : '–'}%</td></tr>`,
+        )
+        .join('')}</tbody></table>
+      <p class="nota">Regiões do IBGE. % = votos do candidato ÷ votos válidos da região. Total: <strong>${fmt.format(total)}</strong> votos.</p>
+    </section>`
+  }
+  return `<section class="cartao"><h3>📍 Votos por município e zona</h3>${botoes}${abasAgrupar}
     ${pm.carregando ? `<p class="nota">Consultando ${pm.feitos} de ${pm.total} municípios…</p>` : ''}
     ${pm.escopo === 'todos' ? `<input id="det-busca-mun" type="search" placeholder="Buscar município…" value="${esc(pm.busca || '')}" autocomplete="off">` : ''}
     <table class="tabela pm-tabela"><thead><tr><th>Município</th><th class="dir">Votos</th><th class="dir">%</th></tr></thead><tbody>${linhas
@@ -2042,7 +2187,13 @@ async function carregarPorMunicipio(escopo) {
     return
   }
   det.ctrlPorMun?.abort()
-  const alvo = escopo === 'regiao' ? lista.filter((m) => NUCLEO.has(chaveNome(m.nm)) || EXPANSAO.has(chaveNome(m.nm))) : lista
+  const porCd = new Map(lista.map((m) => [m.cd, m]))
+  const alvo =
+    escopo === 'regiao'
+      ? lista.filter((m) => NUCLEO.has(chaveNome(m.nm)) || EXPANSAO.has(chaveNome(m.nm)))
+      : escopo === 'maiores'
+        ? MUNICIPIOS_SC.slice(0, 15).map(([cd, , nm]) => porCd.get(cd) || { cd, nm, zonas: [] })
+        : lista
   const pm = { escopo, carregando: true, feitos: 0, total: alvo.length, linhas: [], semDados: 0, zonas: {}, busca: '', t: Date.now() }
   det.porMun = pm
   renderDetalhe()
@@ -2053,7 +2204,7 @@ async function carregarPorMunicipio(escopo) {
     try {
       const d = await buscar(aba, UF, TURNO, ctrl.signal, { cd: m.cd, nm: m.nm })
       const c = d.candidatos.find((x) => x.sqcand === det.sqcand)
-      pm.linhas.push({ cd: m.cd, nm: m.nm, zonas: m.zonas || [], votos: c?.votos || 0, pct: c?.percentual || 0, pos: c ? d.candidatos.indexOf(c) + 1 : '–', pst: d.secoes.percentual })
+      pm.linhas.push({ cd: m.cd, nm: m.nm, zonas: m.zonas || [], votos: c?.votos || 0, validos: d.votos.validos, pct: c?.percentual || 0, pos: c ? d.candidatos.indexOf(c) + 1 : '–', pst: d.secoes.percentual })
     } catch (err) {
       if (err.name === 'AbortError') throw err
       pm.semDados++
@@ -2110,6 +2261,11 @@ detalheEl.addEventListener('click', (ev) => {
   if (pmBtn) return carregarPorMunicipio(pmBtn.dataset.porMun)
   const zBtn = ev.target.closest('[data-zonas-mun]')
   if (zBtn) return alternarZonas(zBtn.dataset.zonasMun)
+  const agBtn = ev.target.closest('[data-agrupar]')
+  if (agBtn && estado.detalhe?.porMun) {
+    estado.detalhe.porMun.agrupar = agBtn.dataset.agrupar
+    return renderDetalhe()
+  }
   if (ev.target.closest('[data-pm-ver-todos]') && estado.detalhe?.porMun) {
     estado.detalhe.porMun.verTodos = true
     renderDetalhe()
