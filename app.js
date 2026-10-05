@@ -4,11 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610060930'
-import { chanceDe, NIVEIS } from './chances.js?v=202610060930'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610060930'
-import { FLORIPA } from './floripa.js?v=202610060930'
-import { corPartido, corTexto } from './cores.js?v=202610060930'
+import { calcularVagas } from './vagas.js?v=202610061000'
+import { chanceDe, NIVEIS } from './chances.js?v=202610061000'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610061000'
+import { FLORIPA } from './floripa.js?v=202610061000'
+import { corPartido, corTexto } from './cores.js?v=202610061000'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -1179,7 +1179,7 @@ conteudo.addEventListener('click', (ev) => {
       return renderizar()
     }
     if (h('[data-b26-cand]')) return ((B26.foco = Number(h('[data-b26-cand]').dataset.b26Cand)), (B26.buscaCand = ''), B26.local && (B26.grupo = 'bairro'), renderizar())
-    if (h('[data-b26-limpar]')) return ((B26.foco = null), renderizar())
+    if (h('[data-b26-limpar]')) return ((B26.foco = null), (B26.semAuto ??= new Set()).add(B26.sel), renderizar())
     const ir = h('[data-b26-ir]')
     if (ir) {
       Object.assign(B26, { local: { cd: ir.dataset.b26Ir, nm: NOME_MUN.get(ir.dataset.b26Ir) || ir.dataset.b26Ir, bairro: ir.dataset.b26Bairro }, grupo: 'local', verTodos: false, verGrupos: false })
@@ -3450,41 +3450,40 @@ function renderBairros26() {
   return `<section class="cartao resumo">
       <div class="resumo-titulo"><h2>Bairros, locais e seções · 2026</h2><span class="selo final">Boletins de urna</span></div>
       ${pills}
+      ${el ? seletorCandidatoB26(el) : ''}
       ${seletorLocal(B26)}
       <p class="nota">Votos de cada seção eleitoral do ${turnoDe(B26.sel)}º turno, lidos dos boletins de urna publicados pelo TSE e somados pelo bairro do local de votação. Escolha um município para ver por zona, bairro, local e seção.${TURNO === 2 && !INDICE26.has('t2-c1') && !INDICE26.has('t2-c3') ? ' <strong>Os boletins do 2º turno entram aqui assim que forem processados.</strong>' : ''}</p>
     </section>
-    ${el ? seletorCandidatoB26(el) : ''}
     ${!el ? `<div class="cartao vazio">${B26.erro ? 'Não consegui carregar os candidatos agora.' : 'Carregando…'}</div>` : B26.local ? renderLocal(B26, el) : B26.foco != null ? bairrosDoCandidatoSC(el) : fortesPorBairro(el)}`
 }
 
 // candidato em foco na aba Bairros: os ❤️ acompanhados (de qualquer cargo) e uma busca
 function seletorCandidatoB26(el) {
+  // só os acompanhados do cargo escolhido; o primeiro entra em destaque sozinho (até a pessoa limpar)
+  const favs = favoritos.filter((f) => ABAS.find((a) => a.id === f.aba)?.cargo === el.cargo)
+  B26.semAuto ??= new Set()
+  if (B26.foco == null && !B26.focoSq && favs.length && !B26.semAuto.has(el.id)) B26.focoSq = favs[0].sqcand
   if (B26.focoSq) {
     const c = el.candidatos.find((x) => x.sqcand === B26.focoSq)
     if (c) B26.foco = Number(c.numero)
     B26.focoSq = null
   }
-  // acompanhados de cargos com dados por seção; deputados primeiro
-  const ordemCargo = { depest: 0, depfed: 1, senador: 2, governador: 3, presidente: 4 }
-  const favs = favoritos.filter((f) => f.aba in ordemCargo).sort((a, b) => ordemCargo[a.aba] - ordemCargo[b.aba])
   const atual = el.porNumero?.get(String(B26.foco)) || el.candidatos.find((c) => Number(c.numero) === B26.foco)
   const termo = semAcento((B26.buscaCand || '').trim())
   const achados = termo ? el.candidatos.filter((x) => x.valido && semAcento(`${x.nome} ${x.nomeCompleto} ${x.partido} ${x.numero}`).includes(termo)).slice(0, 10) : []
-  const rotCargo = (abaId) => (ABAS.find((a) => a.id === abaId)?.rotulo || '').replace(/ SC$/, '')
-  return `<section class="cartao b26-cand">
-    <h3>👤 Candidato</h3>
+  return `<div class="b26-cand">
     ${favs.length
-      ? `<div class="atalhos-grupo"><span class="atalhos-rot">❤️ Acompanhados</span><div class="atalhos-chips">${favs
+      ? `<div class="atalhos-grupo"><span class="atalhos-rot">❤️ Acompanhados · ${esc(ROTULO_26[B26.sel] || '')}</span><div class="atalhos-chips">${favs
           .map((f) => {
             const ativo = atual && atual.sqcand === f.sqcand
-            return `<button type="button" class="atalho ${ativo ? 'ativo' : ''}" data-b26-fav="${esc(f.aba)}|${esc(f.sqcand)}" style="${estiloCor(corPartido(f.partido))}">❤️ ${esc(f.nome)} <small>${esc(f.partido || '')} · ${esc(rotCargo(f.aba))}</small></button>`
+            return `<button type="button" class="atalho ${ativo ? 'ativo' : ''}" data-b26-fav="${esc(f.aba)}|${esc(f.sqcand)}" style="${estiloCor(corPartido(f.partido))}">❤️ ${esc(f.nome)} <small>${esc(f.partido || '')}</small></button>`
           })
           .join('')}</div></div>`
-      : '<p class="nota">Toque no ♡ de um candidato (nas abas de cada cargo ou na ficha) para ele aparecer aqui como atalho.</p>'}
+      : `<p class="nota">Você não acompanha nenhum candidato a ${esc(ROTULO_26[B26.sel] || 'este cargo')}. Toque no ♡ de um candidato (na aba do cargo ou na ficha) para ele aparecer aqui já em destaque.</p>`}
     <input id="b26-busca" type="search" autocomplete="off" placeholder="🔎 Buscar ${esc(ROTULO_26[B26.sel] || 'candidato')} por nome, partido ou número…" value="${esc(B26.buscaCand || '')}">
     ${termo ? `<div class="atalhos-chips">${achados.map((x) => `<button type="button" class="atalho" data-b26-cand="${esc(x.numero)}" style="${estiloCor(corPartido(x.partido))}">${esc(x.nome)} <small>${esc(x.partido)} · ${esc(x.numero)}</small></button>`).join('') || '<span class="nota">Nenhum candidato encontrado neste cargo.</span>'}</div>` : ''}
     ${atual ? `<div class="pro-cand" style="${estiloCor(corPartido(atual.partido))}">Em destaque: <span class="cand-nome">${esc(atual.nome)}</span> ${pill(atual.partido)} <span class="mudo">nº ${esc(atual.numero)} · ${fmt.format(atual.votos)} votos em SC</span> <button type="button" class="link-zonas" data-b26-limpar>limpar</button> <button type="button" class="link-zonas" ${attrCand(atual, ABAS.find((a) => a.cargo === el.cargo)?.id, UF)}>abrir ficha ›</button></div>` : ''}
-  </section>`
+  </div>`
 }
 
 // candidato em foco, SC inteira: os bairros onde foi mais votado no estado

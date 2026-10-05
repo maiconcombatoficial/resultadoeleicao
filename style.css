@@ -817,3 +817,6 @@ td .leg-ponto { margin-right: 4px; vertical-align: middle; }
 .bai-tabela td.dir { white-space: nowrap; }
 .b26-cand .atalho small { font-weight: 500; opacity: 0.75; }
 #b26-busca { width: 100%; font: inherit; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--linha); background: var(--fundo); color: var(--texto); margin-top: 8px; }
+.b26-cand { margin: 12px 0 4px; padding: 10px 12px; border-radius: 12px; background: var(--fundo); }
+.b26-cand .pro-cand { margin-bottom: 0; }
+.b26-cand .link-zonas { margin-right: 14px; }
