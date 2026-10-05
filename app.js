@@ -4,11 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610062200'
-import { chanceDe, NIVEIS } from './chances.js?v=202610062200'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610062200'
-import { FLORIPA } from './floripa.js?v=202610062200'
-import { corPartido, corTexto } from './cores.js?v=202610062200'
+import { calcularVagas } from './vagas.js?v=202610062300'
+import { chanceDe, NIVEIS } from './chances.js?v=202610062300'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610062300'
+import { FLORIPA } from './floripa.js?v=202610062300'
+import { corPartido, corTexto } from './cores.js?v=202610062300'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -4010,7 +4010,7 @@ async function desenharCard(card) {
     caixa(48, ty, W - 96, 80, 18, '#17201b')
     g.fillStyle = '#ffdf00'
     g.font = fonte(800, 22)
-    g.fillText('TOTAL', 72, ty + 32)
+    g.fillText(corta(t.quem ? `TOTAL DE ${t.quem.toUpperCase()}` : 'TOTAL', 540), 72, ty + 32)
     g.fillStyle = '#ffffff'
     g.font = fonte(600, 24)
     g.fillText(corta(t.rot, 450), 72, ty + 62)
@@ -4245,10 +4245,11 @@ function secaoBairros(det, c, aba) {
     const tit = `${nomeNivel} · ${lugar}`
     // total que a imagem representa: em SC, o total do candidato; num lugar, a soma das linhas (zonas escolhidas)
     const baseTot = B.grupo === 'zona' ? visComp : ls
-    const tv = B.mun ? baseTot.reduce((a, l) => a + l.v, 0) : c.votos
+    const tv = B.mun ? baseTot.reduce((a, l) => a + l.v, 0) : r.totalSC
     const tv22 = !tem22 ? null : B.mun ? baseTot.reduce((a, l) => a + l.v22, 0) : p22 ? p22.c.votos : null
     const parcialZonas = B.grupo === 'zona' && visComp.length < vis.length
-    const totalFicha = totalCard(`Total em ${lugar}${parcialZonas ? ' · zonas escolhidas' : ''}`, tv, tv22)
+    const somaDe = B.mun ? (parcialZonas ? 'soma das zonas escolhidas' : `soma ${{ zona: 'das zonas', bairro: 'dos bairros', local: 'dos locais', secao: 'das seções' }[B.grupo]} de ${lugar}`) : 'em todo o estado'
+    const totalFicha = tv == null ? null : { ...totalCard(B.mun ? somaDe[0].toUpperCase() + somaDe.slice(1) : 'Santa Catarina inteira', tv, tv22), quem: c.nome }
     // carrossel: capa + todas as linhas (na visão por zona, os bairros de cada zona), 6 por imagem
     const POR = 6
     const linhaCar = (x, max) => ({ nome: x.nome, extra: [x.sub, x.pos ? `${x.pos.p}º de ${x.pos.n}` : ''].filter(Boolean).join(' · '), corBarra: cor,
@@ -4312,7 +4313,10 @@ function dadosBairrosFicha(B, elId, aba, nr, p22, re) {
     if (!x) return { msg: 'Sem votos nos boletins de urna de SC.' }
     const com22 = PREF.mostrar2022 && !!x.e22
     const lista = x[B.modo] || x.v
+    // total do candidato em SC: soma do arquivo por município (a lista de bairros é só um recorte)
+    const Mt = arquivoAno(`dados2026/municipios-${elId}.json`, re)
     return {
+      totalSC: Mt.valor ? Object.values(Mt.valor.c[nr] || {}).reduce((a, v) => a + v, 0) : null,
       com22,
       e22: x.e22,
       sobeCai: x.s,
@@ -4356,7 +4360,7 @@ function dadosBairrosFicha(B, elId, aba, nr, p22, re) {
         }
         return { nome: sg, sub: ASSOCIACOES[sg], v, val: A.val[sg] || 0, v22: a22[sg] || 0, pos: v ? { p, n } : null, ir: `data-bai-lugar="assoc:${esc(sg)}"` }
       }).filter((l) => l.v || l.v22)
-      return { com22: !!v22de, linhas, aviso: p22 && !v22de && PREF.mostrar2022 ? 'Carregando 2022…' : '', nota: `Associações de municípios da FECAM (soma dos municípios de cada uma). Votou em ${fmt.format(linhas.filter((l) => l.v).length)} de ${Object.keys(ASSOCIACOES).length}. Toque numa associação para ver as zonas e bairros dela.` }
+      return { totalSC: Object.values(meusA).reduce((a, v) => a + v, 0), com22: !!v22de, linhas, aviso: p22 && !v22de && PREF.mostrar2022 ? 'Carregando 2022…' : '', nota: `Associações de municípios da FECAM (soma dos municípios de cada uma). Votou em ${fmt.format(linhas.filter((l) => l.v).length)} de ${Object.keys(ASSOCIACOES).length}. Toque numa associação para ver as zonas e bairros dela.` }
     }
     const cds = new Set([...Object.keys(meus), ...(v22de ? Object.keys(v22de) : [])])
     const linhas = [...cds].map((cd) => {
@@ -4369,7 +4373,7 @@ function dadosBairrosFicha(B, elId, aba, nr, p22, re) {
       }
       return { nome: NOME_MUN.get(cd) || cd, sub: '', v, val: M.valor.validos[cd] || 0, v22: v22de ? v22de[cd] || 0 : 0, pos: v ? { p, n } : null, ir: `data-bai-lugar="${esc(cd)}"` }
     })
-    return { com22: !!v22de, linhas, aviso: p22 && !v22de && PREF.mostrar2022 ? 'Carregando 2022…' : '', nota: `Votou em ${fmt.format(linhas.filter((l) => l.v).length)} de ${MUNICIPIOS_SC.length} municípios. Toque num município para ver os bairros dele.` }
+    return { totalSC: Object.values(meus).reduce((a, v) => a + v, 0), com22: !!v22de, linhas, aviso: p22 && !v22de && PREF.mostrar2022 ? 'Carregando 2022…' : '', nota: `Votou em ${fmt.format(linhas.filter((l) => l.v).length)} de ${MUNICIPIOS_SC.length} municípios. Toque num município para ver os bairros dele.` }
   }
   // município ou região: zonas, bairros, locais ou seções (arquivos de seções de cada cidade)
   const cds = B.mun.cds
