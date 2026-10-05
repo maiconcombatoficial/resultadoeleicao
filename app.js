@@ -4,11 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610061400'
-import { chanceDe, NIVEIS } from './chances.js?v=202610061400'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610061400'
-import { FLORIPA } from './floripa.js?v=202610061400'
-import { corPartido, corTexto } from './cores.js?v=202610061400'
+import { calcularVagas } from './vagas.js?v=202610061500'
+import { chanceDe, NIVEIS } from './chances.js?v=202610061500'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610061500'
+import { FLORIPA } from './floripa.js?v=202610061500'
+import { corPartido, corTexto } from './cores.js?v=202610061500'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -526,7 +526,7 @@ function quadroZonaFloripa(mun) {
   return `<div class="zona-info">
     <p><strong>${Number(mun.zona)}ª zona · ${esc(info.rotulo)}</strong> <span class="mudo">· ${info.locais.length} locais · ${fmt.format(info.secoes)} seções · ${fmt.format(info.eleitores)} eleitores (2026)</span></p>
     <p class="zona-bairros">🏘️ ${info.bairros.map((b) => esc(b)).join(' · ')}</p>
-    <button type="button" class="link-zonas" data-ver-locais>${aberto ? 'Esconder locais de votação ▴' : `Ver os ${info.locais.length} locais de votação ▾`}</button>
+    <button type="button" class="link-zonas" data-ver-locais aria-expanded="${!!aberto}">🏫 ${aberto ? 'Esconder locais de votação' : `Ver os ${info.locais.length} locais de votação`} <span class="seta" aria-hidden="true">${aberto ? '▴' : '▾'}</span></button>
     ${aberto ? `<ul class="locais">${[...info.locais].sort((a, b) => b.eleitores - a.eleitores).map((l) => `<li><strong>${esc(l.local)}</strong><span class="mudo">${esc(l.bairro || 'bairro não informado')} · ${l.secoes.length} seções · ${fmt.format(l.eleitores)} eleitores</span></li>`).join('')}</ul>` : ''}
     ${buscaBairro()}
   </div>`
@@ -2428,7 +2428,7 @@ function secaoPorMunicipio(det, aba, cor) {
       .slice(0, limite)
       .map(
         (l) => `<tr style="${estiloCor(cor)}"><td>${esc(l.nm)}<div class="cand-meta">${l.semDados ? 'sem dados ainda' : `${fmtPct.format(l.pst)}% apurado · ${l.pos}º no município`}</div>
-          ${l.zonas.length > 1 ? `<button type="button" class="link-zonas" data-zonas-mun="${esc(l.cd)}">${pm.zonas[l.cd] ? 'ocultar zonas ▴' : `ver ${l.zonas.length} zonas ▾`}</button>` : l.zonas.length === 1 ? `<div class="cand-meta">zona única: ${Number(l.zonas[0])}ª</div>` : ''}</td>
+          ${l.zonas.length > 1 ? `<button type="button" class="link-zonas" data-zonas-mun="${esc(l.cd)}" aria-expanded="${!!pm.zonas[l.cd]}">${pm.zonas[l.cd] ? 'Ocultar zonas <span class="seta" aria-hidden="true">▴</span>' : `Ver ${l.zonas.length} zonas <span class="seta" aria-hidden="true">▾</span>`}</button>` : l.zonas.length === 1 ? `<div class="cand-meta">zona única: ${Number(l.zonas[0])}ª</div>` : ''}</td>
           <td class="dir">${fmt.format(l.votos)}</td><td class="dir">${fmtPct.format(l.pct)}%${linha2022Mun(det, l.cd, l.pct)}</td></tr>${linhaZonas(l)}`,
       )
       .join('')}</tbody></table>
@@ -3274,7 +3274,7 @@ function renderLocal(X, el) {
         .map((k) => `<button type="button" data-h22-grupo="${k}" aria-pressed="${grupo === k}">${{ zona: 'Zonas', local: 'Locais', bairro: 'Bairros', secao: 'Seções' }[k]}</button>`)
         .join('')}</div>
       <p class="nota"><strong>${fmt.format(linhasGrupo.length)}</strong> ${{ zona: 'zonas', local: 'locais de votação', bairro: 'bairros', secao: 'seções' }[grupo]}${linhasGrupo.length > maxLinhas ? ` · mostrando ${fmt.format(maxLinhas)}` : ''}${ag.secoes ? ` · ${fmt.format(ag.secoes)} seções com boletim` : ''}${el.ano === 2026 ? ' (seções agregadas votam junto com a seção principal)' : ''}.</p>
-      ${focoInfo ? `<p class="nota">Votos de <strong>${esc(focoInfo.nome)}</strong> em cada linha. <button type="button" class="link-zonas" data-h22-foco="">limpar</button></p>` : ''}
+      ${focoInfo ? `<p class="nota">Votos de <strong>${esc(focoInfo.nome)}</strong> em cada linha. <button type="button" class="link-zonas leve" data-h22-foco="">✕ Limpar</button></p>` : ''}
       <table class="tabela h22-grupos"><thead><tr><th>${{ zona: 'Zona', local: 'Local', bairro: 'Bairro', secao: 'Seção' }[grupo]}</th><th class="dir">${focoInfo ? 'Votos' : 'Válidos'}</th></tr></thead><tbody>${linhasGrupo
         .slice(0, maxLinhas)
         .map(({ g, nrTop, vTop }) => {
@@ -3505,7 +3505,7 @@ function seletorCandidatoB26(el) {
       : `<p class="nota">Você não acompanha nenhum candidato a ${esc(ROTULO_26[B26.sel] || 'este cargo')}. Toque no ♡ de um candidato (na aba do cargo ou na ficha) para ele aparecer aqui já em destaque.</p>`}
     <input id="b26-busca" type="search" autocomplete="off" placeholder="🔎 Buscar ${esc(ROTULO_26[B26.sel] || 'candidato')} por nome, partido ou número…" value="${esc(B26.buscaCand || '')}">
     ${termo ? `<div class="atalhos-chips">${achados.map((x) => `<button type="button" class="atalho" data-b26-cand="${esc(x.numero)}" style="${estiloCor(corPartido(x.partido))}">${esc(x.nome)} <small>${esc(x.partido)} · ${esc(x.numero)}</small></button>`).join('') || '<span class="nota">Nenhum candidato encontrado neste cargo.</span>'}</div>` : ''}
-    ${atual ? `<div class="pro-cand" style="${estiloCor(corPartido(atual.partido))}">Em destaque: <span class="cand-nome">${esc(atual.nome)}</span> ${pill(atual.partido)} <span class="mudo">nº ${esc(atual.numero)} · ${fmt.format(atual.votos)} votos em SC</span> <button type="button" class="link-zonas" data-b26-limpar>limpar</button> <button type="button" class="link-zonas" ${attrCand(atual, ABAS.find((a) => a.cargo === el.cargo)?.id, UF)}>abrir ficha ›</button></div>` : ''}
+    ${atual ? `<div class="pro-cand" style="${estiloCor(corPartido(atual.partido))}">Em destaque: <span class="cand-nome">${esc(atual.nome)}</span> ${pill(atual.partido)} <span class="mudo">nº ${esc(atual.numero)} · ${fmt.format(atual.votos)} votos em SC</span> <button type="button" class="link-zonas leve" data-b26-limpar>✕ Limpar</button> <button type="button" class="link-zonas" ${attrCand(atual, ABAS.find((a) => a.cargo === el.cargo)?.id, UF)}>📋 Abrir ficha ›</button></div>` : ''}
   </div>`
 }
 
@@ -4003,7 +4003,7 @@ function secaoBairros(det, c, aba) {
     const blocoZona = (l) => {
       if (!l.zonaKey) return ''
       const aberta = !!l.filhos
-      const bt = `<button type="button" class="link-zonas zona-bairros-bt" data-bai-zona="${esc(l.zonaKey)}" aria-expanded="${aberta}">${aberta ? '▴ esconder os bairros desta zona' : '▾ ver os bairros desta zona'}</button>`
+      const bt = `<button type="button" class="link-zonas zona-bairros-bt" data-bai-zona="${esc(l.zonaKey)}" aria-expanded="${aberta}">🏘️ ${aberta ? 'Esconder os bairros desta zona' : 'Ver os bairros desta zona'} <span class="seta" aria-hidden="true">${aberta ? '▴' : '▾'}</span></button>`
       if (!aberta) return bt
       const fs = l.filhos.filter((f) => f.v > 0 || (tem22 && f.v22 > 0))
       const metaF = (f) => [f.pos ? `${f.pos.p === 1 ? '🏆 ' : ''}${f.pos.p}º de ${f.pos.n} no bairro` : '', `${fmtPct.format(pctDe(f.v, f.val))}% dos votos do bairro`].filter(Boolean).join(' · ')
@@ -4019,7 +4019,7 @@ function secaoBairros(det, c, aba) {
     const rotOrdem = { v: 'mais votos', p: 'maior %', up: 'onde mais cresceu desde 2022', dn: 'onde mais caiu desde 2022' }[B.modo]
     const lista = vis.slice(0, lim)
     corpo = (r.aviso ? `<p class="nota">${r.aviso}</p>` : '') +
-      (B.grupo === 'zona' && lista.length ? `<button type="button" class="link-zonas" data-bai-zonas-todas>${B.zonasTodas ? '▴ fechar os bairros de todas as zonas' : '▾ ver os bairros de todas as zonas'}</button>` : '') +
+      (B.grupo === 'zona' && lista.length ? `<button type="button" class="link-zonas" data-bai-zonas-todas aria-expanded="${!!B.zonasTodas}">🏘️ ${B.zonasTodas ? 'Fechar os bairros de todas as zonas' : 'Ver os bairros de todas as zonas'} <span class="seta" aria-hidden="true">${B.zonasTodas ? '▴' : '▾'}</span></button>` : '') +
       (tem22 ? `<p class="var-resumo">Desde 2022 (${esc(ROTULO_ELEICAO[p22.el.id] || '')}): <span class="var var-alta-forte">▲ cresceu em ${fmt.format(sobe)} ${esc(nomeNivel.toLowerCase())}</span> <span class="var var-queda-forte">▼ caiu em ${fmt.format(cai)}</span></p>` + legendaVar(cor) : '') +
       (!lista.length
         ? `<p class="nota">${B.modo === 'up' ? 'Não cresceu em nenhum lugar' : B.modo === 'dn' ? 'Não caiu em nenhum lugar' : 'Sem votos'} em ${esc(lugar)}.</p>`
