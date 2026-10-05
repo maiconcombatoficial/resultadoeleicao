@@ -811,3 +811,7 @@ td .leg-ponto { margin-right: 4px; vertical-align: middle; }
 /* mapa base no modo escuro: escurece só os blocos do mapa, não os círculos */
 .pro-mapa.mapa-escuro .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9) saturate(0.4); }
 .pro-mapa:not(.mapa-escuro) .leaflet-tile-pane { filter: saturate(0.35) brightness(1.04); }
+.bai-atalhos { margin-top: 8px; }
+#det-busca-bairro-mun { width: 100%; font: inherit; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--linha); background: var(--fundo); color: var(--texto); margin-bottom: 6px; }
+.bai-tabela .var { white-space: normal; }
+.bai-tabela td.dir { white-space: nowrap; }
