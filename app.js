@@ -4,11 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610061030'
-import { chanceDe, NIVEIS } from './chances.js?v=202610061030'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610061030'
-import { FLORIPA } from './floripa.js?v=202610061030'
-import { corPartido, corTexto } from './cores.js?v=202610061030'
+import { calcularVagas } from './vagas.js?v=202610061100'
+import { chanceDe, NIVEIS } from './chances.js?v=202610061100'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610061100'
+import { FLORIPA } from './floripa.js?v=202610061100'
+import { corPartido, corTexto } from './cores.js?v=202610061100'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -2782,8 +2782,10 @@ detalheEl.addEventListener('click', (ev) => {
     const modo = ev.target.closest('[data-bai-modo]')
     if (modo) return ((det.bai.modo = modo.dataset.baiModo), renderDetalhe())
     if (ev.target.closest('[data-bai-todos]')) return ((det.bai.todos = true), renderDetalhe())
+    const gr = ev.target.closest('[data-bai-grupo]')
+    if (gr) return ((det.bai.grupo = gr.dataset.baiGrupo), (det.bai.todos = false), renderDetalhe())
     const ir = ev.target.closest('[data-bai-ir]')
-    if (ir) return irParaBairro(det, ir.dataset.baiIr, ir.dataset.baiBairro)
+    if (ir) return irParaBairro(det, ir.dataset.baiIr, ir.dataset.baiBairro, ir.dataset.baiTipo, ir.dataset.baiChave)
   }
   const pmBtn = ev.target.closest('[data-por-mun]')
   if (pmBtn) return carregarPorMunicipio(pmBtn.dataset.porMun)
@@ -2808,12 +2810,18 @@ detalheEl.addEventListener('change', (ev) => {
   renderDetalhe()
 })
 // abre a aba "Bairros" no bairro escolhido, com o candidato em destaque
-function irParaBairro(det, cd, bairro) {
+function irParaBairro(det, cd, bairro, tipo, chave) {
   const aba = ABAS.find((a) => a.id === det.aba)
   const d = dadosDetalhe()
   const c = d?.candidatos.find((x) => x.sqcand === det.sqcand)
   if (!aba?.cargo || !c) return
-  Object.assign(B26, { sel: eleicaoDoCargo(aba.cargo), local: { cd, nm: NOME_MUN.get(cd) || cd, bairro }, grupo: 'local', foco: Number(c.numero), buscaMun: '', verTodos: false, verGrupos: false })
+  const local = { cd, nm: NOME_MUN.get(cd) || cd }
+  let grupo = 'local'
+  if (tipo === 'zona') Object.assign(local, { zona: chave }), (grupo = 'bairro')
+  else if (tipo === 'local') Object.assign(local, { localVot: chave, zona: chave.split('-')[0] }), (grupo = 'secao')
+  else if (tipo === 'secao') Object.assign(local, { secao: chave, zona: chave.split('-')[0] }), (grupo = 'secao')
+  else local.bairro = bairro
+  Object.assign(B26, { sel: eleicaoDoCargo(aba.cargo), local, grupo, foco: Number(c.numero), buscaMun: '', verTodos: false, verGrupos: false })
   const ir = () => {
     trocarAba('bairros')
     window.scrollTo({ top: 0 })
@@ -3887,115 +3895,157 @@ function escolhaLugarBairros(B) {
 function secaoBairros(det, c, aba) {
   if (DEMO || !aba?.cargo) return ''
   const elId = eleicaoDoCargo(aba.cargo)
-  const B = (det.bai ??= { mun: det.mun ? lugarBairros(det.mun.regiao || det.mun.cd) : null, modo: 'v', todos: false, painel: false, busca: '' })
+  const B = (det.bai ??= { mun: det.mun ? lugarBairros(det.mun.regiao || det.mun.cd) : null, modo: 'v', todos: false, painel: false, busca: '', grupo: 'bairro' })
   const re = () => estado.detalhe === det && renderDetalhe()
   const nr = Number(c.numero)
   const cor = corPartido(c.partido)
   const parts22 = PREF.mostrar2022 && H22.resumo ? achar2022(c).filter((p) => p.el.turno === 1) : []
   const p22 = parts22.find((p) => p.el.cargo === aba.cargo) || parts22[0] || null
-  const com22 = PREF.mostrar2022 && (B.mun ? !!p22 : null) // no estado, decide pelo índice
-  const botoesModo = (tem22) => {
-    const modos = [['v', 'Mais votos'], ['p', 'Maior %'], ...(tem22 ? [['up', '▲ Mais cresceu'], ['dn', '▼ Mais caiu']] : [])]
-    if (!tem22 && (B.modo === 'up' || B.modo === 'dn')) B.modo = 'v'
-    return `<div class="segmentado" role="group">${modos.map(([k, r]) => `<button type="button" data-bai-modo="${k}" aria-pressed="${B.modo === k}">${r}</button>`).join('')}</div>`
-  }
-  const escolha = escolhaLugarBairros(B)
-  const linha = (nome, sub, v, val, cd, bairro, extra = '') =>
-    `<tr class="clicavel" data-bai-ir="${esc(cd)}" data-bai-bairro="${esc(bairro)}"><td><strong>${esc(nome)}</strong>${sub ? `<div class="cand-meta">${esc(sub)}</div>` : ''}${extra}</td>
-      <td class="dir">${fmt.format(v)}</td><td class="dir">${fmtPct.format(pctDe(v, val))}%</td></tr>`
-  const tabela = (linhas) => `<table class="tabela bai-tabela"><thead><tr><th>Bairro</th><th class="dir">Votos</th><th class="dir">% bairro</th></tr></thead><tbody>${linhas}</tbody></table>`
-  const resumoVar = (sobe, cai, rot) =>
-    `<p class="var-resumo">Desde 2022${rot ? ` (${esc(rot)})` : ''}: <span class="var var-alta-forte">▲ cresceu em ${fmt.format(sobe)} bairros</span> <span class="var var-queda-forte">▼ caiu em ${fmt.format(cai)}</span></p>`
-  let modos = ''
+  // níveis: em SC, municípios ou bairros; num município ou região, zonas, bairros, locais ou seções
+  const niveis = B.mun ? [['zona', 'Zonas'], ['bairro', 'Bairros'], ['local', 'Locais'], ['secao', 'Seções']] : [['mun', 'Municípios'], ['bairro', 'Bairros']]
+  if (!niveis.some(([k]) => k === B.grupo)) B.grupo = 'bairro'
+  const nomeNivel = Object.fromEntries(niveis)[B.grupo]
+  const naNivel = { mun: 'no município', zona: 'na zona', bairro: 'no bairro', local: 'no local', secao: 'na seção' }[B.grupo]
+  const r = dadosBairrosFicha(B, elId, aba, nr, p22, re)
+  const tem22 = !!r.com22
+  if (!tem22 && (B.modo === 'up' || B.modo === 'dn')) B.modo = 'v'
+  const modos = [['v', 'Mais votos'], ['p', 'Maior %'], ...(tem22 ? [['up', '▲ Mais cresceu'], ['dn', '▼ Mais caiu']] : [])]
+  const lugar = B.mun ? B.mun.nm : 'Santa Catarina'
+  const controles = `${escolhaLugarBairros(B)}
+    <div class="segmentado" role="group" aria-label="Ver por">${niveis.map(([k, rot]) => `<button type="button" data-bai-grupo="${k}" aria-pressed="${B.grupo === k}">${rot}</button>`).join('')}</div>
+    <div class="segmentado" role="group" aria-label="Ordem">${modos.map(([k, rot]) => `<button type="button" data-bai-modo="${k}" aria-pressed="${B.modo === k}">${rot}</button>`).join('')}</div>`
   let corpo = ''
-  let corpo22 = ''
   B.export = null
-  if (!B.mun) {
-    const idx = arquivoAno(`dados2026/bairros-${elId}.json`, re)
-    const x = idx.valor?.c[nr]
-    const tem22 = PREF.mostrar2022 && !!x?.e22
-    modos = botoesModo(tem22)
-    if (!idx.valor) corpo = `<p class="nota">${idx.erro ? 'Os bairros de 2026 ainda não estão no app.' : 'Carregando os bairros…'}</p>`
-    else if (!x) corpo = '<p class="nota">Sem votos nos boletins de urna de SC.</p>'
-    else {
-      const lista = x[B.modo] || x.v
-      const max = Math.max(1, ...lista.map((e) => Math.max(e[1], tem22 ? e[2] || 0 : 0)))
-      const rot = { v: 'mais votos', p: 'maior %', up: 'onde mais cresceu desde 2022', dn: 'onde mais caiu desde 2022' }[B.modo] || 'mais votos'
-      const itens = lista.map(([bi, v, v22]) => {
-        const [cd, nome, val] = idx.valor.b[bi]
-        return { nome, mun: NOME_MUN.get(cd) || cd, v, pct: pctDe(v, val), v22: tem22 ? v22 || 0 : null, va: tem22 ? variacao(v, v22 || 0) : null }
-      })
-      B.export = {
-        csv: { nome: `${nomeArquivo(c.nome)}-bairros-sc.csv`, cab: ['Bairro', 'Município', 'Votos 2026', '% do bairro', ...(tem22 ? ['Votos 2022', 'Diferença'] : [])], linhas: itens.map((i) => [i.nome, i.mun, i.v, i.pct, ...(tem22 ? [i.v22, i.v - i.v22] : [])]) },
-        card: { turno: turnoDe(elId), nome: c.nome, cor, sub: `${c.partido} · nº ${c.numero} · ${aba.rotulo.replace(/ SC$/, '')}`, titulo: 'Bairros onde foi mais votado', subtitulo: `Santa Catarina · ${rot}`, linhas: linhasBairroCard(itens.map((i) => ({ ...i, extra: i.mun + (i.va ? ` · 2022: ${fmt.format(i.v22)}` : '') }))), rodape: tem22 ? `Desde 2022: cresceu em ${fmt.format(x.s[0])} bairros e caiu em ${fmt.format(x.s[1])}` : '' },
-      }
-      corpo = (tem22 ? resumoVar(x.s[0], x.s[1], ROTULO_ELEICAO[x.e22]) + legendaVar(cor) : '') +
-        (tem22
-          ? listaComparada(lista.map(([bi, v, v22]) => { const [cd, nome, val] = idx.valor.b[bi]; return { nome, sub: NOME_MUN.get(cd) || cd, v, v22: v22 || 0, meta: `${fmtPct.format(pctDe(v, val))}% dos votos do bairro em 2026`, ir: `data-bai-ir="${esc(cd)}" data-bai-bairro="${esc(nome)}"` } }), cor)
-          : tabela(lista.map(([bi, v]) => {
-              const [cd, nome, val] = idx.valor.b[bi]
-              return linha(nome, NOME_MUN.get(cd) || cd, v, val, cd, nome)
-            }).join(''))) +
-        `<p class="nota">Teve votos em ${fmt.format(x.n)} bairros de SC. ${B.modo === 'p' ? '"Maior %" considera bairros com pelo menos 300 votos válidos.' : ''} % bairro = votos ÷ votos válidos do cargo no bairro.${tem22 ? ' Variação = votos de 2026 − votos de 2022 no mesmo bairro.' : ''}</p>`
-    }
-  } else {
-    modos = botoesModo(com22)
-    // um município ou uma região (soma dos bairros dos municípios dela)
-    const cds = B.mun.cds
-    const arqs = cds.map((cd) => [cd, secoesAno(2026, cd, re)])
-    const prontos = arqs.filter(([, x]) => x)
-    const faltam = arqs.filter(([cd, x]) => !x && !erroSecoes(2026, cd)).length
-    const regiao = cds.length > 1
-    if (!prontos.length) corpo = `<p class="nota">${faltam ? `Carregando as seções de ${esc(B.mun.nm)}…` : 'Os boletins deste lugar ainda não estão no app.'}</p>`
-    else {
-      const linhas = []
-      // 2022 só entra quando os arquivos de todos os municípios do lugar chegaram (senão a comparação engana)
-      const faltam22 = p22 ? cds.filter((cd) => !secoesAno(2022, cd, re) && !erroSecoes(2022, cd)).length : 0
-      const com22 = !!p22 && !faltam22
-      for (const [cd, arq] of prontos) {
-        const m = porBairro(arq, elId, aba.cargo, nr)
-        let m22 = null
-        if (com22) {
-          const a22 = secoesAno(2022, cd, re)
-          if (a22) m22 = porBairro(a22, p22.el.id, p22.el.cargo, Number(p22.c.numero))
-        }
-        const chaves = new Set([...m.values()].filter((g) => g.foco > 0).map((g) => g.chave))
-        if (m22) for (const g of m22.values()) if (g.foco > 0) chaves.add(g.chave)
-        for (const k of chaves) linhas.push({ k, cd, mun: NOME_MUN.get(cd) || cd, v: m.get(k)?.foco || 0, val: m.get(k)?.validos || 0, v22: m22?.get(k)?.foco || 0, pos: m.get(k) ? posicaoNoGrupo(m.get(k), nr) : null })
-      }
-      const m22 = com22
-      const ord = { v: (a, b) => b.v - a.v, p: (a, b) => pctDe(b.v, b.val) - pctDe(a.v, a.val), up: (a, b) => b.v - b.v22 - (a.v - a.v22), dn: (a, b) => a.v - a.v22 - (b.v - b.v22) }
-      linhas.sort(ord[B.modo] || ord.v)
-      const vis = B.modo === 'up' ? linhas.filter((l) => l.v > l.v22) : B.modo === 'dn' ? linhas.filter((l) => l.v < l.v22) : linhas.filter((l) => l.v > 0 && (B.modo !== 'p' || l.val >= (regiao ? 300 : 0)))
-      const lim = B.todos ? vis.length : 15
-      const max = Math.max(1, ...vis.slice(0, lim).map((l) => Math.max(l.v, m22 ? l.v22 : 0)))
-      const sobe = linhas.filter((l) => l.v > l.v22).length, cai = linhas.filter((l) => l.v < l.v22).length
-      const rot = { v: 'mais votos', p: 'maior %', up: 'onde mais cresceu desde 2022', dn: 'onde mais caiu desde 2022' }[B.modo] || 'mais votos'
-      B.export = {
-        csv: { nome: `${nomeArquivo(c.nome)}-bairros-${nomeArquivo(B.mun.nm)}.csv`, cab: ['Bairro', ...(regiao ? ['Município'] : []), 'Votos 2026', '% do bairro', 'Posição no bairro', ...(m22 ? ['Votos 2022', 'Diferença'] : [])], linhas: vis.map((l) => [l.k, ...(regiao ? [l.mun] : []), l.v, pctDe(l.v, l.val), l.pos ? `${l.pos.p}º de ${l.pos.n}` : '', ...(m22 ? [l.v22, l.v - l.v22] : [])]) },
-        card: { turno: turnoDe(elId), nome: c.nome, cor, sub: `${c.partido} · nº ${c.numero} · ${aba.rotulo.replace(/ SC$/, '')}`, titulo: `Bairros · ${B.mun.nm}`, subtitulo: rot, linhas: linhasBairroCard(vis.map((l) => ({ nome: l.k, v: l.v, pct: pctDe(l.v, l.val), va: m22 ? variacao(l.v, l.v22) : null, extra: [regiao ? l.mun : '', l.pos ? `${l.pos.p}º no bairro` : '', m22 ? `2022: ${fmt.format(l.v22)}` : ''].filter(Boolean).join(' · ') }))), rodape: m22 ? `Desde 2022: cresceu em ${fmt.format(sobe)} bairros e caiu em ${fmt.format(cai)}` : '' },
-      }
-      corpo = (faltam ? `<p class="nota">Carregando ${faltam} de ${cds.length} municípios…</p>` : faltam22 ? `<p class="nota">Carregando os dados de 2022 (${cds.length - faltam22} de ${cds.length})…</p>` : '') +
-        (m22 ? resumoVar(sobe, cai, ROTULO_ELEICAO[p22.el.id]) + legendaVar(cor) : '') +
-        (vis.length
-          ? (m22
-              ? listaComparada(vis.slice(0, lim).map((l) => ({ nome: l.k, sub: regiao ? l.mun : '', v: l.v, v22: l.v22, meta: `${l.pos?.p === 1 ? '🏆 ' : ''}${textoPosicao(l.pos)} no bairro · ${fmtPct.format(pctDe(l.v, l.val))}% dos votos do bairro em 2026`, ir: `data-bai-ir="${esc(l.cd)}" data-bai-bairro="${esc(l.k)}"` })), cor)
-              : tabela(vis.slice(0, lim).map((l) => linha(l.k, regiao ? l.mun : '', l.v, l.val, l.cd, l.k, `<div class="cand-meta">${l.pos?.p === 1 ? '🏆 ' : ''}${textoPosicao(l.pos)} no bairro</div>`)).join(''))) +
-            (vis.length > lim ? `<button type="button" class="botao secundario" data-bai-todos>Mostrar os ${vis.length} bairros</button>` : '')
-          : `<p class="nota">${B.modo === 'up' ? 'Não cresceu em nenhum bairro' : B.modo === 'dn' ? 'Não caiu em nenhum bairro' : 'Sem votos'} em ${esc(B.mun.nm)}.</p>`) +
-        `<p class="nota">Total em ${esc(B.mun.nm)}: <strong>${fmt.format(linhas.reduce((a, l) => a + l.v, 0))}</strong> votos${m22 ? ` (2022: ${fmt.format(linhas.reduce((a, l) => a + l.v22, 0))})` : ''}${regiao ? ` · ${prontos.length} municípios` : ''}.</p>`
+  if (r.msg) corpo = `<p class="nota">${r.msg}</p>`
+  else {
+    const ls = r.linhas
+    const ord = { v: (a, b) => b.v - a.v, p: (a, b) => pctDe(b.v, b.val) - pctDe(a.v, a.val), up: (a, b) => b.v - b.v22 - (a.v - a.v22), dn: (a, b) => a.v - a.v22 - (b.v - b.v22) }
+    ls.sort(ord[B.modo] || ord.v)
+    const minVal = B.modo === 'p' && B.grupo !== 'secao' ? (B.grupo === 'mun' ? 1000 : 300) : 0
+    const vis = B.modo === 'up' ? ls.filter((l) => l.v > l.v22) : B.modo === 'dn' ? ls.filter((l) => l.v < l.v22) : ls.filter((l) => l.v > 0 && l.val >= minVal)
+    const lim = B.todos ? vis.length : 15
+    const metaDe = (l) => [l.pos ? `${l.pos.p === 1 ? '🏆 ' : ''}${l.pos.p}º de ${l.pos.n} ${naNivel}` : '', `${fmtPct.format(pctDe(l.v, l.val))}% dos votos ${B.grupo === 'mun' ? 'do município' : B.grupo === 'secao' ? 'da seção' : B.grupo === 'local' ? 'do local' : B.grupo === 'zona' ? 'da zona' : 'do bairro'}`].filter(Boolean).join(' · ')
+    // o resumo conta todos os lugares (no índice de SC, vem pronto do estado inteiro)
+    const [sobe, cai] = r.sobeCai || [ls.filter((l) => l.v > l.v22).length, ls.filter((l) => l.v < l.v22).length]
+    const rotOrdem = { v: 'mais votos', p: 'maior %', up: 'onde mais cresceu desde 2022', dn: 'onde mais caiu desde 2022' }[B.modo]
+    const lista = vis.slice(0, lim)
+    corpo = (r.aviso ? `<p class="nota">${r.aviso}</p>` : '') +
+      (tem22 ? `<p class="var-resumo">Desde 2022 (${esc(ROTULO_ELEICAO[p22.el.id] || '')}): <span class="var var-alta-forte">▲ cresceu em ${fmt.format(sobe)} ${esc(nomeNivel.toLowerCase())}</span> <span class="var var-queda-forte">▼ caiu em ${fmt.format(cai)}</span></p>` + legendaVar(cor) : '') +
+      (!lista.length
+        ? `<p class="nota">${B.modo === 'up' ? 'Não cresceu em nenhum lugar' : B.modo === 'dn' ? 'Não caiu em nenhum lugar' : 'Sem votos'} em ${esc(lugar)}.</p>`
+        : tem22
+          ? listaComparada(lista.map((l) => ({ nome: l.nome, sub: l.sub, v: l.v, v22: l.v22, meta: metaDe(l), ir: l.ir })), cor)
+          : `<div class="cmp-lista">${lista.map((l) => `<div class="cmp-linha ${l.ir ? 'clicavel' : ''}" ${l.ir || ''}><div class="cmp-topo"><div class="cmp-nome"><strong>${esc(l.nome)}</strong>${l.sub ? ` <span class="mudo">· ${esc(l.sub)}</span>` : ''}</div><strong class="cmp-total">${fmt.format(l.v)}</strong></div><div class="cand-meta">${metaDe(l)}</div></div>`).join('')}</div>`) +
+      (vis.length > lim ? `<button type="button" class="botao secundario" data-bai-todos>Mostrar todos (${fmt.format(vis.length)})</button>` : '') +
+      `<p class="nota">${r.nota || ''}</p>`
+    const tit = `${nomeNivel} · ${lugar}`
+    B.export = {
+      csv: { nome: `${nomeArquivo(c.nome)}-${nomeArquivo(nomeNivel)}-${nomeArquivo(lugar)}.csv`, cab: [nomeNivel.replace(/s$/, '').replace('Municípi', 'Município').replace('Seçõe', 'Seção').replace('Locai', 'Local'), 'Onde', 'Votos 2026', '% do lugar', 'Posição', ...(tem22 ? ['Votos 2022', 'Diferença'] : [])],
+        linhas: vis.map((l) => [l.nome, l.sub || '', l.v, pctDe(l.v, l.val), l.pos ? `${l.pos.p}º de ${l.pos.n}` : '', ...(tem22 ? [l.v22, l.v - l.v22] : [])]) },
+      card: { turno: turnoDe(elId), nome: c.nome, cor, sub: `${c.partido} · nº ${c.numero} · ${aba.rotulo.replace(/ SC$/, '')}`, titulo: tit, subtitulo: rotOrdem,
+        linhas: linhasBairroCard(vis.map((l) => ({ nome: l.nome, v: l.v, pct: pctDe(l.v, l.val), va: tem22 ? variacao(l.v, l.v22) : null, extra: [l.sub, l.pos ? `${l.pos.p}º de ${l.pos.n}` : '', tem22 ? `2022: ${fmt.format(l.v22)}` : ''].filter(Boolean).join(' · ') }))),
+        rodape: tem22 ? `Desde 2022: cresceu em ${fmt.format(sobe)} e caiu em ${fmt.format(cai)} ${nomeNivel.toLowerCase()}` : '' },
     }
   }
-  if (!B.mun && p22 && !(arquivoAno(`dados2026/bairros-${elId}.json`).valor?.c[nr]?.e22)) {
-    const i22 = arquivoAno(`dados2022/bairros-${p22.el.id}.json`, re)
-    const y = i22.valor?.c[Number(p22.c.numero)]
-    if (y) corpo22 = `<div class="h22-item"><p><strong>Em 2022 · ${esc(ROTULO_ELEICAO[p22.el.id] || p22.el.nome)}</strong></p><ol class="bai-22">${y.v.slice(0, 5)
-      .map(([bi, v]) => { const [cd, nome, val] = i22.valor.b[bi]; return `<li>${esc(nome)} <span class="mudo">· ${esc(NOME_MUN.get(cd) || cd)} · ${fmt.format(v)} votos (${fmtPct.format(pctDe(v, val))}%)</span></li>` }).join('')}</ol></div>`
-  }
-  return `<section class="cartao bai"><h3>🏘️ Bairros onde foi mais votado</h3>${escolha}${modos}${corpo}${corpo22}
+  return `<section class="cartao bai"><h3>🏘️ Onde foi mais votado</h3>${controles}${corpo}
     ${B.export ? `<div class="exportar">${botaoCard('ficha-bairros', B.export.card)}<button type="button" class="botao secundario" data-bai-csv>⬇️ Planilha (CSV)</button></div>` : ''}
     <button type="button" class="botao secundario pro-atalho" data-pro-abrir>🔒 Mapa, perfil do eleitor e abstenção</button>
-    <p class="nota">Fonte: boletins de urna do ${turnoDe(elId)}º turno (TSE) e cadastro de locais de votação. 2022 ligado pelo nome completo do candidato. Toque num bairro para ver os locais e seções.</p></section>`
+    <p class="nota">Fonte: boletins de urna do ${turnoDe(elId)}º turno (TSE) e cadastro de locais de votação. 2022 ligado pelo nome completo do candidato. Toque numa linha para abrir na aba Bairros.</p></section>`
+}
+
+// linhas do cartão "Onde foi mais votado" para o nível escolhido: { linhas: [{ nome, sub, v, val, v22, pos, ir }], com22, nota, aviso } ou { msg }
+function dadosBairrosFicha(B, elId, aba, nr, p22, re) {
+  const cargo = aba.cargo
+  const nr22 = p22 ? Number(p22.c.numero) : null
+  // SC inteira, por bairro: índice pronto (só os destaques de cada ordem)
+  if (!B.mun && B.grupo === 'bairro') {
+    const idx = arquivoAno(`dados2026/bairros-${elId}.json`, re)
+    if (!idx.valor) return { msg: idx.erro ? 'Os bairros de 2026 ainda não estão no app.' : 'Carregando os bairros…' }
+    const x = idx.valor.c[nr]
+    if (!x) return { msg: 'Sem votos nos boletins de urna de SC.' }
+    const com22 = PREF.mostrar2022 && !!x.e22
+    const lista = x[B.modo] || x.v
+    return {
+      com22,
+      sobeCai: x.s,
+      linhas: lista.map(([bi, v, v22]) => { const [cd, nome, val] = idx.valor.b[bi]; return { nome, sub: NOME_MUN.get(cd) || cd, v, val, v22: v22 || 0, ir: `data-bai-ir="${esc(cd)}" data-bai-bairro="${esc(nome)}"` } }),
+      nota: `Teve votos em ${fmt.format(x.n)} bairros de SC; a lista mostra os ${lista.length} principais desta ordem. Escolha uma cidade para ver todos os bairros dela.`,
+    }
+  }
+  // SC inteira, por município
+  if (!B.mun) {
+    const M = arquivoAno(`dados2026/municipios-${elId}.json`, re)
+    if (!M.valor) return { msg: M.erro ? 'Os votos por município ainda não estão no app.' : 'Carregando os municípios…' }
+    const meus = M.valor.c[nr] || {}
+    let v22de = null
+    if (p22) {
+      const m22 = mun2022(p22.el.id)
+      if (!m22.valor) m22.then(re).catch(() => {})
+      else v22de = m22.valor.cand[p22.c.sq] || {}
+    }
+    const cds = new Set([...Object.keys(meus), ...(v22de ? Object.keys(v22de) : [])])
+    const linhas = [...cds].map((cd) => {
+      const v = meus[cd] || 0
+      let p = 1, n = 0
+      for (const outro of Object.values(M.valor.c)) {
+        const x = outro[cd] || 0
+        if (x > 0) n++
+        if (x > v) p++
+      }
+      return { nome: NOME_MUN.get(cd) || cd, sub: '', v, val: M.valor.validos[cd] || 0, v22: v22de ? v22de[cd] || 0 : 0, pos: v ? { p, n } : null, ir: `data-bai-lugar="${esc(cd)}"` }
+    })
+    return { com22: !!v22de, linhas, aviso: p22 && !v22de && PREF.mostrar2022 ? 'Carregando 2022…' : '', nota: `Votou em ${fmt.format(linhas.filter((l) => l.v).length)} de ${MUNICIPIOS_SC.length} municípios. Toque num município para ver os bairros dele.` }
+  }
+  // município ou região: zonas, bairros, locais ou seções (arquivos de seções de cada cidade)
+  const cds = B.mun.cds
+  const regiao = cds.length > 1
+  const arqs = cds.map((cd) => [cd, secoesAno(2026, cd, re)])
+  const prontos = arqs.filter(([, a]) => a)
+  const faltam = arqs.filter(([cd, a]) => !a && !erroSecoes(2026, cd)).length
+  if (!prontos.length) return { msg: faltam ? `Carregando as seções de ${esc(B.mun.nm)}…` : 'Os boletins deste lugar ainda não estão no app.' }
+  // 2022 só por zona e bairro (os códigos de locais e seções mudam entre eleições) e só com todos os arquivos
+  const usa22 = !!p22 && (B.grupo === 'zona' || B.grupo === 'bairro')
+  const faltam22 = usa22 ? cds.filter((cd) => !secoesAno(2022, cd, re) && !erroSecoes(2022, cd)).length : 0
+  const com22 = usa22 && !faltam22
+  const linhas = []
+  for (const [cd, arq] of prontos) {
+    const ag = agregarSecoes(arq, { id: elId, cargo, anul: new Set() }, {}, B.grupo, nr)
+    let m22 = null
+    if (com22) {
+      const a22 = secoesAno(2022, cd, re)
+      if (a22) m22 = new Map(agregarSecoes(a22, { id: p22.el.id, cargo: p22.el.cargo, anul: new Set() }, {}, B.grupo, nr22).grupos.map((g) => [g.chave, g.foco]))
+    }
+    const nmMun = NOME_MUN.get(cd) || cd
+    const vistos = new Set()
+    const add = (k, g) => {
+      vistos.add(k)
+      const v = g?.foco || 0
+      let nome = k, sub = regiao ? nmMun : '', ir = ''
+      if (B.grupo === 'zona') {
+        nome = `${Number(k)}ª zona${cd === FLORIPA_CD && ROTULO_ZONA[z4(k)] ? ` · ${ROTULO_ZONA[z4(k)]}` : ''}`
+        ir = `data-bai-ir="${esc(cd)}" data-bai-tipo="zona" data-bai-chave="${esc(k)}"`
+      } else if (B.grupo === 'bairro') ir = `data-bai-ir="${esc(cd)}" data-bai-bairro="${esc(k)}"`
+      else if (B.grupo === 'local') {
+        nome = tituloLocal((arq.locais[k] || [k])[0])
+        sub = [bairroDoLocal(arq, k), regiao ? nmMun : ''].filter(Boolean).join(' · ')
+        ir = `data-bai-ir="${esc(cd)}" data-bai-tipo="local" data-bai-chave="${esc(k)}"`
+      } else {
+        const [z, sec] = k.split('-')
+        nome = `Seção ${sec}`
+        sub = [tituloLocal((arq.locais[arq.secoes[k]] || [''])[0]), `${Number(z)}ª zona`, regiao ? nmMun : ''].filter(Boolean).join(' · ')
+        ir = `data-bai-ir="${esc(cd)}" data-bai-tipo="secao" data-bai-chave="${esc(k)}"`
+      }
+      linhas.push({ nome, sub, v, val: g?.validos || 0, v22: m22?.get(k) || 0, pos: g && v ? posicaoNoGrupo(g, nr) : null, ir })
+    }
+    for (const g of ag.grupos) if (g.foco > 0 || m22?.get(g.chave)) add(g.chave, g)
+    if (m22) for (const [k, v22] of m22) if (v22 > 0 && !vistos.has(k)) add(k, null)
+  }
+  const total = linhas.reduce((a, l) => a + l.v, 0)
+  return {
+    com22, linhas,
+    aviso: faltam ? `Carregando ${faltam} de ${cds.length} municípios…` : faltam22 ? `Carregando os dados de 2022 (${cds.length - faltam22} de ${cds.length})…` : '',
+    nota: `Total em ${esc(B.mun.nm)}: <strong>${fmt.format(total)}</strong> votos${com22 ? ` (2022: ${fmt.format(linhas.reduce((a, l) => a + l.v22, 0))})` : ''}${regiao ? ` · ${prontos.length} municípios` : ''}.${p22 && !usa22 ? ' A comparação com 2022 aparece por zona e por bairro (locais e seções mudam de número entre as eleições).' : ''}`,
+  }
 }
 
 /* ---------------- 🔒 Análises (área protegida) ---------------- */
