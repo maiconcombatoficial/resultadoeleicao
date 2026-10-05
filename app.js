@@ -4,11 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610052000'
-import { chanceDe, NIVEIS } from './chances.js?v=202610052000'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610052000'
-import { FLORIPA } from './floripa.js?v=202610052000'
-import { corPartido, corTexto } from './cores.js?v=202610052000'
+import { calcularVagas } from './vagas.js?v=202610052100'
+import { chanceDe, NIVEIS } from './chances.js?v=202610052100'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610052100'
+import { FLORIPA } from './floripa.js?v=202610052100'
+import { corPartido, corTexto } from './cores.js?v=202610052100'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -3439,7 +3439,7 @@ async function compartilharCard(card) {
   g.fillText(corta(card.subtitulo, W - 128), 64, 430)
   const linhas = card.linhas.slice(0, 8)
   const max = Math.max(1, ...linhas.map((l) => l.v))
-  let y = 468
+  let y = 456
   linhas.forEach((l, i) => {
     g.fillStyle = '#ffffff'
     g.beginPath()
@@ -3471,11 +3471,34 @@ async function compartilharCard(card) {
   if (card.rodape) {
     g.fillStyle = '#17201b'
     g.font = fonte(600, 28)
-    g.fillText(corta(card.rodape, W - 128), 64, H - 104)
+    g.fillText(corta(card.rodape, W - 128), 64, H - 114)
+  }
+  // foto do criador ao lado do @ (mesma imagem do rodapé do app)
+  const foto = await new Promise((ok) => {
+    const im = new Image()
+    im.onload = () => ok(im)
+    im.onerror = () => ok(null)
+    im.src = `img/maicon-combat.jpg?v=${VERSAO}`
+  })
+  let xArroba = 64
+  if (foto) {
+    const r = 38, cx = 64 + r, cy = H - 56
+    g.save()
+    g.beginPath()
+    g.arc(cx, cy, r + 5, 0, 2 * Math.PI)
+    g.fillStyle = '#ffdf00'
+    g.fill()
+    g.beginPath()
+    g.arc(cx, cy, r, 0, 2 * Math.PI)
+    g.clip()
+    const lado = Math.min(foto.naturalWidth, foto.naturalHeight)
+    g.drawImage(foto, (foto.naturalWidth - lado) / 2, (foto.naturalHeight - lado) / 2, lado, lado, cx - r, cy - r, 2 * r, 2 * r)
+    g.restore()
+    xArroba = 64 + 2 * r + 20
   }
   g.fillStyle = '#0b7a45'
   g.font = fonte(800, 34)
-  g.fillText('@maiconcombat', 64, H - 44)
+  g.fillText('@maiconcombat', xArroba, H - 44)
   g.textAlign = 'right'
   g.fillStyle = '#5f6b65'
   g.font = fonte(500, 24)
