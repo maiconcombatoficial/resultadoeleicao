@@ -768,3 +768,7 @@ html.com-detalhe, html.com-detalhe body { overflow: hidden; }
 .var-leg-barras span { width: 18px; display: inline-block; }
 .var-resumo { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0 2px; font-size: 0.85rem; }
 @media (prefers-color-scheme: dark) { .vb26 { filter: brightness(1.7) saturate(1.1); } }
+.pos-foco { font-weight: 800; color: var(--texto); white-space: nowrap; }
+.pos-foco.pos-top { color: var(--azul); }
+.pos-foco.pos-1 { color: var(--eleito); }
+@media (prefers-color-scheme: dark) { .pos-foco.pos-top { color: #8cbcff; } }
