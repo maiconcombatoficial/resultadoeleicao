@@ -4,11 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610051200'
-import { chanceDe, NIVEIS } from './chances.js?v=202610051200'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610051200'
-import { FLORIPA } from './floripa.js?v=202610051200'
-import { corPartido, corTexto } from './cores.js?v=202610051200'
+import { calcularVagas } from './vagas.js?v=202610051400'
+import { chanceDe, NIVEIS } from './chances.js?v=202610051400'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610051400'
+import { FLORIPA } from './floripa.js?v=202610051400'
+import { corPartido, corTexto } from './cores.js?v=202610051400'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -523,7 +523,7 @@ function quadroZonaFloripa(mun) {
   const info = infoZonaFloripa(mun.zona)
   const aberto = estado.locaisAbertos
   return `<div class="zona-info">
-    <p><strong>${Number(mun.zona)}ª zona · ${esc(info.rotulo)}</strong> <span class="mudo">· ${info.locais.length} locais · ${fmt.format(info.secoes)} seções · ${fmt.format(info.eleitores)} eleitores (2022)</span></p>
+    <p><strong>${Number(mun.zona)}ª zona · ${esc(info.rotulo)}</strong> <span class="mudo">· ${info.locais.length} locais · ${fmt.format(info.secoes)} seções · ${fmt.format(info.eleitores)} eleitores (2026)</span></p>
     <p class="zona-bairros">🏘️ ${info.bairros.map((b) => esc(b)).join(' · ')}</p>
     <button type="button" class="link-zonas" data-ver-locais>${aberto ? 'Esconder locais de votação ▴' : `Ver os ${info.locais.length} locais de votação ▾`}</button>
     ${aberto ? `<ul class="locais">${[...info.locais].sort((a, b) => b.eleitores - a.eleitores).map((l) => `<li><strong>${esc(l.local)}</strong><span class="mudo">${esc(l.bairro || 'bairro não informado')} · ${l.secoes.length} seções · ${fmt.format(l.eleitores)} eleitores</span></li>`).join('')}</ul>` : ''}
@@ -2984,9 +2984,10 @@ function secoesAno(ano, cd, aoCarregar) {
 const erroSecoes = (ano, cd) => !!ARQ_ANO.get(`dados${ano}/secoes/${cd}.json`)?.erro
 
 const BAIRRO_LOCAL_FLORIPA = new Map(FLORIPA.locais.map((l) => [`${l.z}-${l.cod}`, l.bairro]))
-// bairro do local de votação: em Florianópolis, a lista do TRE-SC; nos demais, o cadastro de locais do TSE
+// bairro do local de votação, gravado no arquivo de cada ano (cadastro de locais do TSE; em Florianópolis,
+// a lista do TRE-SC); a lista de floripa.js só entra se o arquivo não trouxer o bairro
 function bairroDoLocal(arq, loc) {
-  return (arq.cd === FLORIPA_CD && BAIRRO_LOCAL_FLORIPA.get(loc)) || arq.locais[loc]?.[2] || 'Bairro não informado'
+  return arq.locais[loc]?.[2] || (arq.cd === FLORIPA_CD && BAIRRO_LOCAL_FLORIPA.get(loc)) || 'Bairro não informado'
 }
 const tituloLocal = (s) => titulo22(s)
 function titulo22(s) {
@@ -3090,7 +3091,7 @@ function renderLocal(X, el) {
       return { g, nrTop, vTop }
     })
     .sort((a, b) => (X.foco != null ? b.g.foco - a.g.foco : b.g.validos - a.g.validos))
-  const maxLinhas = X.verGrupos ? linhasGrupo.length : 60
+  const maxLinhas = X.verGrupos ? linhasGrupo.length : grupo === 'secao' ? 100 : 300
   return `<section class="cartao">
       <h3>📍 ${esc(L.nm)} · ${el.ano}</h3>
       <div class="atalhos-chips migalhas">${migalhas}</div>
@@ -3111,6 +3112,7 @@ function renderLocal(X, el) {
       <div class="segmentado" role="group">${grupos
         .map((k) => `<button type="button" data-h22-grupo="${k}" aria-pressed="${grupo === k}">${{ zona: 'Zonas', local: 'Locais', bairro: 'Bairros', secao: 'Seções' }[k]}</button>`)
         .join('')}</div>
+      <p class="nota"><strong>${fmt.format(linhasGrupo.length)}</strong> ${{ zona: 'zonas', local: 'locais de votação', bairro: 'bairros', secao: 'seções' }[grupo]}${linhasGrupo.length > maxLinhas ? ` · mostrando ${fmt.format(maxLinhas)}` : ''}${ag.secoes ? ` · ${fmt.format(ag.secoes)} seções com boletim` : ''}${el.ano === 2026 ? ' (seções agregadas votam junto com a seção principal)' : ''}.</p>
       ${focoInfo ? `<p class="nota">Votos de <strong>${esc(focoInfo.nome)}</strong> em cada linha. <button type="button" class="link-zonas" data-h22-foco="">limpar</button></p>` : ''}
       <table class="tabela h22-grupos"><thead><tr><th>${{ zona: 'Zona', local: 'Local', bairro: 'Bairro', secao: 'Seção' }[grupo]}</th><th class="dir">${focoInfo ? 'Votos dele' : 'Válidos'}</th></tr></thead><tbody>${linhasGrupo
         .slice(0, maxLinhas)
@@ -3122,7 +3124,7 @@ function renderLocal(X, el) {
             <td class="dir">${focoInfo ? `<strong>${fmt.format(g.foco)}</strong><div class="cand-meta">${fmtPct.format(pctDe(g.foco, g.validos))}%</div>` : fmt.format(g.validos)}</td></tr>`
         })
         .join('')}</tbody></table>
-      ${linhasGrupo.length > maxLinhas ? `<button type="button" class="botao secundario" data-h22-vergrupos>Mostrar todas as ${linhasGrupo.length} linhas</button>` : ''}
+      ${linhasGrupo.length > maxLinhas ? `<button type="button" class="botao secundario" data-h22-vergrupos>Mostrar todas as ${fmt.format(linhasGrupo.length)} ${grupo === 'secao' ? 'seções' : 'linhas'}</button>` : ''}
       <p class="nota">Toque numa linha para entrar nela. Fonte: TSE, ${el.ano === 2026 ? 'boletins de urna de cada seção (2026)' : 'votação por seção eleitoral (2022)'}. Bairros pelo cadastro de locais de votação ${floripa ? 'do TRE-SC' : `do TSE (${el.ano})`}.</p>
     </section>`
 }
