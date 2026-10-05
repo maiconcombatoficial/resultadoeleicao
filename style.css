@@ -688,3 +688,29 @@ html.com-detalhe, html.com-detalhe body { overflow: hidden; }
   border: 1px solid var(--linha); background: var(--fundo); color: var(--texto); margin-bottom: 10px;
 }
 .h22-part td:first-child { width: 100%; }
+
+/* ---------- Sobre / preferências ---------- */
+.criador { border-top: 6px solid var(--amarelo); background: linear-gradient(160deg, color-mix(in srgb, var(--verde) 14%, var(--cartao)), var(--cartao) 60%); }
+.criador-topo { display: flex; align-items: center; gap: 12px; }
+.criador-icone { font-size: 2.6rem; }
+.criador-rot { margin: 0; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--mudo); font-weight: 700; }
+.criador h2 { margin: 0; font-size: 1.6rem; }
+.criador-link { display: inline-block; text-decoration: none; margin-top: 6px; overflow-wrap: anywhere; }
+.interruptor { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center; cursor: pointer; padding: 6px 0; }
+.interruptor input { position: absolute; opacity: 0; pointer-events: none; }
+.interruptor .trilho { width: 48px; height: 28px; border-radius: 999px; background: var(--linha); position: relative; transition: background 0.2s; }
+.interruptor .trilho span { position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / 30%); transition: transform 0.2s; }
+.interruptor input:checked + .trilho { background: var(--verde); }
+.interruptor input:checked + .trilho span { transform: translateX(20px); }
+.interruptor input:focus-visible + .trilho { outline: 2px solid var(--primaria); outline-offset: 2px; }
+.mini-pref { font-size: 0.85rem; color: var(--mudo); display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+
+/* ---------- 2022 por local ---------- */
+.h22-onde { display: grid; gap: 8px; margin-top: 12px; }
+#h22-mun { width: 100%; font: inherit; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--linha); background: var(--fundo); color: var(--texto); }
+.migalhas { align-items: center; margin-bottom: 8px; }
+.h22-cand.foco { box-shadow: 0 0 0 2px var(--cor); background: color-mix(in srgb, var(--cor) 10%, var(--cartao)); }
+.h22-cand[data-h22-foco] { cursor: pointer; }
+.h22-tot { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 560px) { .h22-tot { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.h22-grupos td:first-child { width: 100%; overflow-wrap: anywhere; }
