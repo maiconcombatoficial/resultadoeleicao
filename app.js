@@ -4,11 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610061300'
-import { chanceDe, NIVEIS } from './chances.js?v=202610061300'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610061300'
-import { FLORIPA } from './floripa.js?v=202610061300'
-import { corPartido, corTexto } from './cores.js?v=202610061300'
+import { calcularVagas } from './vagas.js?v=202610061400'
+import { chanceDe, NIVEIS } from './chances.js?v=202610061400'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610061400'
+import { FLORIPA } from './floripa.js?v=202610061400'
+import { corPartido, corTexto } from './cores.js?v=202610061400'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -2784,6 +2784,21 @@ detalheEl.addEventListener('click', (ev) => {
     if (ev.target.closest('[data-bai-todos]')) return ((det.bai.todos = true), renderDetalhe())
     const gr = ev.target.closest('[data-bai-grupo]')
     if (gr) return ((det.bai.grupo = gr.dataset.baiGrupo), (det.bai.todos = false), renderDetalhe())
+    const zb = ev.target.closest('[data-bai-zona]')
+    if (zb) {
+      const zs = (det.bai.zonas ??= new Set())
+      const k = zb.dataset.baiZona
+      if (zs.has(k) || det.bai.zonasTodas) {
+        zs.delete(k)
+        if (det.bai.zonasTodas) {
+          det.bai.zonasTodas = false
+          // mantém abertas as outras
+          for (const b of detalheEl.querySelectorAll('[data-bai-zona][aria-expanded="true"]')) if (b.dataset.baiZona !== k) zs.add(b.dataset.baiZona)
+        }
+      } else zs.add(k)
+      return renderDetalhe()
+    }
+    if (ev.target.closest('[data-bai-zonas-todas]')) return ((det.bai.zonasTodas = !det.bai.zonasTodas), det.bai.zonas?.clear(), renderDetalhe())
     const ir = ev.target.closest('[data-bai-ir]')
     if (ir) return irParaBairro(det, ir.dataset.baiIr, ir.dataset.baiBairro, ir.dataset.baiTipo, ir.dataset.baiChave)
   }
@@ -3901,6 +3916,7 @@ function listaComparada(itens, cor) {
         <div class="cmp-ano"><span class="cmp-rot">2022</span><span class="cmp-trilho"><span class="vb22" style="width:${barra(i.v22 || 0)}"></span></span><span class="cmp-num">${fmt.format(i.v22 || 0)}</span></div>
         <div class="cmp-ano agora"><span class="cmp-rot">2026</span><span class="cmp-trilho"><span class="vb26" style="width:${barra(i.v)};background:${cor}"></span></span><span class="cmp-num"><strong>${fmt.format(i.v)}</strong></span></div>
         ${i.meta ? `<div class="cand-meta">${i.meta}</div>` : ''}
+        ${i.extra || ''}
       </div>`
     })
     .join('')}</div>`
@@ -3983,24 +3999,40 @@ function secaoBairros(det, c, aba) {
     const minVal = B.modo === 'p' && B.grupo !== 'secao' ? (B.grupo === 'mun' ? 1000 : 300) : 0
     const vis = B.modo === 'up' ? ls.filter((l) => l.v > l.v22) : B.modo === 'dn' ? ls.filter((l) => l.v < l.v22) : ls.filter((l) => l.v > 0 && l.val >= minVal)
     const lim = B.todos ? vis.length : 15
+    // bairros de uma zona (sublista)
+    const blocoZona = (l) => {
+      if (!l.zonaKey) return ''
+      const aberta = !!l.filhos
+      const bt = `<button type="button" class="link-zonas zona-bairros-bt" data-bai-zona="${esc(l.zonaKey)}" aria-expanded="${aberta}">${aberta ? '▴ esconder os bairros desta zona' : '▾ ver os bairros desta zona'}</button>`
+      if (!aberta) return bt
+      const fs = l.filhos.filter((f) => f.v > 0 || (tem22 && f.v22 > 0))
+      const metaF = (f) => [f.pos ? `${f.pos.p === 1 ? '🏆 ' : ''}${f.pos.p}º de ${f.pos.n} no bairro` : '', `${fmtPct.format(pctDe(f.v, f.val))}% dos votos do bairro`].filter(Boolean).join(' · ')
+      return `${bt}<div class="zona-bairros">${fs.length
+        ? tem22
+          ? listaComparada(fs.map((f) => ({ nome: f.nome, v: f.v, v22: f.v22, meta: metaF(f), ir: f.ir })), cor)
+          : `<div class="cmp-lista">${fs.map((f) => `<div class="cmp-linha clicavel" ${f.ir}><div class="cmp-topo"><div class="cmp-nome"><strong>${esc(f.nome)}</strong></div><strong class="cmp-total">${fmt.format(f.v)}</strong></div><div class="cand-meta">${metaF(f)}</div></div>`).join('')}</div>`
+        : '<p class="nota">Sem votos nos bairros desta zona.</p>'}</div>`
+    }
     const metaDe = (l) => [l.pos ? `${l.pos.p === 1 ? '🏆 ' : ''}${l.pos.p}º de ${l.pos.n} ${naNivel}` : '', `${fmtPct.format(pctDe(l.v, l.val))}% dos votos ${B.grupo === 'mun' ? 'do município' : B.grupo === 'secao' ? 'da seção' : B.grupo === 'local' ? 'do local' : B.grupo === 'zona' ? 'da zona' : 'do bairro'}`].filter(Boolean).join(' · ')
     // o resumo conta todos os lugares (no índice de SC, vem pronto do estado inteiro)
     const [sobe, cai] = r.sobeCai || [ls.filter((l) => l.v > l.v22).length, ls.filter((l) => l.v < l.v22).length]
     const rotOrdem = { v: 'mais votos', p: 'maior %', up: 'onde mais cresceu desde 2022', dn: 'onde mais caiu desde 2022' }[B.modo]
     const lista = vis.slice(0, lim)
     corpo = (r.aviso ? `<p class="nota">${r.aviso}</p>` : '') +
+      (B.grupo === 'zona' && lista.length ? `<button type="button" class="link-zonas" data-bai-zonas-todas>${B.zonasTodas ? '▴ fechar os bairros de todas as zonas' : '▾ ver os bairros de todas as zonas'}</button>` : '') +
       (tem22 ? `<p class="var-resumo">Desde 2022 (${esc(ROTULO_ELEICAO[p22.el.id] || '')}): <span class="var var-alta-forte">▲ cresceu em ${fmt.format(sobe)} ${esc(nomeNivel.toLowerCase())}</span> <span class="var var-queda-forte">▼ caiu em ${fmt.format(cai)}</span></p>` + legendaVar(cor) : '') +
       (!lista.length
         ? `<p class="nota">${B.modo === 'up' ? 'Não cresceu em nenhum lugar' : B.modo === 'dn' ? 'Não caiu em nenhum lugar' : 'Sem votos'} em ${esc(lugar)}.</p>`
         : tem22
-          ? listaComparada(lista.map((l) => ({ nome: l.nome, sub: l.sub, v: l.v, v22: l.v22, meta: metaDe(l), ir: l.ir })), cor)
-          : `<div class="cmp-lista">${lista.map((l) => `<div class="cmp-linha ${l.ir ? 'clicavel' : ''}" ${l.ir || ''}><div class="cmp-topo"><div class="cmp-nome"><strong>${esc(l.nome)}</strong>${l.sub ? ` <span class="mudo">· ${esc(l.sub)}</span>` : ''}</div><strong class="cmp-total">${fmt.format(l.v)}</strong></div><div class="cand-meta">${metaDe(l)}</div></div>`).join('')}</div>`) +
+          ? listaComparada(lista.map((l) => ({ nome: l.nome, sub: l.sub, v: l.v, v22: l.v22, meta: metaDe(l), ir: l.ir, extra: blocoZona(l) })), cor)
+          : `<div class="cmp-lista">${lista.map((l) => `<div class="cmp-linha ${l.ir ? 'clicavel' : ''}" ${l.ir || ''}><div class="cmp-topo"><div class="cmp-nome"><strong>${esc(l.nome)}</strong>${l.sub ? ` <span class="mudo">· ${esc(l.sub)}</span>` : ''}</div><strong class="cmp-total">${fmt.format(l.v)}</strong></div><div class="cand-meta">${metaDe(l)}</div>${blocoZona(l)}</div>`).join('')}</div>`) +
       (vis.length > lim ? `<button type="button" class="botao secundario" data-bai-todos>Mostrar todos (${fmt.format(vis.length)})</button>` : '') +
       `<p class="nota">${r.nota || ''}</p>`
     const tit = `${nomeNivel} · ${lugar}`
     B.export = {
       csv: { nome: `${nomeArquivo(c.nome)}-${nomeArquivo(nomeNivel)}-${nomeArquivo(lugar)}.csv`, cab: [nomeNivel.replace(/s$/, '').replace('Municípi', 'Município').replace('Seçõe', 'Seção').replace('Locai', 'Local'), 'Onde', 'Votos 2026', '% do lugar', 'Posição', ...(tem22 ? ['Votos 2022', 'Diferença'] : [])],
-        linhas: vis.map((l) => [l.nome, l.sub || '', l.v, pctDe(l.v, l.val), l.pos ? `${l.pos.p}º de ${l.pos.n}` : '', ...(tem22 ? [l.v22, l.v - l.v22] : [])]) },
+        linhas: vis.flatMap((l) => [[l.nome, l.sub || '', l.v, pctDe(l.v, l.val), l.pos ? `${l.pos.p}º de ${l.pos.n}` : '', ...(tem22 ? [l.v22, l.v - l.v22] : [])],
+          ...(l.filhos || []).map((f) => [`${l.nome} › ${f.nome}`, l.sub || '', f.v, pctDe(f.v, f.val), f.pos ? `${f.pos.p}º de ${f.pos.n}` : '', ...(tem22 ? [f.v22, f.v - f.v22] : [])])]) },
       card: { turno: turnoDe(elId), foto: c.foto, nome: c.nome, cor, sub: `${c.partido} · nº ${c.numero} · ${aba.rotulo.replace(/ SC$/, '')}`, titulo: tit, subtitulo: rotOrdem,
         linhas: linhasBairroCard(vis.map((l) => ({ nome: l.nome, v: l.v, pct: pctDe(l.v, l.val), va: tem22 ? variacao(l.v, l.v22) : null, extra: [l.sub, l.pos ? `${l.pos.p}º de ${l.pos.n}` : '', tem22 ? `2022: ${fmt.format(l.v22)}` : ''].filter(Boolean).join(' · ') }))),
         rodape: tem22 ? `Desde 2022: cresceu em ${fmt.format(sobe)} e caiu em ${fmt.format(cai)} ${nomeNivel.toLowerCase()}` : '' },
@@ -4094,7 +4126,27 @@ function dadosBairrosFicha(B, elId, aba, nr, p22, re) {
         sub = [tituloLocal((arq.locais[arq.secoes[k]] || [''])[0]), `${Number(z)}ª zona`, regiao ? nmMun : ''].filter(Boolean).join(' · ')
         ir = `data-bai-ir="${esc(cd)}" data-bai-tipo="secao" data-bai-chave="${esc(k)}"`
       }
-      linhas.push({ nome, sub, v, val: g?.validos || 0, v22: m22?.get(k) || 0, pos: g && v ? posicaoNoGrupo(g, nr) : null, ir })
+      const linha = { nome, sub, v, val: g?.validos || 0, v22: m22?.get(k) || 0, pos: g && v ? posicaoNoGrupo(g, nr) : null, ir }
+      if (B.grupo === 'zona') {
+        // bairros da zona (abre e fecha), com 2022 da mesma zona
+        linha.zonaKey = `${cd}|${k}`
+        if (B.zonas?.has(linha.zonaKey) || B.zonasTodas) {
+          const gb = agregarSecoes(arq, { id: elId, cargo, anul: new Set() }, { zona: k }, 'bairro', nr)
+          let b22 = null
+          if (com22) {
+            const a22 = secoesAno(2022, cd, re)
+            if (a22) b22 = new Map(agregarSecoes(a22, { id: p22.el.id, cargo: p22.el.cargo, anul: new Set() }, { zona: k }, 'bairro', nr22).grupos.map((x) => [x.chave, x.foco]))
+          }
+          const ks = new Set(gb.grupos.filter((x) => x.foco > 0).map((x) => x.chave))
+          if (b22) for (const [kb, v22] of b22) if (v22 > 0) ks.add(kb)
+          const porChave = new Map(gb.grupos.map((x) => [x.chave, x]))
+          linha.filhos = [...ks].map((kb) => {
+            const x = porChave.get(kb)
+            return { nome: kb, v: x?.foco || 0, val: x?.validos || 0, v22: b22?.get(kb) || 0, pos: x?.foco ? posicaoNoGrupo(x, nr) : null, ir: `data-bai-ir="${esc(cd)}" data-bai-bairro="${esc(kb)}"` }
+          }).sort((a, b) => b.v - a.v || b.v22 - a.v22)
+        }
+      }
+      linhas.push(linha)
     }
     for (const g of ag.grupos) if (g.foco > 0 || m22?.get(g.chave)) add(g.chave, g)
     if (m22) for (const [k, v22] of m22) if (v22 > 0 && !vistos.has(k)) add(k, null)

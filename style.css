@@ -836,3 +836,7 @@ td .leg-ponto { margin-right: 4px; vertical-align: middle; }
 .cmp-num { text-align: right; font-variant-numeric: tabular-nums; }
 .cmp-linha .cand-meta { margin-top: 4px; }
 .cmp-total { font-variant-numeric: tabular-nums; flex: none; }
+.zona-bairros-bt { margin-top: 6px; }
+.zona-bairros { margin: 6px 0 2px 10px; padding-left: 10px; border-left: 3px solid var(--linha); }
+.zona-bairros .cmp-linha { padding: 8px 0; }
+.zona-bairros .cmp-linha:last-child { border-bottom: 0; }
