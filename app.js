@@ -4,11 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610061000'
-import { chanceDe, NIVEIS } from './chances.js?v=202610061000'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610061000'
-import { FLORIPA } from './floripa.js?v=202610061000'
-import { corPartido, corTexto } from './cores.js?v=202610061000'
+import { calcularVagas } from './vagas.js?v=202610061030'
+import { chanceDe, NIVEIS } from './chances.js?v=202610061030'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610061030'
+import { FLORIPA } from './floripa.js?v=202610061030'
+import { corPartido, corTexto } from './cores.js?v=202610061030'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -3496,16 +3496,17 @@ function bairrosDoCandidatoSC(el) {
   const tem22 = PREF.mostrar2022 && !!x.e22
   const cor = corPartido(c.partido)
   const lista = x.v
-  const max = Math.max(1, ...lista.map((e) => Math.max(e[1], tem22 ? e[2] || 0 : 0)))
   return `<section class="cartao bai"><h3>🏘️ Onde ${esc(c.nome)} foi mais votado em SC</h3>
     ${tem22 ? `<p class="var-resumo">Desde 2022 (${esc(ROTULO_ELEICAO[x.e22] || '')}): <span class="var var-alta-forte">▲ cresceu em ${fmt.format(x.s[0])} bairros</span> <span class="var var-queda-forte">▼ caiu em ${fmt.format(x.s[1])}</span></p>` : ''}
-    <table class="tabela bai-tabela"><thead><tr><th>Bairro</th><th class="dir">Votos</th><th class="dir">% bairro</th></tr></thead><tbody>${lista
-      .map(([bi, v, v22]) => {
+    ${tem22
+      ? listaComparada(lista.map(([bi, v, v22]) => { const [cd, nome, val] = idx.valor.b[bi]; return { nome, sub: NOME_MUN.get(cd) || cd, v, v22: v22 || 0, meta: `${fmtPct.format(pctDe(v, val))}% dos votos do bairro em 2026`, ir: `data-b26-ir="${esc(cd)}" data-b26-bairro="${esc(nome)}"` } }), cor)
+      : `<table class="tabela bai-tabela"><thead><tr><th>Bairro</th><th class="dir">Votos</th><th class="dir">% bairro</th></tr></thead><tbody>${lista
+      .map(([bi, v]) => {
         const [cd, nome, val] = idx.valor.b[bi]
-        return `<tr class="clicavel" data-b26-ir="${esc(cd)}" data-b26-bairro="${esc(nome)}"><td><strong>${esc(nome)}</strong><div class="cand-meta">${esc(NOME_MUN.get(cd) || cd)}</div>${tem22 ? blocoVariacao(v, v22 || 0, max, cor) : ''}</td>
+        return `<tr class="clicavel" data-b26-ir="${esc(cd)}" data-b26-bairro="${esc(nome)}"><td><strong>${esc(nome)}</strong><div class="cand-meta">${esc(NOME_MUN.get(cd) || cd)}</div></td>
           <td class="dir">${fmt.format(v)}</td><td class="dir">${fmtPct.format(pctDe(v, val))}%</td></tr>`
       })
-      .join('')}</tbody></table>
+      .join('')}</tbody></table>`}
     <p class="nota">Teve votos em ${fmt.format(x.n)} bairros de SC. Toque num bairro para ver os locais e seções, ou escolha um município acima para ver todos os bairros dele com a posição de ${esc(c.nome)}.</p>
   </section>`
 }
@@ -3817,18 +3818,28 @@ function variacao(v26, v22) {
   const r = dif / v22
   const pctTxt = `${r > 0 ? '+' : r < 0 ? '−' : ''}${fmtPct.format(Math.abs(100 * r))}%`
   const cls = !v26 || r <= -0.2 ? 'var-queda-forte' : r < 0 ? 'var-queda' : r >= 0.2 ? 'var-alta-forte' : r > 0 ? 'var-alta' : 'var-igual'
-  return { cls, txt: `${dif > 0 ? '▲' : dif < 0 ? '▼' : '＝'} ${dif > 0 ? '+' : dif < 0 ? '−' : ''}${fmt.format(Math.abs(dif))} (${pctTxt})`, dif }
+  // com poucos votos em 2022 o % engana (2 → 242 = +12.000%): mostra só a diferença
+  return { cls, txt: `${dif > 0 ? '▲' : dif < 0 ? '▼' : '＝'} ${dif > 0 ? '+' : dif < 0 ? '−' : ''}${fmt.format(Math.abs(dif))}${v22 >= 20 ? ` (${pctTxt})` : ' votos'}`, dif }
 }
-// selo + barras 2022 × 2026 de uma linha
-function blocoVariacao(v26, v22, max, cor) {
-  const va = variacao(v26, v22)
-  if (v22 == null) return ''
-  const w = (v) => (max ? Math.max(v ? 2 : 0, (100 * v) / max) : 0)
-  return `<div class="var-linha">${va ? `<span class="var ${va.cls}">${va.txt}</span>` : ''}<span class="mudo">2022: ${fmt.format(v22)}</span></div>
-    <div class="var-barras" aria-hidden="true"><span class="vb22" style="width:${w(v22)}%"></span><span class="vb26" style="width:${w(v26)}%;background:${cor}"></span></div>`
+// lista 2022 × 2026: cada bairro com duas linhas alinhadas (ano · barra · votos) e a variação no canto
+// itens: { nome, sub, v, v22, meta, ir: 'data-…="…"' }
+function listaComparada(itens, cor) {
+  const max = Math.max(1, ...itens.map((i) => Math.max(i.v, i.v22 || 0)))
+  const barra = (v) => `${Math.max(v ? 1.5 : 0, (100 * v) / max)}%`
+  return `<div class="cmp-lista" role="list">${itens
+    .map((i) => {
+      const va = variacao(i.v, i.v22 || 0)
+      return `<div class="cmp-linha ${i.ir ? 'clicavel' : ''}" role="listitem" ${i.ir || ''}>
+        <div class="cmp-topo"><div class="cmp-nome"><strong>${esc(i.nome)}</strong>${i.sub ? ` <span class="mudo">· ${esc(i.sub)}</span>` : ''}</div>${va ? `<span class="var ${va.cls}">${va.txt}</span>` : ''}</div>
+        <div class="cmp-ano"><span class="cmp-rot">2022</span><span class="cmp-trilho"><span class="vb22" style="width:${barra(i.v22 || 0)}"></span></span><span class="cmp-num">${fmt.format(i.v22 || 0)}</span></div>
+        <div class="cmp-ano agora"><span class="cmp-rot">2026</span><span class="cmp-trilho"><span class="vb26" style="width:${barra(i.v)};background:${cor}"></span></span><span class="cmp-num"><strong>${fmt.format(i.v)}</strong></span></div>
+        ${i.meta ? `<div class="cand-meta">${i.meta}</div>` : ''}
+      </div>`
+    })
+    .join('')}</div>`
 }
-const legendaVar = (cor) => `<div class="var-legenda"><span class="var var-alta-forte">▲ +20% ou mais</span><span class="var var-alta">▲ subiu</span><span class="var var-queda">▼ caiu</span><span class="var var-queda-forte">▼ −20% ou mais</span>
-  <span class="var-leg-barras"><span class="vb22"></span>2022 <span class="vb26" style="background:${cor}"></span>2026</span></div>`
+
+const legendaVar = (cor) => `<div class="var-legenda"><span class="var var-alta-forte">▲ +20% ou mais</span><span class="var var-alta">▲ subiu</span><span class="var var-queda">▼ caiu</span><span class="var var-queda-forte">▼ −20% ou mais</span></div>`
 
 // lugar do cartão de bairros: um município (código TSE) ou uma região ('meso:…' / 'micro:…')
 function lugarBairros(id) {
@@ -3919,10 +3930,12 @@ function secaoBairros(det, c, aba) {
         card: { turno: turnoDe(elId), nome: c.nome, cor, sub: `${c.partido} · nº ${c.numero} · ${aba.rotulo.replace(/ SC$/, '')}`, titulo: 'Bairros onde foi mais votado', subtitulo: `Santa Catarina · ${rot}`, linhas: linhasBairroCard(itens.map((i) => ({ ...i, extra: i.mun + (i.va ? ` · 2022: ${fmt.format(i.v22)}` : '') }))), rodape: tem22 ? `Desde 2022: cresceu em ${fmt.format(x.s[0])} bairros e caiu em ${fmt.format(x.s[1])}` : '' },
       }
       corpo = (tem22 ? resumoVar(x.s[0], x.s[1], ROTULO_ELEICAO[x.e22]) + legendaVar(cor) : '') +
-        tabela(lista.map(([bi, v, v22]) => {
-          const [cd, nome, val] = idx.valor.b[bi]
-          return linha(nome, NOME_MUN.get(cd) || cd, v, val, cd, nome, tem22 ? blocoVariacao(v, v22 || 0, max, cor) : '')
-        }).join('')) +
+        (tem22
+          ? listaComparada(lista.map(([bi, v, v22]) => { const [cd, nome, val] = idx.valor.b[bi]; return { nome, sub: NOME_MUN.get(cd) || cd, v, v22: v22 || 0, meta: `${fmtPct.format(pctDe(v, val))}% dos votos do bairro em 2026`, ir: `data-bai-ir="${esc(cd)}" data-bai-bairro="${esc(nome)}"` } }), cor)
+          : tabela(lista.map(([bi, v]) => {
+              const [cd, nome, val] = idx.valor.b[bi]
+              return linha(nome, NOME_MUN.get(cd) || cd, v, val, cd, nome)
+            }).join(''))) +
         `<p class="nota">Teve votos em ${fmt.format(x.n)} bairros de SC. ${B.modo === 'p' ? '"Maior %" considera bairros com pelo menos 300 votos válidos.' : ''} % bairro = votos ÷ votos válidos do cargo no bairro.${tem22 ? ' Variação = votos de 2026 − votos de 2022 no mesmo bairro.' : ''}</p>`
     }
   } else {
@@ -3965,7 +3978,9 @@ function secaoBairros(det, c, aba) {
       corpo = (faltam ? `<p class="nota">Carregando ${faltam} de ${cds.length} municípios…</p>` : faltam22 ? `<p class="nota">Carregando os dados de 2022 (${cds.length - faltam22} de ${cds.length})…</p>` : '') +
         (m22 ? resumoVar(sobe, cai, ROTULO_ELEICAO[p22.el.id]) + legendaVar(cor) : '') +
         (vis.length
-          ? tabela(vis.slice(0, lim).map((l) => linha(l.k, regiao ? l.mun : '', l.v, l.val, l.cd, l.k, `<div class="cand-meta">${l.pos?.p === 1 ? '🏆 ' : ''}${textoPosicao(l.pos)} no bairro</div>` + (m22 ? blocoVariacao(l.v, l.v22, max, cor) : ''))).join('')) +
+          ? (m22
+              ? listaComparada(vis.slice(0, lim).map((l) => ({ nome: l.k, sub: regiao ? l.mun : '', v: l.v, v22: l.v22, meta: `${l.pos?.p === 1 ? '🏆 ' : ''}${textoPosicao(l.pos)} no bairro · ${fmtPct.format(pctDe(l.v, l.val))}% dos votos do bairro em 2026`, ir: `data-bai-ir="${esc(l.cd)}" data-bai-bairro="${esc(l.k)}"` })), cor)
+              : tabela(vis.slice(0, lim).map((l) => linha(l.k, regiao ? l.mun : '', l.v, l.val, l.cd, l.k, `<div class="cand-meta">${l.pos?.p === 1 ? '🏆 ' : ''}${textoPosicao(l.pos)} no bairro</div>`)).join(''))) +
             (vis.length > lim ? `<button type="button" class="botao secundario" data-bai-todos>Mostrar os ${vis.length} bairros</button>` : '')
           : `<p class="nota">${B.modo === 'up' ? 'Não cresceu em nenhum bairro' : B.modo === 'dn' ? 'Não caiu em nenhum bairro' : 'Sem votos'} em ${esc(B.mun.nm)}.</p>`) +
         `<p class="nota">Total em ${esc(B.mun.nm)}: <strong>${fmt.format(linhas.reduce((a, l) => a + l.v, 0))}</strong> votos${m22 ? ` (2022: ${fmt.format(linhas.reduce((a, l) => a + l.v22, 0))})` : ''}${regiao ? ` · ${prontos.length} municípios` : ''}.</p>`
