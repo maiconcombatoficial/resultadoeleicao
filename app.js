@@ -4,11 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610060900'
-import { chanceDe, NIVEIS } from './chances.js?v=202610060900'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610060900'
-import { FLORIPA } from './floripa.js?v=202610060900'
-import { corPartido, corTexto } from './cores.js?v=202610060900'
+import { calcularVagas } from './vagas.js?v=202610060930'
+import { chanceDe, NIVEIS } from './chances.js?v=202610060930'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610060930'
+import { FLORIPA } from './floripa.js?v=202610060930'
+import { corPartido, corTexto } from './cores.js?v=202610060930'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -1133,7 +1133,7 @@ conteudo.addEventListener('click', (ev) => {
   if (h('[data-h22-mun]')) {
     const b = h('[data-h22-mun]')
     X.local = b.dataset.h22Mun ? { cd: b.dataset.h22Mun, nm: b.dataset.h22Nm } : null
-    Object.assign(X, { buscaMun: '', foco: null, grupo: 'zona', verTodos: false, verGrupos: false })
+    Object.assign(X, { buscaMun: '', foco: X === B26 ? X.foco : null, grupo: X === B26 && X.foco != null ? 'bairro' : 'zona', verTodos: false, verGrupos: false })
     renderizar()
     return
   }
@@ -1164,6 +1164,29 @@ conteudo.addEventListener('click', (ev) => {
     if (h('[data-h22-vergrupos]')) return ((X.verGrupos = true), renderizar())
   }
   if (h('[data-h22-todos-est]')) return ((B26.verTodos = true), renderizar())
+  if (estado.aba.tipo === 'bai') {
+    const fav = h('[data-b26-fav]')
+    if (fav) {
+      const [abaId, sq] = fav.dataset.b26Fav.split('|')
+      const cargo = ABAS.find((a) => a.id === abaId)?.cargo
+      const sel = eleicaoDoCargo(cargo)
+      Object.assign(B26, { focoSq: sq, buscaCand: '' })
+      if (sel !== B26.sel) {
+        B26.sel = sel
+        B26.foco = null
+        return carregar()
+      }
+      return renderizar()
+    }
+    if (h('[data-b26-cand]')) return ((B26.foco = Number(h('[data-b26-cand]').dataset.b26Cand)), (B26.buscaCand = ''), B26.local && (B26.grupo = 'bairro'), renderizar())
+    if (h('[data-b26-limpar]')) return ((B26.foco = null), renderizar())
+    const ir = h('[data-b26-ir]')
+    if (ir) {
+      Object.assign(B26, { local: { cd: ir.dataset.b26Ir, nm: NOME_MUN.get(ir.dataset.b26Ir) || ir.dataset.b26Ir, bairro: ir.dataset.b26Bairro }, grupo: 'local', verTodos: false, verGrupos: false })
+      renderizar()
+      return window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
   if (h('[data-csv-local]') && X.csv) return baixarCSV(X.csv)
   const h22Btn = ev.target.closest('[data-h22]')
   if (h22Btn) {
@@ -1238,6 +1261,11 @@ conteudo.addEventListener('change', (ev) => {
 conteudo.addEventListener('input', (ev) => {
   if (ev.target.id === 'mun-busca') {
     mostrarSugestoes()
+    return
+  }
+  if (ev.target.id === 'b26-busca') {
+    B26.buscaCand = ev.target.value
+    renderizar()
     return
   }
   if (ev.target.id === 'h22-mun') {
@@ -1957,7 +1985,7 @@ function renderizar() {
     return
   }
   if (estado.aba.tipo === 'h22' || estado.aba.tipo === 'bai' || estado.aba.tipo === 'pro') {
-    const idf = ['h22-busca', 'h22-mun', 'pro-busca'].includes(document.activeElement?.id) ? document.activeElement.id : null
+    const idf = ['h22-busca', 'h22-mun', 'pro-busca', 'b26-busca'].includes(document.activeElement?.id) ? document.activeElement.id : null
     const foco = idf ? document.activeElement.selectionStart : null
     conteudo.innerHTML = estado.aba.tipo === 'pro' ? renderPro() : estado.aba.tipo === 'bai' ? renderBairros26() : render2022()
     if (estado.aba.tipo === 'pro' && PRO.chave && PRO.aba === 'mapa') montarMapaPro()
@@ -3214,7 +3242,7 @@ function renderLocal(X, el) {
       </div>
     </section>
     <section class="cartao"><h3>Mais votados aqui · ${esc(ROTULO_ELEICAO[el.id] || el.nome)}</h3>
-      <p class="nota">Toque num candidato para ver os votos dele em cada ${grupo === 'secao' ? 'seção' : grupo}.</p>
+      <p class="nota">Toque num candidato para ver quantos votos teve em cada ${grupo === 'secao' ? 'seção' : grupo}.</p>
       <ul class="h22-lista">${linhasRank}</ul>
       ${ranking.length > 25 && !X.verTodos ? `<button type="button" class="botao secundario" data-h22-todos>Mostrar todos (${ranking.length})</button>` : ''}
     </section>
@@ -3224,7 +3252,7 @@ function renderLocal(X, el) {
         .join('')}</div>
       <p class="nota"><strong>${fmt.format(linhasGrupo.length)}</strong> ${{ zona: 'zonas', local: 'locais de votação', bairro: 'bairros', secao: 'seções' }[grupo]}${linhasGrupo.length > maxLinhas ? ` · mostrando ${fmt.format(maxLinhas)}` : ''}${ag.secoes ? ` · ${fmt.format(ag.secoes)} seções com boletim` : ''}${el.ano === 2026 ? ' (seções agregadas votam junto com a seção principal)' : ''}.</p>
       ${focoInfo ? `<p class="nota">Votos de <strong>${esc(focoInfo.nome)}</strong> em cada linha. <button type="button" class="link-zonas" data-h22-foco="">limpar</button></p>` : ''}
-      <table class="tabela h22-grupos"><thead><tr><th>${{ zona: 'Zona', local: 'Local', bairro: 'Bairro', secao: 'Seção' }[grupo]}</th><th class="dir">${focoInfo ? 'Votos dele' : 'Válidos'}</th></tr></thead><tbody>${linhasGrupo
+      <table class="tabela h22-grupos"><thead><tr><th>${{ zona: 'Zona', local: 'Local', bairro: 'Bairro', secao: 'Seção' }[grupo]}</th><th class="dir">${focoInfo ? 'Votos' : 'Válidos'}</th></tr></thead><tbody>${linhasGrupo
         .slice(0, maxLinhas)
         .map(({ g, nrTop, vTop }) => {
           const top = nrTop != null ? nomeVotavel(el, nrTop) : null
@@ -3425,7 +3453,62 @@ function renderBairros26() {
       ${seletorLocal(B26)}
       <p class="nota">Votos de cada seção eleitoral do ${turnoDe(B26.sel)}º turno, lidos dos boletins de urna publicados pelo TSE e somados pelo bairro do local de votação. Escolha um município para ver por zona, bairro, local e seção.${TURNO === 2 && !INDICE26.has('t2-c1') && !INDICE26.has('t2-c3') ? ' <strong>Os boletins do 2º turno entram aqui assim que forem processados.</strong>' : ''}</p>
     </section>
-    ${!el ? `<div class="cartao vazio">${B26.erro ? 'Não consegui carregar os candidatos agora.' : 'Carregando…'}</div>` : B26.local ? renderLocal(B26, el) : fortesPorBairro(el)}`
+    ${el ? seletorCandidatoB26(el) : ''}
+    ${!el ? `<div class="cartao vazio">${B26.erro ? 'Não consegui carregar os candidatos agora.' : 'Carregando…'}</div>` : B26.local ? renderLocal(B26, el) : B26.foco != null ? bairrosDoCandidatoSC(el) : fortesPorBairro(el)}`
+}
+
+// candidato em foco na aba Bairros: os ❤️ acompanhados (de qualquer cargo) e uma busca
+function seletorCandidatoB26(el) {
+  if (B26.focoSq) {
+    const c = el.candidatos.find((x) => x.sqcand === B26.focoSq)
+    if (c) B26.foco = Number(c.numero)
+    B26.focoSq = null
+  }
+  // acompanhados de cargos com dados por seção; deputados primeiro
+  const ordemCargo = { depest: 0, depfed: 1, senador: 2, governador: 3, presidente: 4 }
+  const favs = favoritos.filter((f) => f.aba in ordemCargo).sort((a, b) => ordemCargo[a.aba] - ordemCargo[b.aba])
+  const atual = el.porNumero?.get(String(B26.foco)) || el.candidatos.find((c) => Number(c.numero) === B26.foco)
+  const termo = semAcento((B26.buscaCand || '').trim())
+  const achados = termo ? el.candidatos.filter((x) => x.valido && semAcento(`${x.nome} ${x.nomeCompleto} ${x.partido} ${x.numero}`).includes(termo)).slice(0, 10) : []
+  const rotCargo = (abaId) => (ABAS.find((a) => a.id === abaId)?.rotulo || '').replace(/ SC$/, '')
+  return `<section class="cartao b26-cand">
+    <h3>👤 Candidato</h3>
+    ${favs.length
+      ? `<div class="atalhos-grupo"><span class="atalhos-rot">❤️ Acompanhados</span><div class="atalhos-chips">${favs
+          .map((f) => {
+            const ativo = atual && atual.sqcand === f.sqcand
+            return `<button type="button" class="atalho ${ativo ? 'ativo' : ''}" data-b26-fav="${esc(f.aba)}|${esc(f.sqcand)}" style="${estiloCor(corPartido(f.partido))}">❤️ ${esc(f.nome)} <small>${esc(f.partido || '')} · ${esc(rotCargo(f.aba))}</small></button>`
+          })
+          .join('')}</div></div>`
+      : '<p class="nota">Toque no ♡ de um candidato (nas abas de cada cargo ou na ficha) para ele aparecer aqui como atalho.</p>'}
+    <input id="b26-busca" type="search" autocomplete="off" placeholder="🔎 Buscar ${esc(ROTULO_26[B26.sel] || 'candidato')} por nome, partido ou número…" value="${esc(B26.buscaCand || '')}">
+    ${termo ? `<div class="atalhos-chips">${achados.map((x) => `<button type="button" class="atalho" data-b26-cand="${esc(x.numero)}" style="${estiloCor(corPartido(x.partido))}">${esc(x.nome)} <small>${esc(x.partido)} · ${esc(x.numero)}</small></button>`).join('') || '<span class="nota">Nenhum candidato encontrado neste cargo.</span>'}</div>` : ''}
+    ${atual ? `<div class="pro-cand" style="${estiloCor(corPartido(atual.partido))}">Em destaque: <span class="cand-nome">${esc(atual.nome)}</span> ${pill(atual.partido)} <span class="mudo">nº ${esc(atual.numero)} · ${fmt.format(atual.votos)} votos em SC</span> <button type="button" class="link-zonas" data-b26-limpar>limpar</button> <button type="button" class="link-zonas" ${attrCand(atual, ABAS.find((a) => a.cargo === el.cargo)?.id, UF)}>abrir ficha ›</button></div>` : ''}
+  </section>`
+}
+
+// candidato em foco, SC inteira: os bairros onde foi mais votado no estado
+function bairrosDoCandidatoSC(el) {
+  const idx = arquivoAno(`dados2026/bairros-${el.id}.json`)
+  if (!idx.valor) return `<div class="cartao vazio">${idx.erro ? 'Os bairros ainda não estão no app.' : 'Carregando os bairros…'}</div>`
+  const c = el.candidatos.find((x) => Number(x.numero) === B26.foco)
+  const x = idx.valor.c[B26.foco]
+  if (!c || !x) return '<div class="cartao vazio">Sem votos nos boletins de urna para este candidato.</div>'
+  const tem22 = PREF.mostrar2022 && !!x.e22
+  const cor = corPartido(c.partido)
+  const lista = x.v
+  const max = Math.max(1, ...lista.map((e) => Math.max(e[1], tem22 ? e[2] || 0 : 0)))
+  return `<section class="cartao bai"><h3>🏘️ Onde ${esc(c.nome)} foi mais votado em SC</h3>
+    ${tem22 ? `<p class="var-resumo">Desde 2022 (${esc(ROTULO_ELEICAO[x.e22] || '')}): <span class="var var-alta-forte">▲ cresceu em ${fmt.format(x.s[0])} bairros</span> <span class="var var-queda-forte">▼ caiu em ${fmt.format(x.s[1])}</span></p>` : ''}
+    <table class="tabela bai-tabela"><thead><tr><th>Bairro</th><th class="dir">Votos</th><th class="dir">% bairro</th></tr></thead><tbody>${lista
+      .map(([bi, v, v22]) => {
+        const [cd, nome, val] = idx.valor.b[bi]
+        return `<tr class="clicavel" data-b26-ir="${esc(cd)}" data-b26-bairro="${esc(nome)}"><td><strong>${esc(nome)}</strong><div class="cand-meta">${esc(NOME_MUN.get(cd) || cd)}</div>${tem22 ? blocoVariacao(v, v22 || 0, max, cor) : ''}</td>
+          <td class="dir">${fmt.format(v)}</td><td class="dir">${fmtPct.format(pctDe(v, val))}%</td></tr>`
+      })
+      .join('')}</tbody></table>
+    <p class="nota">Teve votos em ${fmt.format(x.n)} bairros de SC. Toque num bairro para ver os locais e seções, ou escolha um município acima para ver todos os bairros dele com a posição de ${esc(c.nome)}.</p>
+  </section>`
 }
 
 // sem município escolhido: o bairro mais forte de cada candidato
