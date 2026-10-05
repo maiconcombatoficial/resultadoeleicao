@@ -4,10 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610050204'
-import { chanceDe, NIVEIS } from './chances.js?v=202610050204'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610050204'
-import { corPartido, corTexto } from './cores.js?v=202610050204'
+import { calcularVagas } from './vagas.js?v=202610050231'
+import { chanceDe, NIVEIS } from './chances.js?v=202610050231'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610050231'
+import { FLORIPA } from './floripa.js?v=202610050231'
+import { corPartido, corTexto } from './cores.js?v=202610050231'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -287,7 +288,7 @@ const MUNICIPIOS_DEMO = [
   ['80390', 'Biguaçu'], ['82511', 'Santo Amaro da Imperatriz'], ['81353', 'Governador Celso Ramos'],
   ['80152', 'Antônio Carlos'], ['80055', 'Águas Mornas'], ['82392', 'São Pedro de Alcântara'],
   ['82678', 'Tijucas'], ['81302', 'Garopaba'], ['82155', 'Paulo Lopes'], ['82171', 'Rancho Queimado'],
-].map(([cd, nm, capital]) => ({ cd, nm, capital: !!capital, zonas: capital ? ['0012', '0013', '0100', '0101'] : cd === '81795' ? ['0019', '0095', '0096'] : [String(10 + (Number(cd) % 90)).padStart(4, '0')] }))
+].map(([cd, nm, capital]) => ({ cd, nm, capital: !!capital, zonas: capital ? ['0012', '0013', '0100'] : cd === '81795' ? ['0019', '0095', '0096'] : [String(10 + (Number(cd) % 90)).padStart(4, '0')] }))
 
 const municipiosCache = new Map()
 const municipiosProntos = new Map() // eleição → lista já carregada (para uso síncrono)
@@ -487,6 +488,53 @@ function nomeLocal(d) {
   if (mun?.regiao) return `${mun.nm} (${mun.membros.length} municípios)`
   if (mun) return `${mun.nm} (SC)${mun.zona ? ` · ${Number(mun.zona)}ª zona` : ''}`
   return NOMES_ABR[d.abrangencia] || d.abrangencia.toUpperCase()
+}
+
+/* ---------------- Florianópolis: bairros por zona ---------------- */
+
+const FLORIPA_CD = '81051'
+const z4 = (z) => String(z).padStart(4, '0')
+// apelido de cada zona, resumindo os bairros que ela abrange (lista do TRE-SC)
+const ROTULO_ZONA = { '0012': 'Centro e Continente', '0013': 'Leste e Sul da Ilha', '0100': 'Norte da Ilha' }
+function infoZonaFloripa(z) {
+  const k = z4(z)
+  const zz = String(Number(z))
+  const bairros = FLORIPA.zonas[zz]?.bairros || []
+  const locais = FLORIPA.locais.filter((l) => l.z === zz)
+  return { rotulo: ROTULO_ZONA[k] || '', bairros, locais, eleitores: locais.reduce((a, l) => a + l.eleitores, 0), secoes: locais.reduce((a, l) => a + l.secoes.length, 0) }
+}
+// bairro → zona (lista oficial + bairros dos endereços dos locais)
+const BAIRROS_FLORIPA = (() => {
+  const m = new Map()
+  for (const [z, { bairros }] of Object.entries(FLORIPA.zonas)) for (const b of bairros) m.set(b, z4(z))
+  for (const l of FLORIPA.locais) if (l.bairro && !m.has(l.bairro)) m.set(l.bairro, z4(l.z))
+  return [...m.entries()].map(([nome, zona]) => ({ nome, zona })).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+})()
+
+function quadroZonaFloripa(mun) {
+  if (!mun || mun.cd !== FLORIPA_CD || mun.regiao) return ''
+  if (!mun.zona)
+    return `<div class="zona-info"><p class="nota">Florianópolis tem 3 zonas eleitorais: ${Object.keys(ROTULO_ZONA)
+      .map((z) => `<strong>${Number(z)}ª</strong> (${ROTULO_ZONA[z]})`)
+      .join(', ')}. Toque numa zona para ver os bairros e os locais de votação, ou busque o bairro abaixo.</p>${buscaBairro()}</div>`
+  const info = infoZonaFloripa(mun.zona)
+  const aberto = estado.locaisAbertos
+  return `<div class="zona-info">
+    <p><strong>${Number(mun.zona)}ª zona · ${esc(info.rotulo)}</strong> <span class="mudo">· ${info.locais.length} locais · ${fmt.format(info.secoes)} seções · ${fmt.format(info.eleitores)} eleitores (2022)</span></p>
+    <p class="zona-bairros">🏘️ ${info.bairros.map((b) => esc(b)).join(' · ')}</p>
+    <button type="button" class="link-zonas" data-ver-locais>${aberto ? 'Esconder locais de votação ▴' : `Ver os ${info.locais.length} locais de votação ▾`}</button>
+    ${aberto ? `<ul class="locais">${[...info.locais].sort((a, b) => b.eleitores - a.eleitores).map((l) => `<li><strong>${esc(l.local)}</strong><span class="mudo">${esc(l.bairro || 'bairro não informado')} · ${l.secoes.length} seções · ${fmt.format(l.eleitores)} eleitores</span></li>`).join('')}</ul>` : ''}
+    ${buscaBairro()}
+  </div>`
+}
+
+function buscaBairro() {
+  const termo = semAcento((estado.buscaBairro || '').trim())
+  const achados = termo ? BAIRROS_FLORIPA.filter((b) => semAcento(b.nome).includes(termo)).slice(0, 12) : []
+  return `<div class="busca-bairro">
+    <input id="bairro-busca" type="search" autocomplete="off" placeholder="🏘️ Em qual zona fica o bairro…? (ex.: Campeche)" value="${esc(estado.buscaBairro || '')}">
+    ${termo ? `<div class="atalhos-chips">${achados.length ? achados.map((b) => `<button type="button" class="atalho" data-zona="${b.zona}">${esc(b.nome)} → ${Number(b.zona)}ª zona</button>`).join('') : '<span class="nota">Bairro não encontrado na lista do TRE-SC.</span>'}</div>` : ''}
+  </div>`
 }
 
 function zonasDe(mun) {
@@ -936,8 +984,10 @@ function seletorZonas(mun) {
   return `<div class="zonas" role="group" aria-label="Zona eleitoral">
     <span class="zonas-rot">Zona eleitoral:</span>
     <button type="button" class="filtro ${mun.zona ? '' : 'ativo'}" data-zona="">Todas</button>
-    ${zonas.map((z) => `<button type="button" class="filtro ${mun.zona === z ? 'ativo' : ''}" data-zona="${esc(z)}">${Number(z)}ª</button>`).join('')}
-  </div>`
+    ${zonas
+      .map((z) => `<button type="button" class="filtro ${mun.zona === z ? 'ativo' : ''}" data-zona="${esc(z)}">${Number(z)}ª${mun.cd === FLORIPA_CD && ROTULO_ZONA[z4(z)] ? ` · ${ROTULO_ZONA[z4(z)]}` : ''}</button>`)
+      .join('')}
+  </div>${quadroZonaFloripa(mun)}`
 }
 
 async function mostrarSugestoes() {
@@ -960,13 +1010,17 @@ async function mostrarSugestoes() {
       return ia - ib || a.nm.localeCompare(b.nm, 'pt-BR')
     })
     .slice(0, 40)
+  const bairros = termo.length >= 3 ? BAIRROS_FLORIPA.filter((b) => semAcento(b.nome).includes(termo)).slice(0, 6) : []
   ul.innerHTML =
     `<li><button type="button" data-mun-limpar class="sug-estado">🗺️ Santa Catarina inteira</button></li>` +
+    bairros
+      .map((b) => `<li><button type="button" data-bairro-zona="${b.zona}">🏘️ ${esc(b.nome)} <span class="mudo">· Florianópolis, ${Number(b.zona)}ª zona</span></button></li>`)
+      .join('') +
     (achados.length
       ? achados
           .map((m) => `<li><button type="button" data-mun-cd="${esc(m.cd)}" data-mun-nm="${esc(m.nm)}">${esc(m.nm)}${m.capital ? ' <span class="mudo">· capital</span>' : ''}</button></li>`)
           .join('')
-      : `<li class="sug-info">Nenhum município encontrado para “${esc(input.value)}”.</li>`)
+      : bairros.length ? '' : `<li class="sug-info">Nenhum município encontrado para “${esc(input.value)}”.</li>`)
   ul.hidden = false
 }
 
@@ -1043,8 +1097,24 @@ conteudo.addEventListener('click', (ev) => {
     renderizar()
     return
   }
+  if (ev.target.closest('[data-ver-locais]')) {
+    estado.locaisAbertos = !estado.locaisAbertos
+    renderizar()
+    return
+  }
+  const bzBtn = ev.target.closest('[data-bairro-zona]')
+  if (bzBtn) {
+    estado.atalhos = false
+    estado.mun = { cd: FLORIPA_CD, nm: 'Florianópolis', zona: bzBtn.dataset.bairroZona }
+    gravarLocal(`${PREFIXO}municipio:v1`, JSON.stringify(estado.mun))
+    estado.dados = null
+    carregar()
+    return
+  }
   const zonaBtn = ev.target.closest('[data-zona]')
   if (zonaBtn) {
+    estado.buscaBairro = ''
+    estado.locaisAbertos = false
     escolherZona(zonaBtn.dataset.zona)
     return
   }
@@ -1094,6 +1164,11 @@ conteudo.addEventListener('click', (ev) => {
 conteudo.addEventListener('input', (ev) => {
   if (ev.target.id === 'mun-busca') {
     mostrarSugestoes()
+    return
+  }
+  if (ev.target.id === 'bairro-busca') {
+    estado.buscaBairro = ev.target.value
+    renderizar()
     return
   }
   if (ev.target.id === 'busca-mun') {
@@ -1769,7 +1844,8 @@ function renderizar() {
     estado.renderPendente = true
     return
   }
-  const busca = document.activeElement?.id === 'busca'
+  const focoId = ['busca', 'bairro-busca'].includes(document.activeElement?.id) ? document.activeElement.id : null
+  const busca = !!focoId
   const pos = busca ? document.activeElement.selectionStart : null
   if (estado.aba.tipo === 'fav') {
     conteudo.innerHTML = renderFavoritos()
@@ -1793,7 +1869,7 @@ function renderizar() {
     (estado.aba.tipo === 'maj' ? renderMajoritario(d) : renderProporcional(d)) +
     `<p class="nota centro">Dados do TSE de ${esc(d.atualizadoEm || '—')}</p>`
   if (busca) {
-    const el = $('#busca')
+    const el = document.getElementById(focoId)
     el?.focus()
     el?.setSelectionRange(pos, pos)
   }
@@ -2136,7 +2212,9 @@ function secaoPorMunicipio(det, aba, cor) {
     if (z.carregando) return `<tr class="pm-zona"><td colspan="3" class="mudo">Consultando ${z.feitos} de ${z.total} zonas…</td></tr>`
     return z.linhas
       .sort((a, b) => b.votos - a.votos)
-      .map((zl) => `<tr class="pm-zona" style="${estiloCor(cor)}"><td>↳ ${Number(zl.zona)}ª zona<div class="cand-meta">${zl.semDados ? 'sem dados ainda' : `${fmtPct.format(zl.pst)}% apurado · ${zl.pos}º na zona`}</div></td><td class="dir">${fmt.format(zl.votos)}</td><td class="dir">${fmtPct.format(zl.pct)}%</td></tr>`)
+      .map((zl) => `<tr class="pm-zona" style="${estiloCor(cor)}"><td>↳ ${Number(zl.zona)}ª zona${l.cd === FLORIPA_CD && ROTULO_ZONA[z4(zl.zona)] ? ` · ${ROTULO_ZONA[z4(zl.zona)]}` : ''}${
+        l.cd === FLORIPA_CD ? `<div class="cand-meta zona-bairros-mini">${esc(infoZonaFloripa(zl.zona).bairros.slice(0, 8).join(', '))}${infoZonaFloripa(zl.zona).bairros.length > 8 ? '…' : ''}</div>` : ''
+      }<div class="cand-meta">${zl.semDados ? 'sem dados ainda' : `${fmtPct.format(zl.pst)}% apurado · ${zl.pos}º na zona`}</div></td><td class="dir">${fmt.format(zl.votos)}</td><td class="dir">${fmtPct.format(zl.pct)}%</td></tr>`)
       .join('')
   }
   const agrupar = pm.escopo === 'todos' && !pm.carregando ? pm.agrupar || 'mun' : 'mun'

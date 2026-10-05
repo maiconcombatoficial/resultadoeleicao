@@ -651,3 +651,19 @@ html.com-detalhe, html.com-detalhe body { overflow: hidden; }
 .grafico .legenda { margin: 4px 0; }
 .comp-mun th.dir { white-space: normal; text-align: right; font-size: 0.68rem; line-height: 1.2; width: 26%; }
 .comp-mun td.dir { width: 26%; }
+
+/* ---------- Florianópolis: bairros por zona ---------- */
+.zona-info { background: var(--cartao); border: 1px solid var(--linha); border-left: 5px solid #0a5ea8; border-radius: 12px; padding: 10px 12px; display: grid; gap: 6px; }
+.zona-info p { margin: 0; overflow-wrap: anywhere; }
+.zona-bairros { font-size: 0.88rem; line-height: 1.5; }
+.zona-bairros-mini { font-style: italic; }
+.locais { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 340px; overflow-y: auto; }
+.locais li { display: grid; background: var(--fundo); border-radius: 8px; padding: 6px 10px; font-size: 0.86rem; overflow-wrap: anywhere; }
+.locais li .mudo { font-size: 0.78rem; }
+#bairro-busca {
+  width: 100%; font: inherit; font-size: 0.9rem; padding: 8px 12px; border-radius: 10px;
+  border: 1px solid var(--linha); background: var(--fundo); color: var(--texto);
+}
+.busca-bairro { display: grid; gap: 8px; }
+.zonas .filtro { white-space: normal; text-align: left; }
+.zonas .filtro { flex: 0 1 auto; max-width: 100%; }
