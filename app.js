@@ -4,11 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610050319'
-import { chanceDe, NIVEIS } from './chances.js?v=202610050319'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610050319'
-import { FLORIPA } from './floripa.js?v=202610050319'
-import { corPartido, corTexto } from './cores.js?v=202610050319'
+import { calcularVagas } from './vagas.js?v=202610050336'
+import { chanceDe, NIVEIS } from './chances.js?v=202610050336'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610050336'
+import { FLORIPA } from './floripa.js?v=202610050336'
+import { corPartido, corTexto } from './cores.js?v=202610050336'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -2729,7 +2729,7 @@ function interruptor(id, ligado, rotulo, desc) {
 
 function renderSobre() {
   return `<section class="cartao criador">
-      <div class="criador-topo"><span class="criador-icone" aria-hidden="true">🥋</span>
+      <div class="criador-topo"><span class="criador-foto"><span aria-hidden="true">MC</span><img src="img/maicon-combat.jpg?v=${VERSAO}" alt="Foto de Maicon Combat" onerror="this.remove()"></span>
         <div><p class="criador-rot">Criado e desenvolvido por</p><h2>Maicon Combat</h2></div></div>
       <p>Este aplicativo de acompanhamento da apuração das Eleições 2026, com foco em Santa Catarina, foi idealizado por <strong>Maicon Combat</strong>.</p>
       <a class="botao criador-link" href="https://maiconcombat.com.br" target="_blank" rel="noopener">Conheça o Maicon Combat · maiconcombat.com.br ↗</a>
