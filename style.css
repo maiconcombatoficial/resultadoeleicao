@@ -808,3 +808,6 @@ td .leg-ponto { margin-right: 4px; vertical-align: middle; }
 .transf-barra { display: flex; height: 22px; border-radius: 6px; overflow: hidden; background: var(--fundo); gap: 2px; }
 .transf-barra span { display: flex; align-items: center; justify-content: center; color: #fff; font-size: 0.72rem; font-weight: 800; min-width: 0; text-shadow: 0 1px 1px rgb(0 0 0 / 35%); }
 .botao-card { white-space: nowrap; }
+/* mapa base no modo escuro: escurece só os blocos do mapa, não os círculos */
+.pro-mapa.mapa-escuro .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9) saturate(0.4); }
+.pro-mapa:not(.mapa-escuro) .leaflet-tile-pane { filter: saturate(0.35) brightness(1.04); }
