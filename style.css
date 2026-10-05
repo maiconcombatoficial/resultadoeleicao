@@ -621,6 +621,9 @@ html.com-detalhe, html.com-detalhe body { overflow: hidden; }
   background: var(--cartao); border: 1px solid var(--linha); border-radius: 12px; padding: 10px 14px; box-shadow: var(--sombra);
 }
 .atalhos-toggle.aberto { border-color: var(--verde); }
+.assoc-linha { display: grid; gap: 4px; margin-bottom: 8px; min-width: 0; }
+.assoc-chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.assoc-chips .atalho { flex: 0 0 auto; }
 
 /* ---------- comparação ---------- */
 .botao.comparar { width: 100%; margin-top: 4px; }
