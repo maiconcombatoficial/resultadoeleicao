@@ -4,11 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610050417'
-import { chanceDe, NIVEIS } from './chances.js?v=202610050417'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610050417'
-import { FLORIPA } from './floripa.js?v=202610050417'
-import { corPartido, corTexto } from './cores.js?v=202610050417'
+import { calcularVagas } from './vagas.js?v=202610051000'
+import { chanceDe, NIVEIS } from './chances.js?v=202610051000'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610051000'
+import { FLORIPA } from './floripa.js?v=202610051000'
+import { corPartido, corTexto } from './cores.js?v=202610051000'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -26,6 +26,7 @@ const ELEICOES = {
 const ABAS = [
   { id: 'favoritos', rotulo: '❤️ Acompanhados', tipo: 'fav', abrangencias: ['br'] },
   { id: 'municipios', rotulo: '📊 Municípios', tipo: 'mun', abrangencias: ['sc'] },
+  { id: 'bairros', rotulo: '🏘️ Bairros', tipo: 'bai', abrangencias: ['sc'] },
   { id: 'h2022', rotulo: '📅 2022', tipo: 'h22', abrangencias: ['sc'] },
   { id: 'presidente', rotulo: 'Presidente', cargo: 1, eleicao: 'federal', tipo: 'maj', abrangencias: ['br', UF] },
   { id: 'senador', rotulo: 'Senado SC', cargo: 5, eleicao: 'estadual', tipo: 'maj', abrangencias: [UF], turno1: true },
@@ -610,13 +611,14 @@ async function carregar() {
   const abr = abrAtual()
   statusEl.textContent = 'Atualizando…'
   statusEl.className = 'status carregando'
-  if (!estado.dados) conteudo.innerHTML = (['fav', 'mun', 'h22', 'sobre'].includes(aba.tipo) ? '' : cabecalhoAbrangencia()) + `<div class="cartao vazio">Carregando ${esc(aba.rotulo)}${munAtual() ? ` em ${esc(munAtual().nm)}` : ''}…${munAtual()?.regiao ? '<br><small id="progresso-regiao" class="mudo"></small>' : ''}</div>`
+  if (!estado.dados) conteudo.innerHTML = (['fav', 'mun', 'h22', 'bai', 'sobre'].includes(aba.tipo) ? '' : cabecalhoAbrangencia()) + `<div class="cartao vazio">Carregando ${esc(aba.rotulo)}${munAtual() ? ` em ${esc(munAtual().nm)}` : ''}…${munAtual()?.regiao ? '<br><small id="progresso-regiao" class="mudo"></small>' : ''}</div>`
   if (aba.tipo === 'fav') return carregarFavoritos(ctrl)
   if (aba.tipo === 'mun') return carregarPainelMunicipios(ctrl)
   if (aba.tipo === 'h22') {
     if (!PREF.mostrar2022) return trocarAba('presidente')
     return carregar2022(ctrl)
   }
+  if (aba.tipo === 'bai') return carregarBairros(ctrl)
   if (aba.tipo === 'sobre') {
     estado.dados = { sobre: true }
     renderizar()
@@ -1125,45 +1127,48 @@ conteudo.addEventListener('click', (ev) => {
     return
   }
   const h = (sel) => ev.target.closest(sel)
+  const X = estadoLocal()
   if (h('[data-h22-mun]')) {
     const b = h('[data-h22-mun]')
-    H22.local = b.dataset.h22Mun ? { cd: b.dataset.h22Mun, nm: b.dataset.h22Nm } : null
-    Object.assign(H22, { buscaMun: '', foco: null, grupo: 'zona', verTodos: false, verGrupos: false })
+    X.local = b.dataset.h22Mun ? { cd: b.dataset.h22Mun, nm: b.dataset.h22Nm } : null
+    Object.assign(X, { buscaMun: '', foco: null, grupo: 'zona', verTodos: false, verGrupos: false })
     renderizar()
     return
   }
-  if (H22.local) {
-    const L = H22.local
+  if (X.local) {
+    const L = X.local
     const acao = (mud) => {
       Object.assign(L, mud)
-      H22.verGrupos = false
+      X.verGrupos = false
       renderizar()
       document.querySelector('.migalhas')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
     if (h('[data-h22-nivel]')) return acao(h('[data-h22-nivel]').dataset.h22Nivel === 'mun' ? { zona: null, localVot: null, bairro: null, secao: null } : { localVot: null, bairro: null, secao: null })
-    if (h('[data-h22-zona]')) return acao({ zona: h('[data-h22-zona]').dataset.h22Zona, localVot: null, bairro: null, secao: null, _g: (H22.grupo = 'local') })
-    if (h('[data-h22-local]')) return acao({ localVot: h('[data-h22-local]').dataset.h22Local, zona: h('[data-h22-local]').dataset.h22Local.split('-')[0], secao: null, _g: (H22.grupo = 'secao') })
-    if (h('[data-h22-bairro]')) return acao({ bairro: h('[data-h22-bairro]').dataset.h22Bairro, secao: null, _g: (H22.grupo = 'local') })
+    if (h('[data-h22-zona]')) return acao({ zona: h('[data-h22-zona]').dataset.h22Zona, localVot: null, bairro: null, secao: null, _g: (X.grupo = 'local') })
+    if (h('[data-h22-local]')) return acao({ localVot: h('[data-h22-local]').dataset.h22Local, zona: h('[data-h22-local]').dataset.h22Local.split('-')[0], secao: null, _g: (X.grupo = 'secao') })
+    if (h('[data-h22-bairro]')) return acao({ bairro: h('[data-h22-bairro]').dataset.h22Bairro, secao: null, _g: (X.grupo = 'local') })
     if (h('[data-h22-secao]')) return acao({ secao: h('[data-h22-secao]').dataset.h22Secao })
     if (h('[data-h22-grupo]')) {
-      H22.grupo = h('[data-h22-grupo]').dataset.h22Grupo
-      H22.verGrupos = false
+      X.grupo = h('[data-h22-grupo]').dataset.h22Grupo
+      X.verGrupos = false
       return renderizar()
     }
     if (h('[data-h22-foco]')) {
       const v = h('[data-h22-foco]').dataset.h22Foco
-      H22.foco = v === '' || Number(v) === H22.foco ? null : Number(v)
+      X.foco = v === '' || Number(v) === X.foco ? null : Number(v)
       return renderizar()
     }
-    if (h('[data-h22-todos]')) return ((H22.verTodos = true), renderizar())
-    if (h('[data-h22-vergrupos]')) return ((H22.verGrupos = true), renderizar())
+    if (h('[data-h22-todos]')) return ((X.verTodos = true), renderizar())
+    if (h('[data-h22-vergrupos]')) return ((X.verGrupos = true), renderizar())
   }
+  if (h('[data-h22-todos-est]')) return ((B26.verTodos = true), renderizar())
   const h22Btn = ev.target.closest('[data-h22]')
   if (h22Btn) {
-    H22.sel = h22Btn.dataset.h22
-    H22.busca = ''
-    H22.foco = null
-    renderizar()
+    X.sel = h22Btn.dataset.h22
+    X.busca = ''
+    X.foco = null
+    if (X === B26) carregar()
+    else renderizar()
     return
   }
   const zonaBtn = ev.target.closest('[data-zona]')
@@ -1226,7 +1231,7 @@ conteudo.addEventListener('input', (ev) => {
     return
   }
   if (ev.target.id === 'h22-mun') {
-    H22.buscaMun = ev.target.value
+    estadoLocal().buscaMun = ev.target.value
     renderizar()
     return
   }
@@ -1924,10 +1929,10 @@ function renderizar() {
     conteudo.innerHTML = renderSobre()
     return
   }
-  if (estado.aba.tipo === 'h22') {
+  if (estado.aba.tipo === 'h22' || estado.aba.tipo === 'bai') {
     const idf = ['h22-busca', 'h22-mun'].includes(document.activeElement?.id) ? document.activeElement.id : null
     const foco = idf ? document.activeElement.selectionStart : null
-    conteudo.innerHTML = render2022()
+    conteudo.innerHTML = estado.aba.tipo === 'bai' ? renderBairros26() : render2022()
     if (foco != null) {
       const el = document.getElementById(idf)
       el?.focus()
@@ -2266,6 +2271,7 @@ function renderDetalheConteudo() {
       ${ptsPos.length > 1 && new Set(ptsPos.map((p) => p.y)).size > 1 ? graficoLinha(ptsPos, { cor, fmtY: (v) => `${Math.round(-v)}º`, titulo: 'Posição (mais alto = melhor)' }) : ''}
     </section>
     ${secao2022(c, d, aba)}
+    ${secaoBairros(det, c, aba)}
     <section class="cartao"><h3>${c.eleito || d.tseDefinido ? 'Situação oficial (TSE)' : 'Chance de reverter'}</h3>${textoChance(d, c, aba)}</section>
     <section class="cartao"><h3>Disputa</h3>${blocoDisputa(d, c, aba)}</section>
     ${vices}
@@ -2674,6 +2680,14 @@ detalheEl.addEventListener('click', (ev) => {
     det.comp.porMun.verTodos = true
     return renderDetalhe()
   }
+  if (det?.bai) {
+    if (ev.target.closest('[data-bai-sc]')) return ((det.bai.mun = null), (det.bai.todos = false), renderDetalhe())
+    const modo = ev.target.closest('[data-bai-modo]')
+    if (modo) return ((det.bai.modo = modo.dataset.baiModo), renderDetalhe())
+    if (ev.target.closest('[data-bai-todos]')) return ((det.bai.todos = true), renderDetalhe())
+    const ir = ev.target.closest('[data-bai-ir]')
+    if (ir) return irParaBairro(det, ir.dataset.baiIr, ir.dataset.baiBairro)
+  }
   const pmBtn = ev.target.closest('[data-por-mun]')
   if (pmBtn) return carregarPorMunicipio(pmBtn.dataset.porMun)
   const zBtn = ev.target.closest('[data-zonas-mun]')
@@ -2688,6 +2702,31 @@ detalheEl.addEventListener('click', (ev) => {
     renderDetalhe()
   }
 })
+detalheEl.addEventListener('change', (ev) => {
+  const sel = ev.target.closest('[data-bai-mun]')
+  const det = estado.detalhe
+  if (!sel || !det?.bai) return
+  det.bai.mun = sel.value ? { cd: sel.value, nm: NOME_MUN.get(sel.value) || sel.value } : null
+  det.bai.todos = false
+  renderDetalhe()
+})
+// abre a aba "Bairros" no bairro escolhido, com o candidato em destaque
+function irParaBairro(det, cd, bairro) {
+  const aba = ABAS.find((a) => a.id === det.aba)
+  const d = dadosDetalhe()
+  const c = d?.candidatos.find((x) => x.sqcand === det.sqcand)
+  if (!aba?.cargo || !c) return
+  Object.assign(B26, { sel: `t1-c${aba.cargo}`, local: { cd, nm: NOME_MUN.get(cd) || cd, bairro }, grupo: 'local', foco: Number(c.numero), buscaMun: '', verTodos: false, verGrupos: false })
+  const ir = () => {
+    trocarAba('bairros')
+    window.scrollTo({ top: 0 })
+  }
+  // fechar a ficha volta uma entrada do histórico; troca de aba só depois disso
+  const voltar = history.state?.detalhe
+  fecharDetalhe()
+  if (voltar) window.addEventListener('popstate', () => setTimeout(ir), { once: true })
+  else ir()
+}
 detalheEl.addEventListener('input', (ev) => {
   if (ev.target.id === 'comp-busca' && estado.detalhe) {
     estado.detalhe.buscaComp = ev.target.value
@@ -2747,7 +2786,8 @@ function renderSobre() {
       <ul class="det-lista">
         <li><strong>2026, ao vivo:</strong> arquivos oficiais de divulgação do <a href="https://resultados.tse.jus.br/oficial/app/index.html" target="_blank" rel="noopener">TSE</a>, consultados direto do seu aparelho a cada 30 segundos.</li>
         <li><strong>2022:</strong> arquivos oficiais do Portal de Dados Abertos do <a href="https://dadosabertos.tse.jus.br/dataset/resultados-2022" target="_blank" rel="noopener">TSE</a>: votação por candidato, município e zona, e votação por seção eleitoral (SC).</li>
-        <li><strong>Bairros e locais de votação de Florianópolis:</strong> TRE-SC.</li>
+        <li><strong>2026 por seção e bairro:</strong> boletins de urna de cada seção do 1º turno, publicados pelo TSE em "Dados de urna", somados pelo bairro do local de votação.</li>
+        <li><strong>Bairros dos locais de votação:</strong> cadastro de locais de votação do TSE (2022 e 2026); em Florianópolis, a lista do TRE-SC.</li>
         <li><strong>Regiões e população:</strong> IBGE.</li>
       </ul>
       <p class="nota">Projeto independente, sem vínculo com a Justiça Eleitoral. Projeções e chances de reverter são estimativas do app; vale sempre o resultado oficial do TSE.</p>
@@ -2771,6 +2811,10 @@ function resumo2022() {
       H22.indice = new Map()
       for (const el of j.eleicoes) {
         el.id = `t${el.turno}-c${el.cargo}`
+        el.ano = 2022
+        el.anul = new Set(j.anulados.filter((x) => x.startsWith(el.id + '-')).map((x) => Number(x.split('-')[2])))
+        el.partidos = j.partidos
+        el.situ = (c) => situ2022(c.sit)
         el.candidatos.forEach((x, i) => {
           const c = { sq: x[0], numero: x[1], nome: x[2], nomeCompleto: x[3], partido: x[4], fed: x[5], votos: x[6], sit: x[7], pos: i + 1 }
           el.candidatos[i] = c
@@ -2913,25 +2957,37 @@ function atual2026(c22) {
   return H22.atual?.get(chaveNomeCompleto(c22.nomeCompleto)) || null
 }
 
-// arquivos por município com os votos de cada seção (dados2022/secoes/<código TSE>.json)
-function secoes2022(cd) {
-  if (!H22.sec) H22.sec = new Map()
-  if (!H22.sec.has(cd)) {
-    const p = fetch(`dados2022/secoes/${cd}.json?v=${VERSAO}`).then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP'))))
+// arquivos por município com os votos de cada seção (dados<ano>/secoes/<código TSE>.json):
+// 2022 vem do Portal de Dados Abertos; 2026, dos boletins de urna publicados pelo TSE.
+// Também os índices de bairros por candidato (dados<ano>/bairros-<eleição>.json).
+const ARQ_ANO = new Map()
+function arquivoAno(caminho, aoCarregar = () => renderizar()) {
+  if (!ARQ_ANO.has(caminho)) {
+    const p = fetch(`${caminho}?v=${VERSAO}`).then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP'))))
     p.then((j) => {
       p.valor = j
-      renderizar()
+      aoCarregar()
     }).catch(() => {
-      H22.sec.delete(cd)
-      H22.erroSec = cd
-      renderizar()
+      p.erro = true
+      setTimeout(() => ARQ_ANO.get(caminho) === p && ARQ_ANO.delete(caminho), 30_000)
+      aoCarregar()
     })
-    H22.sec.set(cd, p)
+    ARQ_ANO.set(caminho, p)
   }
-  return H22.sec.get(cd).valor || null
+  return ARQ_ANO.get(caminho)
 }
+function secoesAno(ano, cd, aoCarregar) {
+  const p = arquivoAno(`dados${ano}/secoes/${cd}.json`, aoCarregar)
+  if (p.valor) p.valor.cd = cd
+  return p.valor || null
+}
+const erroSecoes = (ano, cd) => !!ARQ_ANO.get(`dados${ano}/secoes/${cd}.json`)?.erro
 
 const BAIRRO_LOCAL_FLORIPA = new Map(FLORIPA.locais.map((l) => [`${l.z}-${l.cod}`, l.bairro]))
+// bairro do local de votação: em Florianópolis, a lista do TRE-SC; nos demais, o cadastro de locais do TSE
+function bairroDoLocal(arq, loc) {
+  return (arq.cd === FLORIPA_CD && BAIRRO_LOCAL_FLORIPA.get(loc)) || arq.locais[loc]?.[2] || 'Bairro não informado'
+}
 const tituloLocal = (s) => titulo22(s)
 function titulo22(s) {
   const MIN = new Set(['de', 'da', 'do', 'das', 'dos', 'e', 'em'])
@@ -2944,9 +3000,9 @@ function titulo22(s) {
 }
 
 // Soma os votos das seções do município filtrando por zona/local/bairro/seção, e agrupa.
-function agregar2022(arq, el, filtro, grupo, foco) {
+function agregarSecoes(arq, el, filtro, grupo, foco) {
   const votos = arq.votos[el.id] || {}
-  const anul = new Set(H22.resumo.anulados.filter((x) => x.startsWith(el.id + '-')).map((x) => Number(x.split('-')[2])))
+  const anul = el.anul
   const prop = el.cargo === 6 || el.cargo === 7
   const total = new Map()
   const grupos = new Map()
@@ -2954,7 +3010,7 @@ function agregar2022(arq, el, filtro, grupo, foco) {
   for (const [zs, arr] of Object.entries(votos)) {
     const [z] = zs.split('-')
     const loc = arq.secoes[zs]
-    const bairro = arq.cd === FLORIPA_CD ? BAIRRO_LOCAL_FLORIPA.get(loc) || 'Bairro não informado' : null
+    const bairro = bairroDoLocal(arq, loc)
     if (filtro.zona && z !== filtro.zona) continue
     if (filtro.local && loc !== filtro.local) continue
     if (filtro.bairro && bairro !== filtro.bairro) continue
@@ -2979,7 +3035,7 @@ function agregar2022(arq, el, filtro, grupo, foco) {
 
 function nomeVotavel(el, nr) {
   if (nr < 100 && (el.cargo === 6 || el.cargo === 7)) {
-    const sg = H22.resumo.partidos[String(nr)] || String(nr)
+    const sg = el.partidos?.[String(nr)] || String(nr)
     return { nome: `Legenda ${sg}`, partido: sg, legenda: true }
   }
   const c = el.porNumero?.get(String(nr))
@@ -2990,7 +3046,7 @@ function rotuloGrupo(arq, grupo, chave) {
   if (grupo === 'zona') return `${Number(chave)}ª zona${arq.cd === FLORIPA_CD && ROTULO_ZONA[z4(chave)] ? ` · ${ROTULO_ZONA[z4(chave)]}` : ''}`
   if (grupo === 'local') {
     const l = arq.locais[chave] || ['Local ' + chave, '']
-    const b = arq.cd === FLORIPA_CD ? BAIRRO_LOCAL_FLORIPA.get(chave) : null
+    const b = bairroDoLocal(arq, chave)
     return `${tituloLocal(l[0])}<div class="cand-meta">${b ? esc(b) + ' · ' : ''}${esc(tituloLocal(l[1]))} · ${Number(chave.split('-')[0])}ª zona</div>`
   }
   if (grupo === 'bairro') return esc(chave)
@@ -2999,17 +3055,17 @@ function rotuloGrupo(arq, grupo, chave) {
   return `Seção ${sec}<div class="cand-meta">${esc(tituloLocal(l[0]))} · ${Number(z)}ª zona</div>`
 }
 
-function render2022Local(el) {
-  const L = H22.local
-  const arq = secoes2022(L.cd)
-  if (!arq) return `<section class="cartao vazio">${H22.erroSec === L.cd ? 'Não consegui carregar as seções deste município.' : `Carregando as seções de ${esc(L.nm)}…`}</section>`
-  arq.cd = L.cd
-  if (!el.porNumero) el.porNumero = new Map(el.candidatos.map((c) => [c.numero, c]))
+// Explorador de um município: zonas › locais › bairros › seções. X é o estado (H22 para 2022, B26 para 2026).
+function renderLocal(X, el) {
+  const L = X.local
+  const arq = secoesAno(el.ano, L.cd)
+  if (!arq) return `<section class="cartao vazio">${erroSecoes(el.ano, L.cd) ? (el.ano === 2026 ? 'Os boletins deste município ainda não estão no app.' : 'Não consegui carregar as seções deste município.') : `Carregando as seções de ${esc(L.nm)}…`}</section>`
+  if (!el.porNumero) el.porNumero = new Map(el.candidatos.map((c) => [String(c.numero), c]))
   const floripa = L.cd === FLORIPA_CD
-  const grupos = ['zona', 'local', ...(floripa ? ['bairro'] : []), 'secao']
-  const grupo = grupos.includes(H22.grupo) ? H22.grupo : 'zona'
+  const grupos = ['zona', 'bairro', 'local', 'secao']
+  const grupo = grupos.includes(X.grupo) ? X.grupo : 'zona'
   const filtro = { zona: L.zona, local: L.localVot, bairro: L.bairro, secao: L.secao }
-  const ag = agregar2022(arq, el, filtro, grupo, H22.foco)
+  const ag = agregarSecoes(arq, el, filtro, grupo, X.foco)
   const ranking = [...ag.total.entries()].sort((a, b) => b[1] - a[1])
   const prop = el.cargo === 6 || el.cargo === 7
   const zonas = [...new Set(Object.keys(arq.secoes).map((zs) => zs.split('-')[0]))].sort((a, b) => a - b)
@@ -3020,12 +3076,12 @@ function render2022Local(el) {
     L.localVot ? `<span class="atalho ativo">${esc(tituloLocal((arq.locais[L.localVot] || [''])[0]))}</span>` : '',
     L.secao ? `<span class="atalho ativo">Seção ${L.secao.split('-')[1]}</span>` : '',
   ].filter(Boolean).join('<span class="mudo">›</span>')
-  const focoInfo = H22.foco != null ? nomeVotavel(el, H22.foco) : null
-  const linhasRank = ranking.slice(0, H22.verTodos ? 400 : 25).map(([nr, v], i) => {
+  const focoInfo = X.foco != null ? nomeVotavel(el, X.foco) : null
+  const linhasRank = ranking.slice(0, X.verTodos ? 400 : 25).map(([nr, v], i) => {
     const n = nomeVotavel(el, nr)
     const cor = corPartido(n.partido)
-    return `<li class="h22-cand ${H22.foco === nr ? 'foco' : ''}" style="${estiloCor(cor)}" data-h22-foco="${nr}">
-      <div class="cand-linha"><span class="pos">${i + 1}º</span><span class="cand-nome">${esc(n.nome)}</span> ${n.partido ? pill(n.partido) : ''} ${n.sit ? situ2022(n.sit) : ''}</div>
+    return `<li class="h22-cand ${X.foco === nr ? 'foco' : ''}" style="${estiloCor(cor)}" data-h22-foco="${nr}">
+      <div class="cand-linha"><span class="pos">${i + 1}º</span><span class="cand-nome">${esc(n.nome)}</span> ${n.partido ? pill(n.partido) : ''} ${n.c && el.situ ? el.situ(n.c) : ''}</div>
       <div class="cand-meta">${fmt.format(v)} votos · ${fmtPct.format(pctDe(v, ag.validos))}% dos válidos${n.c ? ` · em SC: ${fmt.format(n.c.votos)}` : ''}</div></li>`
   }).join('')
   const linhasGrupo = ag.grupos
@@ -3033,10 +3089,10 @@ function render2022Local(el) {
       const [nrTop, vTop] = [...g.top.entries()].sort((a, b) => b[1] - a[1])[0] || [null, 0]
       return { g, nrTop, vTop }
     })
-    .sort((a, b) => (H22.foco != null ? b.g.foco - a.g.foco : b.g.validos - a.g.validos))
-  const maxLinhas = H22.verGrupos ? linhasGrupo.length : 60
+    .sort((a, b) => (X.foco != null ? b.g.foco - a.g.foco : b.g.validos - a.g.validos))
+  const maxLinhas = X.verGrupos ? linhasGrupo.length : 60
   return `<section class="cartao">
-      <h3>📍 ${esc(L.nm)} · 2022</h3>
+      <h3>📍 ${esc(L.nm)} · ${el.ano}</h3>
       <div class="atalhos-chips migalhas">${migalhas}</div>
       ${!L.zona && zonas.length > 1 ? `<div class="zonas"><span class="zonas-rot">Zona:</span>${zonas.map((z) => `<button type="button" class="filtro" data-h22-zona="${z}">${Number(z)}ª${floripa && ROTULO_ZONA[z4(z)] ? ` · ${ROTULO_ZONA[z4(z)]}` : ''}</button>`).join('')}</div>` : ''}
       <div class="calc-num h22-tot">
@@ -3049,7 +3105,7 @@ function render2022Local(el) {
     <section class="cartao"><h3>Mais votados aqui · ${esc(ROTULO_ELEICAO[el.id] || el.nome)}</h3>
       <p class="nota">Toque num candidato para ver os votos dele em cada ${grupo === 'secao' ? 'seção' : grupo}.</p>
       <ul class="h22-lista">${linhasRank}</ul>
-      ${ranking.length > 25 && !H22.verTodos ? `<button type="button" class="botao secundario" data-h22-todos>Mostrar todos (${ranking.length})</button>` : ''}
+      ${ranking.length > 25 && !X.verTodos ? `<button type="button" class="botao secundario" data-h22-todos>Mostrar todos (${ranking.length})</button>` : ''}
     </section>
     <section class="cartao"><h3>Por ${grupo === 'secao' ? 'seção' : grupo === 'local' ? 'local de votação' : grupo}${focoInfo ? ` · ${esc(focoInfo.nome)}` : ''}</h3>
       <div class="segmentado" role="group">${grupos
@@ -3067,13 +3123,13 @@ function render2022Local(el) {
         })
         .join('')}</tbody></table>
       ${linhasGrupo.length > maxLinhas ? `<button type="button" class="botao secundario" data-h22-vergrupos>Mostrar todas as ${linhasGrupo.length} linhas</button>` : ''}
-      <p class="nota">Toque numa linha para entrar nela. Fonte: TSE, votação por seção eleitoral 2022.${floripa ? ' Bairros pelo cadastro de locais de votação do TRE-SC.' : ''}</p>
+      <p class="nota">Toque numa linha para entrar nela. Fonte: TSE, ${el.ano === 2026 ? 'boletins de urna de cada seção (2026)' : 'votação por seção eleitoral (2022)'}. Bairros pelo cadastro de locais de votação ${floripa ? 'do TRE-SC' : `do TSE (${el.ano})`}.</p>
     </section>`
 }
 
-function seletorLocal2022() {
-  const L = H22.local
-  const termo = semAcento((H22.buscaMun || '').trim())
+function seletorLocal(X) {
+  const L = X.local
+  const termo = semAcento((X.buscaMun || '').trim())
   const achados = termo ? MUNICIPIOS_SC.filter((m) => semAcento(m[2]).includes(termo)).slice(0, 10) : []
   const gf = GRANDE_FLORIPA.map((nm) => MUNICIPIOS_SC.find((m) => chaveNome(m[2]) === chaveNome(nm))).filter(Boolean).slice(0, 5)
   const atalhos = [...gf, ...MUNICIPIOS_SC.filter((m) => !gf.includes(m)).slice(0, 6)]
@@ -3082,7 +3138,7 @@ function seletorLocal2022() {
       <button type="button" class="atalho regiao ${!L ? 'ativo' : ''}" data-h22-mun="">🗺️ SC inteira</button>
       ${atalhos.map((m) => `<button type="button" class="atalho ${L?.cd === m[0] ? 'ativo' : ''}" data-h22-mun="${m[0]}" data-h22-nm="${esc(m[2])}">${esc(m[2])}</button>`).join('')}
     </div>
-    <input id="h22-mun" type="search" autocomplete="off" placeholder="📍 Outro município (resultados por zona, local e seção)…" value="${esc(H22.buscaMun || '')}">
+    <input id="h22-mun" type="search" autocomplete="off" placeholder="📍 Outro município (por zona, bairro, local e seção)…" value="${esc(X.buscaMun || '')}">
     ${termo ? `<div class="atalhos-chips">${achados.map((m) => `<button type="button" class="atalho" data-h22-mun="${m[0]}" data-h22-nm="${esc(m[2])}">${esc(m[2])}</button>`).join('') || '<span class="nota">Nenhum município encontrado.</span>'}</div>` : ''}
   </div>`
 }
@@ -3156,10 +3212,10 @@ function render2022() {
   return `<section class="cartao resumo">
       <div class="resumo-titulo"><h2>Eleições 2022 · ${esc(el.nome)}${el.turno === 2 ? ' (2º turno)' : ''} · SC</h2><span class="selo final">Resultado oficial</span></div>
       ${pills}
-      ${seletorLocal2022()}
+      ${seletorLocal(H22)}
       <p class="nota">${fmt.format(el.validos)} votos nominais válidos · ${el.candidatos.length} candidatos${prop ? ` · ${el.vagas} vagas` : ''}. Toque num candidato que concorre em 2026 para abrir a ficha atual.</p>
     </section>
-    ${H22.local ? render2022Local(el) : `<section class="cartao"><h3>${prop ? `Eleitos em 2022 (${eleitos.length}) e onde estão em 2026` : 'Principais candidatos de 2022 e onde estão em 2026'}</h3>
+    ${H22.local ? renderLocal(H22, el) : `<section class="cartao"><h3>${prop ? `Eleitos em 2022 (${eleitos.length}) e onde estão em 2026` : 'Principais candidatos de 2022 e onde estão em 2026'}</h3>
       <ul class="h22-lista">${destaque.map(cartaoCand).join('')}</ul></section>
     ${partidos}
     <section class="cartao"><h3>Todos os candidatos de 2022</h3>
@@ -3170,6 +3226,155 @@ function render2022() {
     `}
     <p class="nota centro">Fonte: TSE, Portal de Dados Abertos (votação por candidato/município/zona e por seção eleitoral, 2022).</p>
     <p class="centro"><label class="mini-pref"><input type="checkbox" data-pref="2022" checked> Mostrar dados de 2022 no app</label></p>`
+}
+
+/* ---------------- 2026 por bairro, local e seção (boletins de urna) ---------------- */
+
+// Votos de cada seção do 1º turno de 2026, lidos dos boletins de urna (BU) publicados pelo TSE,
+// com o bairro de cada local de votação (cadastro de locais do TSE; em Florianópolis, a lista do TRE-SC).
+const B26 = { sel: 't1-c7', local: null, grupo: 'zona', foco: null, els: new Map() }
+const estadoLocal = () => (estado.aba.tipo === 'bai' ? B26 : H22)
+const ROTULO_26 = { 't1-c1': 'Presidente', 't1-c3': 'Governador', 't1-c5': 'Senado', 't1-c6': 'Dep. Federal', 't1-c7': 'Dep. Estadual' }
+const NOME_MUN = new Map(MUNICIPIOS_SC.map((m) => [m[0], m[2]]))
+
+// "eleição" de 2026 no formato do explorador, a partir dos candidatos do estado
+function eleicao26(d, cargo) {
+  const el = { id: `t1-c${cargo}`, ano: 2026, cargo, nome: ROTULO_26[`t1-c${cargo}`], candidatos: d.candidatos, partidos: {}, anul: new Set(), situ: (c) => selo(c) }
+  for (const c of d.candidatos) {
+    if (!c.valido) el.anul.add(Number(c.numero))
+    el.partidos[String(c.numero).slice(0, 2)] ??= c.partido
+  }
+  return el
+}
+
+async function carregarBairros(ctrl) {
+  const cargo = Number(B26.sel.split('-c')[1])
+  const aba = ABAS.find((a) => a.cargo === cargo)
+  B26.erro = false
+  if (!B26.els.has(B26.sel) || Date.now() - (B26.t || 0) > 120_000) {
+    try {
+      const d = await buscar(aba, UF, 1, ctrl.signal)
+      if (ctrl.signal.aborted) return
+      B26.els.set(B26.sel, eleicao26(d, cargo))
+      B26.t = Date.now()
+    } catch {
+      if (ctrl.signal.aborted) return
+      B26.erro = !B26.els.has(B26.sel)
+    }
+  }
+  estado.dados = { bai: true }
+  renderizar()
+  statusEl.textContent = 'Boletins de urna · TSE'
+  statusEl.className = 'status ok'
+}
+
+function renderBairros26() {
+  if (DEMO) return '<div class="cartao vazio">Os bairros usam os boletins de urna reais do TSE e não aparecem no modo demonstração.</div>'
+  const el = B26.els.get(B26.sel)
+  const pills = `<div class="segmentado h22-pills" role="group">${Object.entries(ROTULO_26)
+    .map(([id, r]) => `<button type="button" data-h22="${id}" aria-pressed="${id === B26.sel}">${r}</button>`)
+    .join('')}</div>`
+  return `<section class="cartao resumo">
+      <div class="resumo-titulo"><h2>Bairros, locais e seções · 2026</h2><span class="selo final">Boletins de urna</span></div>
+      ${pills}
+      ${seletorLocal(B26)}
+      <p class="nota">Votos de cada seção eleitoral do 1º turno, lidos dos boletins de urna publicados pelo TSE e somados pelo bairro do local de votação. Escolha um município para ver por zona, bairro, local e seção.${TURNO === 2 ? ' <strong>Dados do 1º turno.</strong>' : ''}</p>
+    </section>
+    ${!el ? `<div class="cartao vazio">${B26.erro ? 'Não consegui carregar os candidatos agora.' : 'Carregando…'}</div>` : B26.local ? renderLocal(B26, el) : fortesPorBairro(el)}`
+}
+
+// sem município escolhido: o bairro mais forte de cada candidato
+function fortesPorBairro(el) {
+  const idx = arquivoAno(`dados2026/bairros-${el.id}.json`)
+  if (!idx.valor) return `<div class="cartao vazio">${idx.erro ? 'Os bairros de 2026 ainda não estão no app.' : 'Carregando os bairros…'}</div>`
+  const aba = ABAS.find((a) => a.cargo === el.cargo)
+  const lista = el.candidatos.filter((c) => c.valido && idx.valor.c[Number(c.numero)]).slice(0, B26.verTodos ? 1000 : 30)
+  return `<section class="cartao"><h3>🏆 Bairro mais forte de cada candidato</h3>
+    <p class="nota">Bairro onde cada um teve mais votos em SC. Toque no candidato para abrir a ficha com a lista completa.</p>
+    <ul class="h22-lista">${lista
+      .map((c) => {
+        const [bi, v] = idx.valor.c[Number(c.numero)].v[0]
+        const [cd, nome, val] = idx.valor.b[bi]
+        return `<li class="h22-cand" style="${estiloCor(corPartido(c.partido))}" ${attrCand(c, aba.id, UF)}>
+          <div class="cand-linha"><span class="cand-nome">${esc(c.nome)}</span> ${pill(c.partido)}</div>
+          <div class="cand-meta">📍 <strong>${esc(nome)}</strong> · ${esc(NOME_MUN.get(cd) || cd)} · ${fmt.format(v)} votos (${fmtPct.format(pctDe(v, val))}% do bairro)</div>
+          <div class="cand-meta">${fmt.format(c.votos)} votos em SC</div></li>`
+      })
+      .join('')}</ul>
+    ${!B26.verTodos && el.candidatos.length > 30 ? '<button type="button" class="botao secundario" data-h22-todos-est>Mostrar todos</button>' : ''}
+  </section>`
+}
+
+// votos de um candidato por bairro de um município (arquivo de seções)
+function porBairro(arq, elId, cargo, nr) {
+  const ag = agregarSecoes(arq, { id: elId, cargo, anul: new Set() }, {}, 'bairro', nr)
+  return new Map(ag.grupos.map((g) => [g.chave, g]))
+}
+
+// cartão da ficha: bairros onde o candidato foi mais votado (2026) e, se ligado, em 2022
+function secaoBairros(det, c, aba) {
+  if (DEMO || !aba?.cargo) return ''
+  const elId = `t1-c${aba.cargo}`
+  const B = (det.bai ??= { mun: det.mun && !det.mun.regiao ? { cd: det.mun.cd, nm: det.mun.nm } : null, modo: 'v', todos: false })
+  const re = () => estado.detalhe === det && renderDetalhe()
+  const nr = Number(c.numero)
+  const p22 = PREF.mostrar2022 && H22.resumo ? achar2022(c).find((p) => p.el.turno === 1) : null
+  const opcoes = [...MUNICIPIOS_SC].sort((a, b) => a[2].localeCompare(b[2], 'pt-BR'))
+    .map((m) => `<option value="${m[0]}" ${B.mun?.cd === m[0] ? 'selected' : ''}>${esc(m[2])}</option>`).join('')
+  const escolha = `<div class="bai-escolha">
+      <button type="button" class="atalho regiao ${!B.mun ? 'ativo' : ''}" data-bai-sc>🗺️ SC inteira</button>
+      <select data-bai-mun aria-label="Município"><option value="">📍 Escolher município…</option>${opcoes}</select>
+    </div>
+    <div class="segmentado" role="group"><button type="button" data-bai-modo="v" aria-pressed="${B.modo === 'v'}">Mais votos</button><button type="button" data-bai-modo="p" aria-pressed="${B.modo === 'p'}">Maior %</button></div>`
+  const linha = (nome, sub, v, val, cd, bairro, extra = '') =>
+    `<tr class="clicavel" data-bai-ir="${esc(cd)}" data-bai-bairro="${esc(bairro)}"><td><strong>${esc(nome)}</strong>${sub ? `<div class="cand-meta">${esc(sub)}</div>` : ''}${extra}</td>
+      <td class="dir">${fmt.format(v)}</td><td class="dir">${fmtPct.format(pctDe(v, val))}%</td></tr>`
+  const tabela = (linhas) => `<table class="tabela bai-tabela"><thead><tr><th>Bairro</th><th class="dir">Votos</th><th class="dir">% bairro</th></tr></thead><tbody>${linhas}</tbody></table>`
+  let corpo = ''
+  let corpo22 = ''
+  if (!B.mun) {
+    const idx = arquivoAno(`dados2026/bairros-${elId}.json`, re)
+    const x = idx.valor?.c[nr]
+    if (!idx.valor) corpo = `<p class="nota">${idx.erro ? 'Os bairros de 2026 ainda não estão no app.' : 'Carregando os bairros…'}</p>`
+    else if (!x) corpo = '<p class="nota">Sem votos nos boletins de urna de SC.</p>'
+    else {
+      const lista = B.modo === 'p' ? x.p : x.v
+      corpo = tabela(lista.map(([bi, v]) => {
+        const [cd, nome, val] = idx.valor.b[bi]
+        return linha(nome, NOME_MUN.get(cd) || cd, v, val, cd, nome)
+      }).join('')) + `<p class="nota">Teve votos em ${fmt.format(x.n)} bairros de SC. ${B.modo === 'p' ? '"Maior %" considera bairros com pelo menos 300 votos válidos.' : ''} % bairro = votos ÷ votos válidos do cargo no bairro.</p>`
+    }
+    if (p22) {
+      const i22 = arquivoAno(`dados2022/bairros-${p22.el.id}.json`, re)
+      const y = i22.valor?.c[Number(p22.c.numero)]
+      if (y) corpo22 = `<div class="h22-item"><p><strong>Em 2022 · ${esc(ROTULO_ELEICAO[p22.el.id] || p22.el.nome)}</strong></p><ol class="bai-22">${(B.modo === 'p' ? y.p : y.v).slice(0, 5)
+        .map(([bi, v]) => { const [cd, nome, val] = i22.valor.b[bi]; return `<li>${esc(nome)} <span class="mudo">· ${esc(NOME_MUN.get(cd) || cd)} · ${fmt.format(v)} votos (${fmtPct.format(pctDe(v, val))}%)</span></li>` }).join('')}</ol></div>`
+    }
+  } else {
+    const arq = secoesAno(2026, B.mun.cd, re)
+    if (!arq) corpo = `<p class="nota">${erroSecoes(2026, B.mun.cd) ? 'Os boletins deste município ainda não estão no app.' : `Carregando as seções de ${esc(B.mun.nm)}…`}</p>`
+    else {
+      const m = porBairro(arq, elId, aba.cargo, nr)
+      let m22 = null
+      if (p22) {
+        const a22 = secoesAno(2022, B.mun.cd, re)
+        if (a22) m22 = porBairro(a22, p22.el.id, p22.el.cargo, Number(p22.c.numero))
+      }
+      const gs = [...m.values()].filter((g) => g.foco > 0).sort((a, b) => (B.modo === 'p' ? b.foco / b.validos - a.foco / a.validos : b.foco - a.foco))
+      const lim = B.todos ? gs.length : 15
+      corpo = gs.length
+        ? tabela(gs.slice(0, lim).map((g) => {
+            const g22 = m22?.get(g.chave)
+            const extra = m22 ? `<div class="h22-mun">2022: ${g22 ? `${fmt.format(g22.foco)} votos · ${fmtPct.format(pctDe(g22.foco, g22.validos))}%` : 'sem votos'}</div>` : ''
+            return linha(g.chave, '', g.foco, g.validos, B.mun.cd, g.chave, extra)
+          }).join('')) +
+          (gs.length > lim ? `<button type="button" class="botao secundario" data-bai-todos>Mostrar os ${gs.length} bairros</button>` : '') +
+          `<p class="nota">Total em ${esc(B.mun.nm)}: <strong>${fmt.format(gs.reduce((a, g) => a + g.foco, 0))}</strong> votos em ${gs.length} bairros.${m22 ? ` Linha "2022": ${esc(ROTULO_ELEICAO[p22.el.id] || '')} no mesmo bairro.` : ''}</p>`
+        : `<p class="nota">Sem votos em ${esc(B.mun.nm)}.</p>`
+    }
+  }
+  return `<section class="cartao bai"><h3>🏘️ Bairros onde foi mais votado</h3>${escolha}${corpo}${corpo22}
+    <p class="nota">Fonte: boletins de urna do 1º turno (TSE) e cadastro de locais de votação. Toque num bairro para ver os locais e seções.</p></section>`
 }
 
 /* ---------------- início ---------------- */
