@@ -4,11 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610061600'
-import { chanceDe, NIVEIS } from './chances.js?v=202610061600'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610061600'
-import { FLORIPA } from './floripa.js?v=202610061600'
-import { corPartido, corTexto } from './cores.js?v=202610061600'
+import { calcularVagas } from './vagas.js?v=202610061700'
+import { chanceDe, NIVEIS } from './chances.js?v=202610061700'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610061700'
+import { FLORIPA } from './floripa.js?v=202610061700'
+import { corPartido, corTexto } from './cores.js?v=202610061700'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -2354,7 +2354,7 @@ function cardFicha(det, d, c, aba, pos, total) {
   let linhas = []
   const idx = aba?.cargo && ARQ_ANO.get(`dados2026/bairros-${eleicaoDoCargo(aba.cargo)}.json`)?.valor
   const x = idx?.c[Number(c.numero)]
-  if (x) linhas = linhasBairroCard(x.v.slice(0, 3).map(([bi, v, v22]) => { const [cd, nome, val] = idx.b[bi]; return { nome, extra: NOME_MUN.get(cd) || cd, v, pct: pctDe(v, val), va: v22 != null && PREF.mostrar2022 ? variacao(v, v22) : null } }))
+  if (x) linhas = linhasBairroCard(x.v.slice(0, 3).map(([bi, v, v22]) => { const [cd, nome, val] = idx.b[bi]; return { nome, extra: NOME_MUN.get(cd) || cd, v, pct: pctDe(v, val), v22: v22 != null && PREF.mostrar2022 ? v22 : null, va: v22 != null && PREF.mostrar2022 ? variacao(v, v22) : null } }))
   return { foto: c.foto, nome: c.nome, cor, sub: `${c.partido} · nº ${c.numero} · ${aba ? aba.rotulo.replace(/ SC$/, '') : ''}${det.mun ? ` · ${det.mun.nm}` : ''}`, titulo: 'Desempenho na apuração', subtitulo: situ || (d.atualizadoEm ? `Dados do TSE de ${d.atualizadoEm}` : ''), tiles, linhas, numerar: true, rodape: linhas.length ? 'Bairros onde foi mais votado (boletins de urna)' : '' }
 }
 
@@ -3971,8 +3971,12 @@ async function desenharCard(card) {
 
 // linhas de bairros no formato da lista do card
 const linhasBairroCard = (itens) => {
-  const max = Math.max(1, ...itens.map((i) => i.v))
-  return itens.map((i) => ({ nome: i.nome, extra: i.extra, valor: fmt.format(i.v), dir2: i.va ? i.va.txt : `${fmtPct.format(i.pct)}% do bairro`, corDir2: i.va ? COR_VAR[i.va.cls] : null, frac: i.v / max }))
+  const max = Math.max(1, ...itens.map((i) => Math.max(i.v, i.v22 ?? 0)))
+  return itens.map((i) =>
+    i.v22 != null && i.va !== null
+      ? { nome: i.nome, extra: i.extra, par: { v22: i.v22, v26: i.v, max }, dir2: i.va?.txt || '', corDir2: i.va ? COR_VAR[i.va.cls] : null }
+      : { nome: i.nome, extra: i.extra, valor: fmt.format(i.v), dir2: i.va ? i.va.txt : `${fmtPct.format(i.pct)}% do bairro`, corDir2: i.va ? COR_VAR[i.va.cls] : null, frac: i.v / max },
+  )
 }
 
 // variação 2022 → 2026 num bairro: verde (alta forte), azul (alta), laranja (queda), vermelho (queda forte)
@@ -4103,7 +4107,7 @@ function secaoBairros(det, c, aba) {
     const lista = vis.slice(0, lim)
     corpo = (r.aviso ? `<p class="nota">${r.aviso}</p>` : '') +
       (B.grupo === 'zona' && lista.length ? `<button type="button" class="link-zonas" data-bai-zonas-todas aria-expanded="${!!B.zonasTodas}">🏘️ ${B.zonasTodas ? 'Fechar os bairros de todas as zonas' : 'Ver os bairros de todas as zonas'} <span class="seta" aria-hidden="true">${B.zonasTodas ? '▴' : '▾'}</span></button>` : '') +
-      (tem22 ? `<p class="var-resumo">Desde 2022 (${esc(ROTULO_ELEICAO[p22.el.id] || '')}): <span class="var var-alta-forte">▲ cresceu em ${fmt.format(sobe)} ${esc(nomeNivel.toLowerCase())}</span> <span class="var var-queda-forte">▼ caiu em ${fmt.format(cai)}</span></p>` + legendaVar(cor) : '') +
+      (tem22 ? `<p class="var-resumo">Desde 2022 (${esc(ROTULO_ELEICAO[p22?.el.id || r.e22] || '')}): <span class="var var-alta-forte">▲ cresceu em ${fmt.format(sobe)} ${esc(nomeNivel.toLowerCase())}</span> <span class="var var-queda-forte">▼ caiu em ${fmt.format(cai)}</span></p>` + legendaVar(cor) : '') +
       (!lista.length
         ? `<p class="nota">${B.modo === 'up' ? 'Não cresceu em nenhum lugar' : B.modo === 'dn' ? 'Não caiu em nenhum lugar' : 'Sem votos'} em ${esc(lugar)}.</p>`
         : tem22
@@ -4147,7 +4151,7 @@ function secaoBairros(det, c, aba) {
         linhas: vis.flatMap((l) => [[l.nome, l.sub || '', l.v, pctDe(l.v, l.val), l.pos ? `${l.pos.p}º de ${l.pos.n}` : '', ...(tem22 ? [l.v22, l.v - l.v22] : [])],
           ...(l.filhos || []).map((f) => [`${l.nome} › ${f.nome}`, l.sub || '', f.v, pctDe(f.v, f.val), f.pos ? `${f.pos.p}º de ${f.pos.n}` : '', ...(tem22 ? [f.v22, f.v - f.v22] : [])])]) },
       card: { turno: turnoDe(elId), foto: c.foto, nome: c.nome, cor, sub: `${c.partido} · nº ${c.numero} · ${aba.rotulo.replace(/ SC$/, '')}`, titulo: tit, subtitulo: rotOrdem,
-        linhas: linhasBairroCard(vis.map((l) => ({ nome: l.nome, v: l.v, pct: pctDe(l.v, l.val), va: tem22 ? variacao(l.v, l.v22) : null, extra: [l.sub, l.pos ? `${l.pos.p}º de ${l.pos.n}` : '', tem22 ? `2022: ${fmt.format(l.v22)}` : ''].filter(Boolean).join(' · ') }))),
+        linhas: linhasBairroCard(vis.map((l) => ({ nome: l.nome, v: l.v, pct: pctDe(l.v, l.val), v22: tem22 ? l.v22 : null, va: tem22 ? variacao(l.v, l.v22) : null, extra: [l.sub, l.pos ? `${l.pos.p}º de ${l.pos.n}` : ''].filter(Boolean).join(' · ') }))),
         rodape: tem22 ? `Desde 2022: cresceu em ${fmt.format(sobe)} e caiu em ${fmt.format(cai)} ${nomeNivel.toLowerCase()}` : '' },
       paginas: Math.min(20, 1 + Math.ceil(vis.length / POR)),
     }
@@ -4172,6 +4176,7 @@ function dadosBairrosFicha(B, elId, aba, nr, p22, re) {
     const lista = x[B.modo] || x.v
     return {
       com22,
+      e22: x.e22,
       sobeCai: x.s,
       linhas: lista.map(([bi, v, v22]) => { const [cd, nome, val] = idx.valor.b[bi]; return { nome, sub: NOME_MUN.get(cd) || cd, v, val, v22: v22 || 0, ir: `data-bai-ir="${esc(cd)}" data-bai-bairro="${esc(nome)}"` } }),
       nota: `Teve votos em ${fmt.format(x.n)} bairros de SC; a lista mostra os ${lista.length} principais desta ordem. Escolha uma cidade para ver todos os bairros dela.`,
@@ -4537,7 +4542,12 @@ function cardMapaPro(el, pts) {
       linhas: top.map((p) => ({ ponto: p.cor, nome: p.nome, extra: `${p.sub ? p.sub + ' · ' : ''}${fmt.format(p.l[4] - p.l[5])} ausentes de ${fmt.format(p.l[4])}`, valor: `${fmtPct.format(p.valor)}%`, frac: p.valor / max, corBarra: p.cor })) }
   }
   return baseCardPro(el, { titulo: `Mapa de votos · ${onde}`, subtitulo: PRO.mun ? 'Locais de votação com mais votos' : 'Municípios com mais votos',
-    linhas: top.map((p) => ({ ponto: p.cor, nome: p.nome, extra: [p.sub, p.pos ? `${p.pos.p}º no local` : '', p.v22 != null ? `2022: ${fmt.format(p.v22)}` : ''].filter(Boolean).join(' · '), valor: fmt.format(p.valor), dir2: p.va ? p.va.txt : `${fmtPct.format(pctDe(p.valor, p.val))}%`, corDir2: p.va ? COR_VAR[p.va.cls] : null, frac: p.valor / max, corBarra: p.cor })) })
+    linhas: top.map((p) => {
+      const extra = [p.sub, p.pos ? `${p.pos.p}º no local` : ''].filter(Boolean).join(' · ')
+      // com 2022: barras alinhadas (2022 cinza × 2026 na cor do candidato), como no app
+      if (p.v22 != null) return { nome: p.nome, extra, par: { v22: p.v22, v26: p.valor, max: Math.max(1, ...top.map((q) => Math.max(q.valor, q.v22 || 0))) }, dir2: p.va ? p.va.txt : '', corDir2: p.va ? COR_VAR[p.va.cls] : null }
+      return { ponto: p.cor, nome: p.nome, extra, valor: fmt.format(p.valor), dir2: `${fmtPct.format(pctDe(p.valor, p.val))}%`, frac: p.valor / max, corBarra: p.cor }
+    }) })
 }
 
 async function montarMapaPro() {
