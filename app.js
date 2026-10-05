@@ -4,11 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610061700'
-import { chanceDe, NIVEIS } from './chances.js?v=202610061700'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610061700'
-import { FLORIPA } from './floripa.js?v=202610061700'
-import { corPartido, corTexto } from './cores.js?v=202610061700'
+import { calcularVagas } from './vagas.js?v=202610061800'
+import { chanceDe, NIVEIS } from './chances.js?v=202610061800'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610061800'
+import { FLORIPA } from './floripa.js?v=202610061800'
+import { corPartido, corTexto } from './cores.js?v=202610061800'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -2769,8 +2769,21 @@ detalheEl.addEventListener('click', (ev) => {
     return renderDetalhe()
   }
   if (det && ev.target.closest('[data-pro-abrir]')) return abrirAnalises(det)
+  const zc = ev.target.closest('[data-bai-zona-comp]')
+  if (zc && det?.bai) {
+    const fora = (det.bai.zonasFora ??= new Set())
+    const k = zc.dataset.baiZonaComp
+    fora.has(k) ? fora.delete(k) : fora.add(k)
+    return renderDetalhe()
+  }
+  const lg = ev.target.closest('[data-bai-legenda]')
+  if (lg && det?.bai?.export) {
+    const ok = () => ((lg.textContent = '✅ Legenda copiada! Cole na publicação'), setTimeout(() => renderDetalhe(), 2500))
+    return navigator.clipboard?.writeText(det.bai.export.legenda).then(ok).catch(() => window.prompt('Copie a legenda:', det.bai.export.legenda))
+  }
   const btCar = ev.target.closest('[data-bai-carrossel]')
   if (btCar && det?.bai?.carrossel) {
+    if (det.bai.export?.zonas && det.bai.export.zonas.every((z) => !z.dentro)) return
     const cards = det.bai.carrossel()
     btCar.disabled = true
     return compartilharCarrossel(cards, `${cards[0].nome} · ${cards[0].titulo}`, btCar).finally(() => (btCar.disabled = false))
@@ -3636,12 +3649,16 @@ function fotoCirculo(g, im, cx, cy, r, aro = '#ffffff', larg = 6) {
   g.restore()
 }
 
+// legenda que acompanha as imagens (e que o botão "copiar legenda" copia)
+const INSTAGRAM = 'https://www.instagram.com/maiconcombat/'
+const legendaShare = (titulo) => `${titulo}\n\n📲 Siga @maiconcombat 👉 ${INSTAGRAM}\nApuração 2026 · dados oficiais do TSE`
+
 async function compartilharCard(card) {
   const { blob, nome } = await desenharCard(card)
   const arq = new File([blob], nome, { type: 'image/png' })
   if (navigator.canShare?.({ files: [arq] })) {
     try {
-      await navigator.share({ files: [arq], title: `${card.nome} · ${card.titulo}`, text: `${card.nome} · ${card.titulo}\nPor @maiconcombat · https://www.instagram.com/maiconcombat/` })
+      await navigator.share({ files: [arq], title: `${card.nome} · ${card.titulo}`, text: legendaShare(`${card.nome} · ${card.titulo}`) })
       return
     } catch (e) {
       if (e?.name === 'AbortError') return
@@ -3663,7 +3680,7 @@ async function compartilharCarrossel(cards, titulo, botao) {
   if (botao) botao.innerHTML = rotulo
   if (navigator.canShare?.({ files: arqs })) {
     try {
-      await navigator.share({ files: arqs, title: titulo, text: `${titulo}\nPor @maiconcombat · https://www.instagram.com/maiconcombat/` })
+      await navigator.share({ files: arqs, title: titulo, text: legendaShare(titulo) })
       return
     } catch (e) {
       if (e?.name === 'AbortError') return
@@ -4115,6 +4132,10 @@ function secaoBairros(det, c, aba) {
           : `<div class="cmp-lista">${lista.map((l) => `<div class="cmp-linha ${l.ir ? 'clicavel' : ''}" ${l.ir || ''}><div class="cmp-topo"><div class="cmp-nome"><strong>${esc(l.nome)}</strong>${l.sub ? ` <span class="mudo">· ${esc(l.sub)}</span>` : ''}</div><strong class="cmp-total">${fmt.format(l.v)}</strong></div><div class="cand-meta">${metaDe(l)}</div>${blocoZona(l)}</div>`).join('')}</div>`) +
       (vis.length > lim ? `<button type="button" class="botao secundario" data-bai-todos>Mostrar todos (${fmt.format(vis.length)})</button>` : '') +
       `<p class="nota">${r.nota || ''}</p>`
+    // no modo Zonas, a pessoa escolhe quais zonas entram no compartilhamento
+    B.zonasFora ??= new Set()
+    const naComp = (l) => !(B.grupo === 'zona' && l.zonaKey && B.zonasFora.has(l.zonaKey))
+    const visComp = vis.filter(naComp)
     const tit = `${nomeNivel} · ${lugar}`
     // carrossel: capa + todas as linhas (na visão por zona, os bairros de cada zona), 6 por imagem
     const POR = 6
@@ -4125,8 +4146,8 @@ function secaoBairros(det, c, aba) {
       let grupos
       if (B.grupo === 'zona') {
         const rz = dadosBairrosFicha({ ...B, zonasTodas: true }, elId, aba, nr, p22, () => {})
-        grupos = (rz.linhas || []).sort((a, b) => b.v - a.v).map((z) => ({ titulo: z.nome, sub: z.sub, z, itens: (z.filhos || []).filter((f) => f.v > 0 || (tem22 && f.v22 > 0)) }))
-      } else grupos = [{ titulo: tit, itens: vis }]
+        grupos = (rz.linhas || []).filter(naComp).sort((a, b) => b.v - a.v).map((z) => ({ titulo: z.nome, sub: z.sub, z, itens: (z.filhos || []).filter((f) => f.v > 0 || (tem22 && f.v22 > 0)) }))
+      } else grupos = [{ titulo: tit, itens: visComp }]
       const total26 = ls.reduce((a, l) => a + l.v, 0), total22 = ls.reduce((a, l) => a + l.v22, 0)
       const vaT = tem22 ? variacao(total26, total22) : null
       const capa = { ...baseCar, titulo: `${B.grupo === 'zona' ? 'Zonas e bairros' : nomeNivel} · ${lugar}`, subtitulo: tem22 ? `2022 × 2026 · ${grupos.reduce((a, g) => a + g.itens.length, 0)} ${B.grupo === 'zona' ? 'bairros' : nomeNivel.toLowerCase()}` : rotOrdem,
@@ -4148,16 +4169,21 @@ function secaoBairros(det, c, aba) {
     B.carrossel = montarCarrossel
     B.export = {
       csv: { nome: `${nomeArquivo(c.nome)}-${nomeArquivo(nomeNivel)}-${nomeArquivo(lugar)}.csv`, cab: [nomeNivel.replace(/s$/, '').replace('Municípi', 'Município').replace('Seçõe', 'Seção').replace('Locai', 'Local'), 'Onde', 'Votos 2026', '% do lugar', 'Posição', ...(tem22 ? ['Votos 2022', 'Diferença'] : [])],
-        linhas: vis.flatMap((l) => [[l.nome, l.sub || '', l.v, pctDe(l.v, l.val), l.pos ? `${l.pos.p}º de ${l.pos.n}` : '', ...(tem22 ? [l.v22, l.v - l.v22] : [])],
+        linhas: visComp.flatMap((l) => [[l.nome, l.sub || '', l.v, pctDe(l.v, l.val), l.pos ? `${l.pos.p}º de ${l.pos.n}` : '', ...(tem22 ? [l.v22, l.v - l.v22] : [])],
           ...(l.filhos || []).map((f) => [`${l.nome} › ${f.nome}`, l.sub || '', f.v, pctDe(f.v, f.val), f.pos ? `${f.pos.p}º de ${f.pos.n}` : '', ...(tem22 ? [f.v22, f.v - f.v22] : [])])]) },
       card: { turno: turnoDe(elId), foto: c.foto, nome: c.nome, cor, sub: `${c.partido} · nº ${c.numero} · ${aba.rotulo.replace(/ SC$/, '')}`, titulo: tit, subtitulo: rotOrdem,
-        linhas: linhasBairroCard(vis.map((l) => ({ nome: l.nome, v: l.v, pct: pctDe(l.v, l.val), v22: tem22 ? l.v22 : null, va: tem22 ? variacao(l.v, l.v22) : null, extra: [l.sub, l.pos ? `${l.pos.p}º de ${l.pos.n}` : ''].filter(Boolean).join(' · ') }))),
+        linhas: linhasBairroCard(visComp.map((l) => ({ nome: l.nome, v: l.v, pct: pctDe(l.v, l.val), v22: tem22 ? l.v22 : null, va: tem22 ? variacao(l.v, l.v22) : null, extra: [l.sub, l.pos ? `${l.pos.p}º de ${l.pos.n}` : ''].filter(Boolean).join(' · ') }))),
         rodape: tem22 ? `Desde 2022: cresceu em ${fmt.format(sobe)} e caiu em ${fmt.format(cai)} ${nomeNivel.toLowerCase()}` : '' },
-      paginas: Math.min(20, 1 + Math.ceil(vis.length / POR)),
+      paginas: Math.min(20, 1 + Math.ceil(visComp.length / POR)),
+      legenda: legendaShare(`${c.nome} · ${tit}`),
+      zonas: B.grupo === 'zona' ? vis.filter((l) => l.zonaKey).map((l) => ({ k: l.zonaKey, nome: l.nome.replace(/ · .*/, ''), dentro: !B.zonasFora.has(l.zonaKey) })) : null,
     }
   }
   return `<section class="cartao bai"><h3>🏘️ Onde foi mais votado</h3>${controles}${corpo}
-    ${B.export ? `<div class="exportar">${botaoCard('ficha-bairros', B.export.card)}<button type="button" class="botao" data-bai-carrossel>🎞️ ${B.grupo === 'zona' ? 'Carrossel: zonas e todos os bairros' : `Carrossel com todos (${B.export.paginas} imagens)`}</button><button type="button" class="botao secundario" data-bai-csv>⬇️ Planilha (CSV)</button></div>` : ''}
+    ${B.export?.zonas?.length > 1 ? `<div class="zonas-comp"><span class="atalhos-rot">📤 Zonas no compartilhamento</span><div class="atalhos-chips">${B.export.zonas
+      .map((z) => `<button type="button" class="atalho ${z.dentro ? 'ativo' : ''}" data-bai-zona-comp="${esc(z.k)}" aria-pressed="${z.dentro}">${z.dentro ? '✓ ' : ''}${esc(z.nome)}</button>`)
+      .join('')}</div>${B.export.zonas.every((z) => !z.dentro) ? '<p class="nota">Marque ao menos uma zona.</p>' : ''}</div>` : ''}
+    ${B.export ? `<div class="exportar">${botaoCard('ficha-bairros', B.export.card)}<button type="button" class="botao" data-bai-carrossel>🎞️ ${B.grupo === 'zona' ? 'Carrossel: zonas e todos os bairros' : `Carrossel com todos (${B.export.paginas} imagens)`}</button><button type="button" class="botao secundario" data-bai-csv>⬇️ Planilha (CSV)</button><button type="button" class="botao secundario" data-bai-legenda>📋 Copiar legenda com o link do Instagram</button></div>` : ''}
     <button type="button" class="botao secundario pro-atalho" data-pro-abrir>🔒 Mapa, perfil do eleitor e abstenção</button>
     <p class="nota">Fonte: boletins de urna do ${turnoDe(elId)}º turno (TSE) e cadastro de locais de votação. 2022 ligado pelo nome completo do candidato. Toque numa linha para abrir na aba Bairros.</p></section>`
 }
