@@ -21,7 +21,7 @@ App web para acompanhar a apuração das **Eleições Gerais 2026** com os dados
 
 **📅 2022 por município, zona, local, bairro e seção:** na aba "📅 2022", escolha um município para ver o resultado de 2022 por zona, local de votação, seção e (em Florianópolis) bairro; toque num candidato para ver os votos dele em cada um. Dados em `dados2022/secoes/<código TSE>.json` (TSE, `votacao_secao_2022_SC`), baixados só quando o município é aberto. Os dados de 2022 podem ser desligados em "ℹ️ Sobre → Preferências".
 
-**ℹ️ Sobre:** criado e desenvolvido por **Maicon Combat** — [maiconcombat.com.br](https://maiconcombat.com.br).
+**ℹ️ Sobre:** criado e desenvolvido por **Maicon Combat** — [maiconcombat.com.br](https://maiconcombat.com.br) · Instagram [@maiconcombat](https://www.instagram.com/maiconcombat/).
 
 **📅 2022 × 2026:** resultado oficial de 2022 em SC (Governador 1º e 2º turno, Senado, Deputado Federal e Estadual), com votos por município, em `dados2022/` (TSE, `votacao_candidato_munzona_2022`, via o espelho [f4llenz/tse-dados-abertos](https://github.com/f4llenz/tse-dados-abertos); totais conferidos com o resultado oficial). Na ficha de cada candidato de 2026: o que ele fez em 2022 (cargo, votos, %, posição, situação) e a variação até agora; na tabela por município/região, o % de 2022 ao lado do atual. Aba "📅 2022": resultado por cargo, onde estão os eleitos de 2022 na disputa de 2026 e os partidos de 2022 × 2026. Os candidatos são ligados pelo nome completo.
 

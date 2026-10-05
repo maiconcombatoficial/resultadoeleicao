@@ -4,11 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610050336'
-import { chanceDe, NIVEIS } from './chances.js?v=202610050336'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610050336'
-import { FLORIPA } from './floripa.js?v=202610050336'
-import { corPartido, corTexto } from './cores.js?v=202610050336'
+import { calcularVagas } from './vagas.js?v=202610050337'
+import { chanceDe, NIVEIS } from './chances.js?v=202610050337'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610050337'
+import { FLORIPA } from './floripa.js?v=202610050337'
+import { corPartido, corTexto } from './cores.js?v=202610050337'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -2732,7 +2732,10 @@ function renderSobre() {
       <div class="criador-topo"><span class="criador-foto"><span aria-hidden="true">MC</span><img src="img/maicon-combat.jpg?v=${VERSAO}" alt="Foto de Maicon Combat" onerror="this.remove()"></span>
         <div><p class="criador-rot">Criado e desenvolvido por</p><h2>Maicon Combat</h2></div></div>
       <p>Este aplicativo de acompanhamento da apuração das Eleições 2026, com foco em Santa Catarina, foi idealizado por <strong>Maicon Combat</strong>.</p>
-      <a class="botao criador-link" href="https://maiconcombat.com.br" target="_blank" rel="noopener">Conheça o Maicon Combat · maiconcombat.com.br ↗</a>
+      <div class="criador-links">
+        <a class="botao criador-link" href="https://maiconcombat.com.br" target="_blank" rel="noopener">🌐 maiconcombat.com.br ↗</a>
+        <a class="botao criador-link insta" href="https://www.instagram.com/maiconcombat/" target="_blank" rel="noopener">📷 Instagram @maiconcombat ↗</a>
+      </div>
     </section>
     <section class="cartao"><h3>⚙️ Preferências</h3>
       ${interruptor('2022', PREF.mostrar2022, 'Mostrar dados de 2022', 'Aba "📅 2022", comparação 2022 × 2026 na ficha de cada candidato e % de 2022 nas tabelas por município.')}

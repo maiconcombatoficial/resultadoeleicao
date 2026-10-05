@@ -720,3 +720,6 @@ html.com-detalhe, html.com-detalhe body { overflow: hidden; }
   background: var(--topo); box-shadow: 0 0 0 3px var(--cartao), 0 0 0 6px var(--amarelo);
 }
 .criador-foto img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.criador-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.criador-links .criador-link { margin-top: 0; }
+.criador-link.insta { background: linear-gradient(45deg, #f58529, #dd2a7b 50%, #8134af); }
