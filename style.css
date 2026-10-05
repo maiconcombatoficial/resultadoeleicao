@@ -807,3 +807,4 @@ td .leg-ponto { margin-right: 4px; vertical-align: middle; }
 .transf-orig { overflow-wrap: anywhere; margin-bottom: 4px; }
 .transf-barra { display: flex; height: 22px; border-radius: 6px; overflow: hidden; background: var(--fundo); gap: 2px; }
 .transf-barra span { display: flex; align-items: center; justify-content: center; color: #fff; font-size: 0.72rem; font-weight: 800; min-width: 0; text-shadow: 0 1px 1px rgb(0 0 0 / 35%); }
+.botao-card { white-space: nowrap; }
