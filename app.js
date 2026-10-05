@@ -4,11 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610051800'
-import { chanceDe, NIVEIS } from './chances.js?v=202610051800'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610051800'
-import { FLORIPA } from './floripa.js?v=202610051800'
-import { corPartido, corTexto } from './cores.js?v=202610051800'
+import { calcularVagas } from './vagas.js?v=202610052000'
+import { chanceDe, NIVEIS } from './chances.js?v=202610052000'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610052000'
+import { FLORIPA } from './floripa.js?v=202610052000'
+import { corPartido, corTexto } from './cores.js?v=202610052000'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -2730,7 +2730,7 @@ function irParaBairro(det, cd, bairro) {
   const d = dadosDetalhe()
   const c = d?.candidatos.find((x) => x.sqcand === det.sqcand)
   if (!aba?.cargo || !c) return
-  Object.assign(B26, { sel: `t1-c${aba.cargo}`, local: { cd, nm: NOME_MUN.get(cd) || cd, bairro }, grupo: 'local', foco: Number(c.numero), buscaMun: '', verTodos: false, verGrupos: false })
+  Object.assign(B26, { sel: eleicaoDoCargo(aba.cargo), local: { cd, nm: NOME_MUN.get(cd) || cd, bairro }, grupo: 'local', foco: Number(c.numero), buscaMun: '', verTodos: false, verGrupos: false })
   const ir = () => {
     trocarAba('bairros')
     window.scrollTo({ top: 0 })
@@ -2812,7 +2812,7 @@ function renderSobre() {
         <li><strong>2026 por seção e bairro:</strong> boletins de urna de cada seção do 1º turno, publicados pelo TSE em "Dados de urna", somados pelo bairro do local de votação.</li>
         <li><strong>Bairros dos locais de votação:</strong> cadastro de locais de votação do TSE (2022 e 2026); em Florianópolis, a lista do TRE-SC.</li>
         <li><strong>Regiões e população:</strong> IBGE.</li>
-        <li><strong>🔒 Análises:</strong> perfil do eleitorado por seção (TSE, 2026), coordenadas dos locais de votação (TSE) e mapa base © OpenStreetMap / CARTO. Os dados desta área são criptografados e só abrem com usuário e senha.</li>
+        <li><strong>🔒 Análises:</strong> perfil do eleitorado por seção (TSE, 2026), coordenadas dos locais de votação (TSE), mapa base © OpenStreetMap / CARTO e estimativa de transferência de votos entre turnos, seção a seção. Os dados desta área são criptografados e só abrem com usuário e senha.</li>
       </ul>
       <p class="nota">Projeto independente, sem vínculo com a Justiça Eleitoral. Projeções e chances de reverter são estimativas do app; vale sempre o resultado oficial do TSE.</p>
     </section>`
@@ -3291,12 +3291,22 @@ function render2022() {
 // com o bairro de cada local de votação (cadastro de locais do TSE; em Florianópolis, a lista do TRE-SC).
 const B26 = { sel: 't1-c7', local: null, grupo: 'zona', foco: null, els: new Map() }
 const estadoLocal = () => (estado.aba.tipo === 'bai' ? B26 : H22)
-const ROTULO_26 = { 't1-c1': 'Presidente', 't1-c3': 'Governador', 't1-c5': 'Senado', 't1-c6': 'Dep. Federal', 't1-c7': 'Dep. Estadual' }
+const ROTULO_26 = { 't1-c1': 'Presidente', 't1-c3': 'Governador', 't1-c5': 'Senado', 't1-c6': 'Dep. Federal', 't1-c7': 'Dep. Estadual', 't2-c1': 'Presidente · 2º turno', 't2-c3': 'Governador · 2º turno' }
+// eleições com dados por seção já publicados (dados2026/indice.json); o 2º turno entra sozinho quando for gerado
+const INDICE26 = new Set(['t1-c1', 't1-c3', 't1-c5', 't1-c6', 't1-c7'])
+const indice26Pronto = fetch(`dados2026/indice.json?v=${VERSAO}`)
+  .then((r) => (r.ok ? r.json() : null))
+  .then((j) => j?.eleicoes?.forEach((id) => INDICE26.add(id)))
+  .catch(() => {})
+const eleicoes26 = () => Object.keys(ROTULO_26).filter((id) => INDICE26.has(id))
+const turnoDe = (id) => Number(String(id)[1]) || 1
+// eleição por seção para um cargo: a do turno atual, se já publicada; senão a do 1º turno
+const eleicaoDoCargo = (cargo) => (INDICE26.has(`t${TURNO}-c${cargo}`) ? `t${TURNO}-c${cargo}` : `t1-c${cargo}`)
 const NOME_MUN = new Map(MUNICIPIOS_SC.map((m) => [m[0], m[2]]))
 
 // "eleição" de 2026 no formato do explorador, a partir dos candidatos do estado
-function eleicao26(d, cargo) {
-  const el = { id: `t1-c${cargo}`, ano: 2026, cargo, nome: ROTULO_26[`t1-c${cargo}`], candidatos: d.candidatos, partidos: {}, anul: new Set(), situ: (c) => selo(c) }
+function eleicao26(d, cargo, turno = 1) {
+  const el = { id: `t${turno}-c${cargo}`, ano: 2026, cargo, turno, nome: ROTULO_26[`t${turno}-c${cargo}`], candidatos: d.candidatos, partidos: {}, anul: new Set(), situ: (c) => selo(c) }
   for (const c of d.candidatos) {
     if (!c.valido) el.anul.add(Number(c.numero))
     el.partidos[String(c.numero).slice(0, 2)] ??= c.partido
@@ -3305,14 +3315,15 @@ function eleicao26(d, cargo) {
 }
 
 async function carregarBairros(ctrl) {
+  await indice26Pronto
   const cargo = Number(B26.sel.split('-c')[1])
   const aba = ABAS.find((a) => a.cargo === cargo)
   B26.erro = false
   if (!B26.els.has(B26.sel) || Date.now() - (B26.t || 0) > 120_000) {
     try {
-      const d = await buscar(aba, UF, 1, ctrl.signal)
+      const d = await buscar(aba, UF, turnoDe(B26.sel), ctrl.signal)
       if (ctrl.signal.aborted) return
-      B26.els.set(B26.sel, eleicao26(d, cargo))
+      B26.els.set(B26.sel, eleicao26(d, cargo, turnoDe(B26.sel)))
       B26.t = Date.now()
     } catch {
       if (ctrl.signal.aborted) return
@@ -3328,14 +3339,14 @@ async function carregarBairros(ctrl) {
 function renderBairros26() {
   if (DEMO) return '<div class="cartao vazio">Os bairros usam os boletins de urna reais do TSE e não aparecem no modo demonstração.</div>'
   const el = B26.els.get(B26.sel)
-  const pills = `<div class="segmentado h22-pills" role="group">${Object.entries(ROTULO_26)
-    .map(([id, r]) => `<button type="button" data-h22="${id}" aria-pressed="${id === B26.sel}">${r}</button>`)
+  const pills = `<div class="segmentado h22-pills" role="group">${eleicoes26()
+    .map((id) => `<button type="button" data-h22="${id}" aria-pressed="${id === B26.sel}">${ROTULO_26[id]}</button>`)
     .join('')}</div>`
   return `<section class="cartao resumo">
       <div class="resumo-titulo"><h2>Bairros, locais e seções · 2026</h2><span class="selo final">Boletins de urna</span></div>
       ${pills}
       ${seletorLocal(B26)}
-      <p class="nota">Votos de cada seção eleitoral do 1º turno, lidos dos boletins de urna publicados pelo TSE e somados pelo bairro do local de votação. Escolha um município para ver por zona, bairro, local e seção.${TURNO === 2 ? ' <strong>Dados do 1º turno.</strong>' : ''}</p>
+      <p class="nota">Votos de cada seção eleitoral do ${turnoDe(B26.sel)}º turno, lidos dos boletins de urna publicados pelo TSE e somados pelo bairro do local de votação. Escolha um município para ver por zona, bairro, local e seção.${TURNO === 2 && !INDICE26.has('t2-c1') && !INDICE26.has('t2-c3') ? ' <strong>Os boletins do 2º turno entram aqui assim que forem processados.</strong>' : ''}</p>
     </section>
     ${!el ? `<div class="cartao vazio">${B26.erro ? 'Não consegui carregar os candidatos agora.' : 'Carregando…'}</div>` : B26.local ? renderLocal(B26, el) : fortesPorBairro(el)}`
 }
@@ -3468,7 +3479,7 @@ async function compartilharCard(card) {
   g.textAlign = 'right'
   g.fillStyle = '#5f6b65'
   g.font = fonte(500, 24)
-  g.fillText('Fonte: TSE · boletins de urna · 1º turno', W - 64, H - 46)
+  g.fillText(`Fonte: TSE · boletins de urna · ${card.turno || 1}º turno`, W - 64, H - 46)
   const blob = await new Promise((ok) => cv.toBlob(ok, 'image/png'))
   const nome = `${nomeArquivo(card.nome)}-bairros.png`
   const arq = new File([blob], nome, { type: 'image/png' })
@@ -3507,7 +3518,7 @@ const legendaVar = (cor) => `<div class="var-legenda"><span class="var var-alta-
 // cartão da ficha: bairros onde o candidato foi mais votado (2026) e, se ligado, a variação desde 2022
 function secaoBairros(det, c, aba) {
   if (DEMO || !aba?.cargo) return ''
-  const elId = `t1-c${aba.cargo}`
+  const elId = eleicaoDoCargo(aba.cargo)
   const B = (det.bai ??= { mun: det.mun && !det.mun.regiao ? { cd: det.mun.cd, nm: det.mun.nm } : null, modo: 'v', todos: false })
   const re = () => estado.detalhe === det && renderDetalhe()
   const nr = Number(c.numero)
@@ -3553,7 +3564,7 @@ function secaoBairros(det, c, aba) {
       })
       B.export = {
         csv: { nome: `${nomeArquivo(c.nome)}-bairros-sc.csv`, cab: ['Bairro', 'Município', 'Votos 2026', '% do bairro', ...(tem22 ? ['Votos 2022', 'Diferença'] : [])], linhas: itens.map((i) => [i.nome, i.mun, i.v, i.pct, ...(tem22 ? [i.v22, i.v - i.v22] : [])]) },
-        card: { nome: c.nome, cor, sub: `${c.partido} · nº ${c.numero} · ${aba.rotulo.replace(/ SC$/, '')}`, titulo: 'Bairros onde foi mais votado', subtitulo: `Santa Catarina · ${rot}`, linhas: itens.map((i) => ({ ...i, extra: i.mun + (i.va ? ` · 2022: ${fmt.format(i.v22)}` : '') })), rodape: tem22 ? `Desde 2022: cresceu em ${fmt.format(x.s[0])} bairros e caiu em ${fmt.format(x.s[1])}` : '' },
+        card: { turno: turnoDe(elId), nome: c.nome, cor, sub: `${c.partido} · nº ${c.numero} · ${aba.rotulo.replace(/ SC$/, '')}`, titulo: 'Bairros onde foi mais votado', subtitulo: `Santa Catarina · ${rot}`, linhas: itens.map((i) => ({ ...i, extra: i.mun + (i.va ? ` · 2022: ${fmt.format(i.v22)}` : '') })), rodape: tem22 ? `Desde 2022: cresceu em ${fmt.format(x.s[0])} bairros e caiu em ${fmt.format(x.s[1])}` : '' },
       }
       corpo = (tem22 ? resumoVar(x.s[0], x.s[1], ROTULO_ELEICAO[x.e22]) + legendaVar(cor) : '') +
         tabela(lista.map(([bi, v, v22]) => {
@@ -3587,7 +3598,7 @@ function secaoBairros(det, c, aba) {
       const rot = { v: 'mais votos', p: 'maior %', up: 'onde mais cresceu desde 2022', dn: 'onde mais caiu desde 2022' }[B.modo] || 'mais votos'
       B.export = {
         csv: { nome: `${nomeArquivo(c.nome)}-bairros-${nomeArquivo(B.mun.nm)}.csv`, cab: ['Bairro', 'Votos 2026', '% do bairro', 'Posição no bairro', ...(m22 ? ['Votos 2022', 'Diferença'] : [])], linhas: vis.map((l) => [l.k, l.v, pctDe(l.v, l.val), l.pos ? `${l.pos.p}º de ${l.pos.n}` : '', ...(m22 ? [l.v22, l.v - l.v22] : [])]) },
-        card: { nome: c.nome, cor, sub: `${c.partido} · nº ${c.numero} · ${aba.rotulo.replace(/ SC$/, '')}`, titulo: `Bairros de ${B.mun.nm}`, subtitulo: rot, linhas: vis.map((l) => ({ nome: l.k, v: l.v, pct: pctDe(l.v, l.val), va: m22 ? variacao(l.v, l.v22) : null, extra: [l.pos ? `${l.pos.p}º no bairro` : '', m22 ? `2022: ${fmt.format(l.v22)}` : ''].filter(Boolean).join(' · ') })), rodape: m22 ? `Desde 2022: cresceu em ${fmt.format(sobe)} bairros e caiu em ${fmt.format(cai)}` : '' },
+        card: { turno: turnoDe(elId), nome: c.nome, cor, sub: `${c.partido} · nº ${c.numero} · ${aba.rotulo.replace(/ SC$/, '')}`, titulo: `Bairros de ${B.mun.nm}`, subtitulo: rot, linhas: vis.map((l) => ({ nome: l.k, v: l.v, pct: pctDe(l.v, l.val), va: m22 ? variacao(l.v, l.v22) : null, extra: [l.pos ? `${l.pos.p}º no bairro` : '', m22 ? `2022: ${fmt.format(l.v22)}` : ''].filter(Boolean).join(' · ') })), rodape: m22 ? `Desde 2022: cresceu em ${fmt.format(sobe)} bairros e caiu em ${fmt.format(cai)}` : '' },
       }
       corpo = (m22 ? resumoVar(sobe, cai, ROTULO_ELEICAO[p22.el.id]) + legendaVar(cor) : '') +
         (vis.length
@@ -3606,7 +3617,7 @@ function secaoBairros(det, c, aba) {
   return `<section class="cartao bai"><h3>🏘️ Bairros onde foi mais votado</h3>${escolha}${modos}${corpo}${corpo22}
     ${B.export && (B.mun ? secoesAno(2026, B.mun.cd) : true) ? `<div class="exportar"><button type="button" class="botao" data-bai-card>📸 Compartilhar imagem</button><button type="button" class="botao secundario" data-bai-csv>⬇️ Planilha (CSV)</button></div>` : ''}
     <button type="button" class="botao secundario pro-atalho" data-pro-abrir>🔒 Mapa, perfil do eleitor e abstenção</button>
-    <p class="nota">Fonte: boletins de urna do 1º turno (TSE) e cadastro de locais de votação. 2022 ligado pelo nome completo do candidato. Toque num bairro para ver os locais e seções.</p></section>`
+    <p class="nota">Fonte: boletins de urna do ${turnoDe(elId)}º turno (TSE) e cadastro de locais de votação. 2022 ligado pelo nome completo do candidato. Toque num bairro para ver os locais e seções.</p></section>`
 }
 
 /* ---------------- 🔒 Análises (área protegida) ---------------- */
@@ -3671,16 +3682,26 @@ function arquivoPro(nome) {
   return ARQ_PRO.get(nome)
 }
 
+// candidatos de uma eleição de 2026 ('t<turno>-c<cargo>') para nomes e cores
+async function garantirEleicao26(id, signal) {
+  if (B26.els.has(id)) return B26.els.get(id)
+  const cargo = Number(id.split('-c')[1])
+  const d = await buscar(ABAS.find((a) => a.cargo === cargo), UF, turnoDe(id), signal)
+  const el = eleicao26(d, cargo, turnoDe(id))
+  B26.els.set(id, el)
+  return el
+}
+
 async function carregarPro(ctrl) {
-  await proPronto
+  await Promise.all([proPronto, indice26Pronto])
   estado.dados = { pro: true }
   if (PRO.chave) {
     const cargo = Number(PRO.sel.split('-c')[1])
     if (!B26.els.has(PRO.sel)) {
       try {
-        const d = await buscar(ABAS.find((a) => a.cargo === cargo), UF, 1, ctrl.signal)
+        const d = await buscar(ABAS.find((a) => a.cargo === cargo), UF, turnoDe(PRO.sel), ctrl.signal)
         if (ctrl.signal.aborted) return
-        B26.els.set(PRO.sel, eleicao26(d, cargo))
+        B26.els.set(PRO.sel, eleicao26(d, cargo, turnoDe(PRO.sel)))
       } catch {
         if (ctrl.signal.aborted) return
       }
@@ -3730,19 +3751,20 @@ function renderPro() {
   if (DEMO) return '<div class="cartao vazio">As análises usam dados reais e não aparecem no modo demonstração.</div>'
   if (!PRO.chave) return renderLoginPro()
   const el = B26.els.get(PRO.sel)
-  const subs = [['mapa', '🗺️ Mapa de votos'], ['perfil', '👥 Perfil do eleitor'], ['abst', '📉 Abstenção']]
+  const subs = [['mapa', '🗺️ Mapa de votos'], ['perfil', '👥 Perfil do eleitor'], ['abst', '📉 Abstenção'], ['transf', '🔀 1º → 2º turno']]
   const topo = `<section class="cartao resumo">
-      <div class="resumo-titulo"><h2>🔒 Análises · 1º turno 2026</h2><button type="button" class="botao secundario pro-sair" data-pro-sair>Sair</button></div>
+      <div class="resumo-titulo"><h2>🔒 Análises · 2026</h2><button type="button" class="botao secundario pro-sair" data-pro-sair>Sair</button></div>
       <div class="segmentado" role="group">${subs.map(([k, r]) => `<button type="button" data-pro-aba="${k}" aria-pressed="${PRO.aba === k}">${r}</button>`).join('')}</div>
-      ${PRO.aba !== 'abst' ? seletorCandidatoPro(el) : ''}
+      ${PRO.aba !== 'abst' && PRO.aba !== 'transf' ? seletorCandidatoPro(el) : ''}
     </section>`
+  if (PRO.aba === 'transf') return topo + renderTransfPro()
   if (!el && PRO.aba !== 'abst') return topo + '<div class="cartao vazio">Carregando os candidatos…</div>'
   return topo + (PRO.aba === 'mapa' ? renderMapaPro(el) : PRO.aba === 'perfil' ? renderPerfilPro(el) : renderAbstPro())
 }
 
 function seletorCandidatoPro(el) {
-  const pills = `<div class="segmentado h22-pills" role="group">${Object.entries(ROTULO_26)
-    .map(([id, r]) => `<button type="button" data-pro-cargo="${id}" aria-pressed="${id === PRO.sel}">${r}</button>`)
+  const pills = `<div class="segmentado h22-pills" role="group">${eleicoes26()
+    .map((id) => `<button type="button" data-pro-cargo="${id}" aria-pressed="${id === PRO.sel}">${ROTULO_26[id]}</button>`)
     .join('')}</div>`
   const c = el?.porNumero?.get(String(PRO.cand))
   const termo = semAcento(PRO.busca.trim())
@@ -3926,7 +3948,9 @@ const rotuloAtributo = (n) => ({ Mulheres: 'mulheres', '16 a 24 anos': 'jovens d
 
 /* ---- abstenção, brancos e nulos ---- */
 function renderAbstPro() {
-  const arq = arquivoPro('locais')
+  const tem2 = [...INDICE26].some((id) => id.startsWith('t2-'))
+  if (!tem2) PRO.turnoAbst = 1
+  const arq = arquivoPro(PRO.turnoAbst === 2 ? 'locais-t2' : 'locais')
   if (!arq.valor) return `<div class="cartao vazio">${arq.erro ? 'Não consegui abrir os dados.' : 'Carregando…'}</div>`
   const { l: loc, cargos } = arq.valor
   const ic = Math.max(0, cargos.indexOf(PRO.cargoAbst))
@@ -3947,6 +3971,7 @@ function renderAbstPro() {
   const maxAbs = Math.max(...vis.map((g) => g.abst), 1)
   return `<section class="cartao">
       ${seletorMunPro()}
+      ${tem2 ? `<div class="segmentado" role="group" aria-label="Turno">${[1, 2].map((t) => `<button type="button" data-pro-turno-abst="${t}" aria-pressed="${(PRO.turnoAbst || 1) === t}">${t}º turno</button>`).join('')}</div>` : ''}
       <div class="segmentado" role="group" aria-label="Cargo dos brancos e nulos">${cargos.map((id) => `<button type="button" data-pro-cargo-abst="${id}" aria-pressed="${id === PRO.cargoAbst}">${ROTULO_26[id]}</button>`).join('')}</div>
       <div class="calc-num h22-tot">
         <div><span>Eleitores aptos</span><strong>${fmt.format(tot.aptos)}</strong></div>
@@ -3967,6 +3992,58 @@ function renderAbstPro() {
     </section>`
 }
 
+
+/* ---- transferência de votos entre turnos ---- */
+function conjuntosTransf() {
+  const l = []
+  for (const c of [1, 3]) if (INDICE26.has(`t2-c${c}`)) l.push({ id: `transf-c${c}`, ano: 2026, cargo: c, rot: `${c === 1 ? 'Presidente' : 'Governador'} · 2026` })
+  l.push({ id: 'transf22-c3', ano: 2022, cargo: 3, rot: 'Governador · 2022' })
+  return l
+}
+// nome, partido e cor de um número de candidato numa eleição (2022 ou 2026)
+function votavelTransf(ano, id, nr) {
+  if (nr === 96) return { nome: 'Brancos e nulos', cor: '#9aa19d' }
+  if (nr === 'outros') return { nome: 'Outros candidatos', cor: '#7d8580' }
+  if (ano === 2022) {
+    const el = H22.resumo?.eleicoes.find((e) => e.id === id)
+    const c = el?.candidatos.find((x) => Number(x.numero) === nr)
+    return c ? { nome: c.nome, partido: c.partido, cor: corPartido(c.partido) } : { nome: `Nº ${nr}`, cor: '#7d8580' }
+  }
+  const c = B26.els.get(id)?.candidatos.find((x) => Number(x.numero) === nr)
+  if (!c) garantirEleicao26(id).then(() => estado.aba.tipo === 'pro' && renderizar()).catch(() => {})
+  return c ? { nome: c.nome, partido: c.partido, cor: corPartido(c.partido) } : { nome: `Nº ${nr}`, cor: '#7d8580' }
+}
+function renderTransfPro() {
+  const conj = conjuntosTransf()
+  const sel = conj.find((x) => x.id === PRO.transf) || conj[0]
+  const pills = `<div class="segmentado" role="group">${conj.map((x) => `<button type="button" data-pro-transf="${x.id}" aria-pressed="${x.id === sel.id}">${x.rot}</button>`).join('')}</div>`
+  if (sel.ano === 2022 && !H22.resumo) {
+    resumo2022().then(() => renderizar()).catch(() => {})
+    return `<section class="cartao">${pills}<p class="nota">Carregando 2022…</p></section>`
+  }
+  const arq = arquivoPro(sel.id)
+  if (!arq.valor) return `<section class="cartao">${pills}<p class="nota">${arq.erro ? 'Não consegui abrir os dados.' : 'Carregando…'}</p></section>`
+  const R = arq.valor
+  const id1 = `t1-c${sel.cargo}`, id2 = `t2-c${sel.cargo}`
+  const dest = R.destinos.map((d) => votavelTransf(sel.ano, id2, d))
+  const leg = `<div class="var-legenda">${dest.map((d) => `<span class="leg-ponto"><i style="background:${d.cor}"></i>${esc(d.nome)}${d.partido ? ` (${esc(d.partido)})` : ''}</span>`).join('')}</div>`
+  const linhas = R.origens.map((o, i) => {
+    const or = votavelTransf(sel.ano, id1, o)
+    const seg = R.T[i]
+    return `<div class="transf-linha">
+      <div class="transf-orig"><strong>${esc(or.nome)}</strong>${or.partido ? ` ${pill(or.partido)}` : ''} <span class="mudo">· ${fmt.format(R.votos1[i])} votos no 1º turno</span></div>
+      <div class="transf-barra" role="img" aria-label="${dest.map((d, j) => `${d.nome}: ${fmtPct.format(100 * seg[j])}%`).join(', ')}">${seg.map((v, j) => (v >= 0.005 ? `<span style="width:${100 * v}%;background:${dest[j].cor}" title="${esc(dest[j].nome)}: ${fmtPct.format(100 * v)}%">${v >= 0.14 ? `${Math.round(100 * v)}%` : ''}</span>` : '')).join('')}</div>
+      <div class="cand-meta">${seg.map((v, j) => (v >= 0.005 ? `${esc(dest[j].nome)} <strong>${fmtPct.format(100 * v)}%</strong> (≈ ${fmt.format(Math.round(v * R.votos1[i]))})` : '')).filter(Boolean).join(' · ')}</div>
+    </div>`
+  })
+  return `<section class="cartao">${pills}
+      <h3>🔀 Para onde foram os eleitores de cada candidato do 1º turno</h3>
+      ${leg}
+      ${linhas.join('')}
+      <p class="nota">No 2º turno: ${R.destinos.map((d, j) => `${esc(dest[j].nome)} ${fmt.format(R.votos2[j])}`).join(' · ')}.</p>
+      <p class="nota">Estimativa ecológica a partir de ${fmt.format(R.secoes)} seções: procura a divisão (sem valores negativos, somando 100% em cada linha) que melhor reproduz, seção a seção, o resultado do 2º turno a partir do 1º. Não considera quem votou em só um dos turnos; vale como tendência, não como contagem.</p>
+    </section>`
+}
 // eventos da área protegida
 conteudo.addEventListener('submit', async (ev) => {
   if (ev.target.id !== 'pro-form') return
@@ -3998,6 +4075,8 @@ conteudo.addEventListener('click', (ev) => {
   if (h('[data-pro-cargo-abst]')) return ((PRO.cargoAbst = h('[data-pro-cargo-abst]').dataset.proCargoAbst), renderizar())
   if (h('[data-pro-abst-todos]')) return ((PRO.verTodosAbst = true), renderizar())
   if (h('[data-pro-mapa-todos]')) return ((PRO.verTodosMapa = true), montarMapaPro())
+  if (h('[data-pro-turno-abst]')) return ((PRO.turnoAbst = Number(h('[data-pro-turno-abst]').dataset.proTurnoAbst)), (PRO.cargoAbst = PRO.turnoAbst === 2 ? 't2-c1' : 't1-c3'), renderizar())
+  if (h('[data-pro-transf]')) return ((PRO.transf = h('[data-pro-transf]').dataset.proTransf), renderizar())
 })
 conteudo.addEventListener('change', (ev) => {
   const s = ev.target.closest('[data-pro-mun-sel]')
@@ -4016,7 +4095,7 @@ function abrirAnalises(det) {
   const aba = ABAS.find((a) => a.id === det.aba)
   const c = dadosDetalhe()?.candidatos.find((x) => x.sqcand === det.sqcand)
   if (!aba?.cargo || !c) return
-  Object.assign(PRO, { sel: `t1-c${aba.cargo}`, cand: Number(c.numero), aba: 'mapa', busca: '' })
+  Object.assign(PRO, { sel: eleicaoDoCargo(aba.cargo), cand: Number(c.numero), aba: 'mapa', busca: '' })
   const ir = () => {
     trocarAba('analises')
     window.scrollTo({ top: 0 })
