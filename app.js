@@ -4,10 +4,10 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610050130'
-import { chanceDe, NIVEIS } from './chances.js?v=202610050130'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610050130'
-import { corPartido, corTexto } from './cores.js?v=202610050130'
+import { calcularVagas } from './vagas.js?v=202610050147'
+import { chanceDe, NIVEIS } from './chances.js?v=202610050147'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC } from './regioes.js?v=202610050147'
+import { corPartido, corTexto } from './cores.js?v=202610050147'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -895,14 +895,16 @@ function cabecalhoAbrangencia() {
 const chip = (cd, nm, ativo) => `<button type="button" class="atalho ${ativo ? 'ativo' : ''}" data-mun-cd="${esc(cd)}" data-mun-nm="${esc(nm)}">${esc(nm)}</button>`
 
 function atalhosLocal(mun) {
-  const aberto = estado.atalhos ?? !mun
-  if (!aberto) return `<button type="button" class="atalhos-abrir" data-atalhos="1">⚡ Atalhos: Grande Florianópolis, maiores cidades e regiões ▾</button>`
+  // fechado por padrão; o app lembra se a pessoa deixou aberto
+  const aberto = estado.atalhos ?? lerLocal('atalhos:v1', '0') === '1'
+  if (!aberto) return `<button type="button" class="atalhos-toggle" data-atalhos="1" aria-expanded="false">⚡ Mostrar cidades e regiões <span aria-hidden="true">▾</span></button>`
   const ativo = (cd) => mun && !mun.regiao && mun.cd === cd
   const gf = GRANDE_FLORIPA.map((nm) => MUNICIPIOS_SC.find((m) => chaveNome(m[2]) === chaveNome(nm))).filter(Boolean)
   const gfSet = new Set(gf.map((m) => m[0]))
   const maiores = MUNICIPIOS_SC.filter((m) => !gfSet.has(m[0])).slice(0, 12)
   const microsDe = (meso) => Object.keys(MICRORREGIOES).filter((mi) => MUNICIPIOS_SC.some((m) => m[4] === meso && m[5] === mi))
-  return `<div class="atalhos">
+  return `<button type="button" class="atalhos-toggle aberto" data-atalhos="0" aria-expanded="true">⚡ Esconder cidades e regiões <span aria-hidden="true">▴</span></button>
+  <div class="atalhos">
     <div class="atalhos-grupo"><span class="atalhos-rot">🏝️ Grande Florianópolis</span>
       <div class="atalhos-chips">${gf.map((m) => chip(m[0], m[2], ativo(m[0]))).join('')}
         <button type="button" class="atalho regiao ${mun?.regiao === 'micro:42016' ? 'ativo' : ''}" data-regiao="micro:42016">Σ Soma da região</button></div></div>
@@ -919,7 +921,6 @@ function atalhosLocal(mun) {
             .join('')}</div>`)
           .join('')}
       </details></div>
-    ${mun ? '<button type="button" class="atalhos-abrir" data-atalhos="0">Fechar atalhos ▴</button>' : ''}
   </div>`
 }
 
@@ -1038,6 +1039,7 @@ conteudo.addEventListener('click', (ev) => {
   const atBtn = ev.target.closest('[data-atalhos]')
   if (atBtn) {
     estado.atalhos = atBtn.dataset.atalhos === '1'
+    gravarLocal('atalhos:v1', estado.atalhos ? '1' : '0')
     renderizar()
     return
   }

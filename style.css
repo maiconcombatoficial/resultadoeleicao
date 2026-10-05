@@ -605,3 +605,9 @@ html.com-detalhe, html.com-detalhe body { overflow: hidden; }
   background: none; border: 1px dashed var(--linha); border-radius: 999px; padding: 6px 12px; max-width: 100%; text-align: left;
 }
 .segmentado { flex-wrap: wrap; max-width: 100%; }
+.atalhos-toggle {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;
+  font: inherit; font-size: 0.9rem; font-weight: 700; color: var(--primaria); cursor: pointer;
+  background: var(--cartao); border: 1px solid var(--linha); border-radius: 12px; padding: 10px 14px; box-shadow: var(--sombra);
+}
+.atalhos-toggle.aberto { border-color: var(--verde); }
