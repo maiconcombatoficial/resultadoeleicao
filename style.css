@@ -723,3 +723,16 @@ html.com-detalhe, html.com-detalhe body { overflow: hidden; }
 .criador-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 .criador-links .criador-link { margin-top: 0; }
 .criador-link.insta { background: linear-gradient(45deg, #f58529, #dd2a7b 50%, #8134af); }
+.criador { padding: 0; overflow: hidden; }
+.criador > p, .criador > .criador-links { margin-left: 16px; margin-right: 16px; }
+.criador > .criador-links { margin-bottom: 16px; }
+.criador-capa { position: relative; margin: 0; aspect-ratio: 720 / 589; max-height: 420px; width: 100%; overflow: hidden; background: #1b1f24; }
+.criador-capa img { width: 100%; height: 100%; object-fit: cover; object-position: center 20%; display: block; }
+.criador-capa figcaption {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 40px 16px 14px; color: #fff; display: grid;
+  background: linear-gradient(transparent, rgb(0 0 0 / 78%));
+}
+.criador-capa .criador-rot { color: rgb(255 255 255 / 85%); }
+.criador-capa strong { font-size: 1.7rem; line-height: 1.1; }
+.assinatura { display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; }
+.assinatura img { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 2px var(--amarelo); }
