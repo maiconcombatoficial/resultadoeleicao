@@ -593,7 +593,8 @@ $('#abas').addEventListener('click', (ev) => {
   trocarAba(b.dataset.aba)
 })
 
-window.addEventListener('hashchange', () => aplicarLink())
+// usa o endereço do evento: uma renderização pendente da tela anterior pode já ter reescrito location.hash
+window.addEventListener('hashchange', (ev) => aplicarLink(new URL(ev.newURL).hash))
 
 /* ---------------- link direto ---------------- */
 
@@ -646,8 +647,8 @@ function sincronizarLink() {
 }
 
 // abre o que o endereço pede (ao iniciar, ao colar um link ou ao voltar/avançar)
-function aplicarLink() {
-  const { id, p } = lerHash()
+function aplicarLink(hash = location.hash) {
+  const { id, p } = lerHash(hash)
   if (!id) return
   const aba = ABAS.find((a) => a.id === id)
   if (!aba) return
