@@ -4,11 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610071100'
-import { chanceDe, NIVEIS } from './chances.js?v=202610071100'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610071100'
-import { FLORIPA } from './floripa.js?v=202610071100'
-import { corPartido, corTexto } from './cores.js?v=202610071100'
+import { calcularVagas } from './vagas.js?v=202610071300'
+import { chanceDe, NIVEIS } from './chances.js?v=202610071300'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610071300'
+import { FLORIPA } from './floripa.js?v=202610071300'
+import { corPartido, corTexto } from './cores.js?v=202610071300'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -3232,6 +3232,20 @@ function renderSobre() {
       ${interruptor('2022', PREF.mostrar2022, 'Mostrar dados de 2022', 'Aba "📅 2022", comparação 2022 × 2026 na ficha de cada candidato e % de 2022 nas tabelas por município.')}
       <p class="nota">As preferências ficam salvas neste aparelho.</p>
     </section>
+    <section class="cartao metodo"><h3>🧮 Como os números são calculados</h3>
+      <details><summary>Votos, % e apuração ao vivo</summary>
+        <p>Os votos de 2026 vêm dos arquivos oficiais de divulgação do TSE, lidos direto do seu aparelho a cada atualização. O % de cada candidato é sobre os <strong>votos válidos</strong> (sem brancos e nulos). Num município ou região, o app usa os arquivos daquele lugar; numa região ou associação, soma os municípios dela.</p></details>
+      <details><summary>Quociente eleitoral, partidário e projeção de eleitos</summary>
+        <p>Para Deputado, a projeção segue o Código Eleitoral (arts. 106 a 111): <strong>quociente eleitoral</strong> = votos válidos (nominais + legenda) ÷ vagas; <strong>quociente partidário</strong> = votos do partido ou federação ÷ QE, desprezada a fração, e essas vagas vão aos mais votados da legenda com ao menos 10% do QE; as <strong>sobras</strong> vão pelas maiores médias entre os partidos com ao menos 80% do QE, com candidato que tenha ao menos 20% do QE; se nenhum partido atingir o QE, elegem-se os mais votados. Enquanto a apuração não termina, é uma projeção com os votos já apurados.</p></details>
+      <details><summary>Chances de reverter</summary>
+        <p>Estima os votos que faltam (votos válidos apurados × seções que faltam ÷ seções apuradas). Nos cargos majoritários a conta é exata: se a diferença é maior que tudo o que falta, a situação está definida. Nos proporcionais, usa o cálculo de vagas para achar quantos votos a mais elegeriam o candidato (ou o tirariam). Nos casos em aberto, compara o desempenho que ele precisaria ter nas urnas restantes com o atual: até 1,1× "pode reverter", até 1,5× "reversão difícil", acima disso "improvável".</p></details>
+      <details><summary>Bairros, zonas, locais e seções</summary>
+        <p>Vêm dos <strong>boletins de urna</strong> de cada uma das ~17,5 mil seções de SC (1º turno), decodificados com a especificação oficial do TSE. Cada seção é somada pelo bairro do seu local de votação (cadastro de locais do TSE; em Florianópolis, a lista do TRE-SC). O bairro é o do local de votação, não o endereço do eleitor.</p></details>
+      <details><summary>Comparação com 2022 e entre candidatos</summary>
+        <p>O candidato é ligado a 2022 pelo nome completo (vale o mesmo cargo de 2022, quando houver). A variação é a diferença de votos em cada lugar: verde/azul para alta, laranja/vermelho para queda (forte a partir de 20%). Na comparação entre dois candidatos — inclusive de cargos diferentes, já que cada eleitor vota em todos os cargos — o app mostra a diferença de votos lugar a lugar; "mais parecidos" ordena pela menor diferença proporcional.</p></details>
+      <details><summary>🔒 Análises (mapa, perfil, abstenção, transferência)</summary>
+        <p>O perfil do eleitor cruza os votos de cada seção com o perfil do eleitorado da seção (TSE). A transferência entre turnos é uma <strong>estimativa estatística</strong> (mínimos quadrados com restrições sobre os resultados por seção), não um dado oficial: mostra para onde os votos tendem a ter ido.</p></details>
+    </section>
     <section class="cartao"><h3>📚 De onde vêm os dados</h3>
       <ul class="det-lista">
         <li><strong>2026, ao vivo:</strong> arquivos oficiais de divulgação do <a href="https://resultados.tse.jus.br/oficial/app/index.html" target="_blank" rel="noopener">TSE</a>, consultados direto do seu aparelho a cada 30 segundos.</li>
@@ -3242,8 +3256,22 @@ function renderSobre() {
         <li><strong>🔒 Análises:</strong> perfil do eleitorado por seção (TSE, 2026), coordenadas dos locais de votação (TSE), mapa base © OpenStreetMap e estimativa de transferência de votos entre turnos, seção a seção. Os dados desta área são criptografados e só abrem com usuário e senha.</li>
       </ul>
       <p class="nota">Projeto independente, sem vínculo com a Justiça Eleitoral. Projeções e chances de reverter são estimativas do app; vale sempre o resultado oficial do TSE.</p>
+    </section>
+    <section class="cartao"><h3>🔐 Privacidade</h3>
+      <ul class="det-lista">
+        <li><strong>Sem cadastro e sem rastreamento:</strong> o app não usa cookies de publicidade nem ferramentas de análise de visitas.</li>
+        <li><strong>Tudo fica no seu aparelho:</strong> candidatos acompanhados (❤️), preferências e a última aba aberta são salvos só no navegador deste aparelho.</li>
+        <li><strong>Dados públicos:</strong> os resultados e as fotos dos candidatos são baixados direto dos servidores do TSE e deste site (no mapa da área 🔒, também do OpenStreetMap/Esri); nenhum dado pessoal é enviado.</li>
+        <li><strong>Área 🔒:</strong> os dados exclusivos ficam criptografados (AES-256); a senha é verificada no próprio aparelho e não é enviada a lugar nenhum.</li>
+      </ul>
+    </section>
+    <section class="cartao"><h3>ℹ️ Sobre esta versão</h3>
+      <p>Versão <strong>${esc(versaoLegivel())}</strong> · Eleições 2026, ${TURNO}º turno.</p>
+      <p class="nota">Encontrou algo estranho nos números? Fale com <a href="https://www.instagram.com/maiconcombat/" target="_blank" rel="noopener">@maiconcombat</a>.</p>
     </section>`
 }
+// "202610071300" → "07/10/2026 12:00"
+const versaoLegivel = () => (/^\d{12}$/.test(VERSAO) ? `${VERSAO.slice(6, 8)}/${VERSAO.slice(4, 6)}/${VERSAO.slice(0, 4)} ${VERSAO.slice(8, 10)}:${VERSAO.slice(10, 12)}` : VERSAO || 'local')
 
 /* ---------------- eleições de 2022 (SC) ---------------- */
 
@@ -5223,6 +5251,27 @@ function abrirAnalises(det) {
 
 // instalar como app (PWA): service worker com rede primeiro
 if ('serviceWorker' in navigator && !DEMO) navigator.serviceWorker.register('sw.js').catch(() => {})
+
+// Versão nova publicada: compara o ?v= do app.js no index.html do servidor com o desta página
+// e oferece recarregar (sem precisar fechar e abrir o app).
+async function checarVersao() {
+  if (!VERSAO || document.getElementById('versao-nova')) return
+  try {
+    const html = await (await fetch(`./?checar=${Date.now()}`, { cache: 'no-store' })).text()
+    const v = html.match(/app\.js\?v=(\d+)/)?.[1]
+    if (!v || v === VERSAO) return
+    const faixa = document.createElement('div')
+    faixa.id = 'versao-nova'
+    faixa.className = 'versao-nova'
+    faixa.setAttribute('role', 'status')
+    faixa.innerHTML = '<span>✨ Nova versão do app disponível</span><button type="button" class="botao">Atualizar</button>'
+    faixa.querySelector('button').addEventListener('click', () => location.reload())
+    document.body.append(faixa)
+  } catch {}
+}
+setTimeout(checarVersao, 30_000)
+setInterval(checarVersao, 5 * 60_000)
+document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && checarVersao())
 let pedidoInstalar = null
 window.addEventListener('beforeinstallprompt', (ev) => {
   ev.preventDefault()

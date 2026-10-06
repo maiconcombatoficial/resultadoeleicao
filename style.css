@@ -867,3 +867,22 @@ td .leg-ponto { margin-right: 4px; vertical-align: middle; }
 .var.var-a, .var.var-b { color: var(--texto); background: var(--fundo); border-color: var(--linha); border-left: 5px solid var(--cor); }
 .comp-cargos { margin-bottom: 10px; }
 .comp-cargo { font-size: 0.78rem; font-weight: 700; color: var(--mudo); text-transform: uppercase; letter-spacing: 0.03em; }
+
+/* ---------- aviso de versão nova ---------- */
+.versao-nova {
+  position: fixed; left: 50%; bottom: max(16px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 60;
+  display: flex; align-items: center; gap: 12px; width: min(560px, calc(100% - 32px));
+  background: var(--texto); color: var(--cartao); border-radius: 14px; padding: 10px 10px 10px 16px; box-shadow: 0 10px 30px rgb(0 0 0 / 25%);
+  font-weight: 700; font-size: 0.92rem;
+}
+.versao-nova span { flex: 1; }
+.versao-nova .botao { width: auto; margin: 0; padding: 8px 16px; }
+
+/* ---------- Sobre: metodologia ---------- */
+.metodo details { border-top: 1px solid var(--linha); padding: 10px 0; }
+.metodo details:first-of-type { border-top: 0; }
+.metodo summary { cursor: pointer; font-weight: 700; color: var(--primaria); list-style: none; display: flex; justify-content: space-between; gap: 8px; }
+.metodo summary::-webkit-details-marker { display: none; }
+.metodo summary::after { content: '▾'; color: var(--mudo); }
+.metodo details[open] summary::after { content: '▴'; }
+.metodo details p { margin: 8px 0 0; font-size: 0.92rem; line-height: 1.5; }
