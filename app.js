@@ -4,12 +4,12 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { icone } from './icones.js?v=202610071500'
-import { calcularVagas } from './vagas.js?v=202610071500'
-import { chanceDe, NIVEIS } from './chances.js?v=202610071500'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610071500'
-import { FLORIPA } from './floripa.js?v=202610071500'
-import { corPartido, corTexto } from './cores.js?v=202610071500'
+import { icone } from './icones.js?v=202610071600'
+import { calcularVagas } from './vagas.js?v=202610071600'
+import { chanceDe, NIVEIS } from './chances.js?v=202610071600'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610071600'
+import { FLORIPA } from './floripa.js?v=202610071600'
+import { corPartido, corTexto } from './cores.js?v=202610071600'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -25,6 +25,7 @@ const ELEICOES = {
 }
 
 const ABAS = [
+  { id: 'inicio', rotulo: '🏠 Início', tipo: 'painel', abrangencias: ['br'] },
   { id: 'favoritos', rotulo: '❤️ Acompanhados', tipo: 'fav', abrangencias: ['br'] },
   { id: 'municipios', rotulo: '📊 Municípios', tipo: 'mun', abrangencias: ['sc'] },
   { id: 'bairros', rotulo: '🏘️ Bairros', tipo: 'bai', abrangencias: ['sc'] },
@@ -465,7 +466,7 @@ function registrarHistorico(abaId, abr, dados) {
 /* ---------------- estado e navegação ---------------- */
 
 const estado = {
-  aba: ABAS.find((a) => a.id === (location.hash.slice(1) || lerLocal('aba', 'presidente'))) || ABAS[0],
+  aba: ABAS.find((a) => a.id === (location.hash.slice(1) || lerLocal('aba', 'inicio'))) || ABAS[0],
   abr: {},
   busca: '',
   visao: 'candidatos', // proporcionais: candidatos | partidos
@@ -627,8 +628,9 @@ async function carregar() {
   const abr = abrAtual()
   statusEl.textContent = 'Atualizando…'
   statusEl.className = 'status carregando'
-  if (!estado.dados) conteudo.innerHTML = (['fav', 'mun', 'h22', 'bai', 'pro', 'sobre'].includes(aba.tipo) ? '' : cabecalhoAbrangencia()) + esqueleto(`Carregando ${semEmoji(aba.rotulo)}${munAtual() ? ` em ${munAtual().nm}` : ''}…`, munAtual()?.regiao ? '<small id="progresso-regiao" class="mudo"></small>' : '')
+  if (!estado.dados) conteudo.innerHTML = (['fav', 'mun', 'h22', 'bai', 'pro', 'sobre', 'painel'].includes(aba.tipo) ? '' : cabecalhoAbrangencia()) + esqueleto(`Carregando ${semEmoji(aba.rotulo)}${munAtual() ? ` em ${munAtual().nm}` : ''}…`, munAtual()?.regiao ? '<small id="progresso-regiao" class="mudo"></small>' : '')
   if (aba.tipo === 'fav') return carregarFavoritos(ctrl)
+  if (aba.tipo === 'painel') return carregarPainel(ctrl)
   if (aba.tipo === 'mun') return carregarPainelMunicipios(ctrl)
   if (aba.tipo === 'h22') {
     if (!PREF.mostrar2022) return trocarAba('presidente')
@@ -706,6 +708,123 @@ async function carregarFavoritos(ctrl) {
   statusEl.textContent = erros ? 'Erro ao atualizar' : `Atualizado ${new Date().toLocaleTimeString('pt-BR')}`
   statusEl.className = erros ? 'status erro' : 'status ok'
   if (estado.controlador === ctrl) agendar()
+}
+
+/* ---------------- Início: visão geral de SC e dos acompanhados ---------------- */
+
+const CARGOS_PAINEL = ['governador', 'senador', 'depfed', 'depest']
+
+async function carregarPainel(ctrl) {
+  const grupos = new Map(CARGOS_PAINEL.map((id) => [`${id}|${UF}`, { aba: ABAS.find((a) => a.id === id), abr: UF }]))
+  for (const f of favoritos) {
+    const aba = ABAS.find((a) => a.id === f.aba)
+    if (aba?.cargo) grupos.set(`${f.aba}|${f.abr}`, { aba, abr: f.abr })
+  }
+  const res = await Promise.allSettled([...grupos.entries()].map(async ([k, g]) => [k, await buscar(g.aba, g.abr, TURNO, ctrl.signal)]))
+  if (ctrl.signal.aborted) return
+  estado.favDados = new Map()
+  let erros = 0
+  for (const r of res) {
+    if (r.status === 'fulfilled') {
+      const [k, d] = r.value
+      const [abaId, abr] = k.split('|')
+      registrarHistorico(abaId, abr, d)
+      registrarSessao(abaId, abr, null, d)
+      estado.favDados.set(k, d)
+    } else if (!(r.reason instanceof NaoDivulgado) && r.reason?.name !== 'AbortError') erros++
+  }
+  estado.dados = { painel: true, final: [...estado.favDados.values()].every((d) => d.final) && estado.favDados.size > 0 }
+  renderizar()
+  statusEl.textContent = erros ? 'Erro ao atualizar' : estado.dados.final ? 'Apuração encerrada' : `Atualizado ${new Date().toLocaleTimeString('pt-BR')}`
+  statusEl.className = erros ? 'status erro' : 'status ok'
+  if (estado.controlador === ctrl && !estado.dados.final) agendar()
+}
+
+// eleitos (TSE) ou, enquanto não definido, os eleitos pela projeção, agrupados por partido
+function cadeirasPorPartido(d) {
+  const eleitos = d.candidatos.filter((c) => c.eleito || (!d.tseDefinido && c.projecao))
+  const g = new Map()
+  for (const c of eleitos) g.set(c.partido, [...(g.get(c.partido) || []), c])
+  return { eleitos, partidos: [...g.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0])) }
+}
+
+function renderPainel() {
+  const D = (id) => estado.favDados?.get(`${id}|${UF}`)
+  const ref = D('governador') || D('depfed') || D('depest')
+  const topo = `<section class="cartao painel-topo">
+      <div class="resumo-titulo"><h2>Eleições 2026 · Santa Catarina</h2>${ref ? `<span class="selo ${ref.final ? 'final' : ''}">${ref.final ? 'Totalização final · TSE' : 'Em apuração'}</span>` : ''}</div>
+      ${ref
+        ? `<div class="progresso"><div class="progresso-barra" style="width:${Math.min(100, ref.secoes.percentual)}%"></div></div>
+           <p><strong>${fmtPct.format(ref.secoes.percentual)}%</strong> das seções totalizadas <span class="mudo">(${fmt.format(ref.secoes.totalizadas)} de ${fmt.format(ref.secoes.total)})</span>${ref.atualizadoEm ? ` <span class="mudo">· dados do TSE de ${esc(ref.atualizadoEm)}</span>` : ''}</p>`
+        : '<p class="nota">Os resultados aparecem aqui assim que o TSE começar a divulgar (a partir das 17h de Brasília, no dia da eleição).</p>'}
+    </section>`
+  const meus = favoritos.length
+    ? `<section class="cartao"><h3>${icone('acompanhados')} Seus candidatos</h3><div class="favs">${favoritos
+        .map((f) => cardFavorito(f, estado.favDados?.get(`${f.aba}|${f.abr}`), { mostrarCargo: true }))
+        .join('')}</div></section>`
+    : `<section class="cartao painel-convite"><h3>${icone('acompanhados')} Acompanhe seus candidatos</h3>
+        <p>Toque no coração <span class="estrela-exemplo">♡</span> ao lado de qualquer candidato para ver aqui, logo ao abrir o app, os votos, a posição e se está eleito.</p>
+        <p><a class="botao secundario" href="#depfed">Ver Dep. Federal</a> <a class="botao secundario" href="#depest">Ver Dep. Estadual</a></p></section>`
+  const blocoMaj = (id, titulo, n) => {
+    const d = D(id)
+    if (!d) return ''
+    const lista = d.candidatos.filter((c) => c.valido).slice(0, n)
+    const max = Math.max(1, ...lista.map((c) => c.percentual))
+    return `<section class="cartao painel-maj"><h3><a href="#${id}" class="link-aba">${esc(titulo)}</a></h3>
+      <ol class="painel-lista">${lista
+        .map((c, i) => {
+          const cor = corPartido(c.partido)
+          return `<li ${attrCand(c, id, UF)} style="${estiloCor(cor)}"><span class="pos">${i + 1}º</span>${foto(c, cor)}<div class="painel-info"><div><strong>${esc(c.nome)}</strong> ${pill(c.partido, cor)} ${c.eleito ? selo(c) : ''}</div>
+            <div class="barra fina"><span style="width:${(100 * c.percentual) / max}%"></span></div></div><div class="painel-num"><strong>${fmtPct.format(c.percentual)}%</strong><small>${fmt.format(c.votos)}</small></div></li>`
+        })
+        .join('')}</ol></section>`
+  }
+  const blocoCadeiras = (id, titulo) => {
+    const d = D(id)
+    if (!d) return ''
+    const { eleitos, partidos } = cadeirasPorPartido(d)
+    const vagas = d.vagas || eleitos.length || 1
+    return `<section class="cartao painel-cadeiras"><h3><a href="#${id}" class="link-aba">${esc(titulo)}</a> <span class="mudo">· ${d.vagas} vagas</span></h3>
+      <div class="cadeiras">${partidos.map(([p, cs]) => `<span style="width:${(100 * cs.length) / vagas}%;background:${corPartido(p)}" title="${esc(p)}: ${cs.length}"></span>`).join('')}</div>
+      <div class="cadeiras-leg">${partidos.map(([p, cs]) => `<span class="tag" style="${estiloCor(corPartido(p))}">${pill(p, corPartido(p))} <strong>${cs.length}</strong></span>`).join('')}</div>
+      <p class="nota">${d.tseDefinido ? 'Eleitos conforme o TSE.' : `Projeção do app com ${fmtPct.format(d.secoes.percentual)}% apurado (quociente eleitoral e sobras); pode mudar até o fim da apuração.`}</p>
+      <details class="painel-eleitos"><summary>Ver os ${eleitos.length} ${d.tseDefinido ? 'eleitos' : 'eleitos pela projeção'}</summary>
+        <ul>${eleitos.sort((a, b) => b.votos - a.votos).map((c) => `<li ${attrCand(c, id, UF)}><strong>${esc(c.nome)}</strong> ${pill(c.partido, corPartido(c.partido))} <span class="mudo">${fmt.format(c.votos)}</span></li>`).join('')}</ul></details>
+    </section>`
+  }
+  const atalhos = `<section class="cartao"><h3>Explorar</h3><div class="painel-atalhos">
+      <a href="#bairros">${icone('bairros')}<strong>Bairros</strong><small>zona, local e seção</small></a>
+      <a href="#municipios">${icone('municipios')}<strong>Municípios</strong><small>apuração em cada cidade</small></a>
+      <a href="#analises">${icone('analises')}<strong>Análises</strong><small>mapa, perfil e abstenção</small></a>
+      ${PREF.mostrar2022 ? `<a href="#h2022">${icone('h2022')}<strong>2022</strong><small>resultado anterior</small></a>` : ''}
+    </div><p class="nota">Para comparar dois candidatos (inclusive de cargos diferentes), abra a ficha de um deles e toque em <strong>Comparar com outro candidato</strong>.</p></section>`
+  const card = cardPainel(D)
+  return topo + meus + blocoMaj('governador', 'Governador', 3) + blocoMaj('senador', 'Senado', 4) + blocoCadeiras('depfed', 'Dep. Federal') + blocoCadeiras('depest', 'Dep. Estadual') +
+    (card ? `<section class="cartao"><div class="exportar">${botaoCard('painel', card, `${icone('compartilhar')} Compartilhar resumo de SC`)}</div></section>` : '') + atalhos
+}
+
+// card de compartilhar com o resumo: governador, senado e cadeiras por partido
+function cardPainel(D) {
+  const gov = D('governador'), sen = D('senador'), fed = D('depfed'), est = D('depest')
+  const ref = gov || fed || est
+  if (!ref) return null
+  const tiles = []
+  for (const [d, rot, n] of [[gov, 'Governador', 2], [sen, 'Senado', 2]]) {
+    if (!d) continue
+    for (const c of d.candidatos.filter((x) => x.valido).slice(0, n)) tiles.push({ rot: `${rot} · ${c.partido}`, valor: c.nome, sub: `${fmtPct.format(c.percentual)}% · ${fmt.format(c.votos)} votos`, cor: corPartido(c.partido) })
+  }
+  const cad = new Map()
+  for (const [d, k] of [[fed, 'f'], [est, 'e']]) if (d) for (const [p, cs] of cadeirasPorPartido(d).partidos) cad.set(p, { ...(cad.get(p) || { f: 0, e: 0 }), [k]: cs.length })
+  const linhas = [...cad.entries()].map(([p, x]) => ({ p, ...x, t: x.f + x.e })).sort((a, b) => b.t - a.t).slice(0, 6)
+  const max = Math.max(1, ...linhas.map((l) => l.t))
+  const def = (fed?.tseDefinido ?? true) && (est?.tseDefinido ?? true)
+  return {
+    chapeu: 'APURAÇÃO 2026 · SANTA CATARINA', nome: 'Resumo da apuração', cor: '#0b7a45',
+    sub: ref.final ? 'Resultado final · TSE' : `${fmtPct.format(ref.secoes.percentual)}% das seções apuradas`,
+    titulo: 'Quem lidera em SC', subtitulo: ref.atualizadoEm ? `Dados do TSE de ${ref.atualizadoEm}` : '', tiles,
+    linhas: linhas.map((l) => ({ nome: l.p, extra: `Federal ${l.f || 0} · Estadual ${l.e || 0}`, valor: `${l.t} ${l.t === 1 ? 'cadeira' : 'cadeiras'}`, frac: l.t / max, corBarra: corPartido(l.p) })),
+    rodape: linhas.length ? (def ? 'Cadeiras de deputado: eleitos conforme o TSE' : 'Cadeiras de deputado: projeção do app') : '',
+  }
 }
 
 /* ---------------- painel: % apurado por município ---------------- */
@@ -2037,6 +2156,10 @@ function renderizar() {
     conteudo.innerHTML = renderSobre()
     return
   }
+  if (estado.aba.tipo === 'painel') {
+    conteudo.innerHTML = renderPainel()
+    return
+  }
   if (estado.aba.tipo === 'h22' || estado.aba.tipo === 'bai' || estado.aba.tipo === 'pro') {
     const idf = ['h22-busca', 'h22-mun', 'pro-busca', 'b26-busca'].includes(document.activeElement?.id) ? document.activeElement.id : null
     const foco = idf ? document.activeElement.selectionStart : null
@@ -3280,7 +3403,7 @@ function renderSobre() {
       <p class="nota">Encontrou algo estranho nos números? Fale com <a href="https://www.instagram.com/maiconcombat/" target="_blank" rel="noopener">@maiconcombat</a>.</p>
     </section>`
 }
-// "202610071500" → "07/10/2026 12:00"
+// "202610071600" → "07/10/2026 12:00"
 const versaoLegivel = () => (/^\d{12}$/.test(VERSAO) ? `${VERSAO.slice(6, 8)}/${VERSAO.slice(4, 6)}/${VERSAO.slice(0, 4)} ${VERSAO.slice(8, 10)}:${VERSAO.slice(10, 12)}` : VERSAO || 'local')
 
 /* ---------------- eleições de 2022 (SC) ---------------- */
