@@ -4,12 +4,12 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { icone } from './icones.js?v=202610080700'
-import { calcularVagas } from './vagas.js?v=202610080700'
-import { chanceDe, NIVEIS } from './chances.js?v=202610080700'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610080700'
-import { FLORIPA } from './floripa.js?v=202610080700'
-import { corPartido, corTexto } from './cores.js?v=202610080700'
+import { icone } from './icones.js?v=202610080800'
+import { calcularVagas } from './vagas.js?v=202610080800'
+import { chanceDe, NIVEIS } from './chances.js?v=202610080800'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610080800'
+import { FLORIPA } from './floripa.js?v=202610080800'
+import { corPartido, corTexto } from './cores.js?v=202610080800'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -620,6 +620,7 @@ function paramsAba() {
     if (abrAtual() !== a.abrangencias[0]) p.r = abrAtual()
     const m = munAtual()
     if (m) Object.assign(p, { m: m.regiao || m.cd, z: m.zona })
+    if (estado.partido) p.p = estado.partido
   }
   if (a.tipo === 'bai' || a.tipo === 'h22') {
     const X = estadoLocal()
@@ -667,6 +668,8 @@ function aplicarLink(hash = location.hash) {
     if (temParams) {
       estado.mun = munDoLink(p.get('m'), p.get('z'))
       gravarLocal(`${PREFIXO}municipio:v1`, JSON.stringify(estado.mun))
+      estado.partido = p.get('p') || null
+      if (estado.partido) estado.visao = 'candidatos'
     }
   }
   if ((aba.tipo === 'bai' || aba.tipo === 'h22') && temParams) {
@@ -1752,6 +1755,26 @@ conteudo.addEventListener('click', (ev) => {
     renderizar()
     return
   }
+  const ppG = ev.target.closest('[data-pp-grupo]')
+  if (ppG) return ((PP.grupo = ppG.dataset.ppGrupo), renderizar())
+  if (ev.target.closest('[data-pp-todos]')) return ((PP.todos = true), renderizar())
+  if (ev.target.closest('[data-pp-xlsx]')) return excelPartido(ev.target.closest('[data-pp-xlsx]'))
+  const ppM = ev.target.closest('[data-pp-mun]')
+  if (ppM) {
+    const part = estado.partido
+    PP.grupo = 'bairro'
+    escolherMunicipio({ cd: ppM.dataset.ppMun, nm: NOME_MUN.get(ppM.dataset.ppMun) || ppM.dataset.ppMun })
+    estado.partido = part
+    return window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  const ppA = ev.target.closest('[data-pp-assoc]')
+  if (ppA) {
+    const part = estado.partido
+    PP.grupo = 'mun'
+    escolherMunicipio(regiao(`assoc:${ppA.dataset.ppAssoc}`))
+    estado.partido = part
+    return window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
   const partidoBtn = ev.target.closest('[data-partido]')
   if (partidoBtn) {
     const p = partidoBtn.dataset.partido
@@ -2254,6 +2277,161 @@ function agremiacoes(d) {
   return lista.sort((a, b) => b.total - a.total || b.eleitos - a.eleitos)
 }
 
+/* ---------------- painel do partido ---------------- */
+
+// Ao escolher um partido/federação nas abas de deputados: a chapa inteira, quem puxou mais votos e o
+// partido por município, associação e (num município) bairro, com 2022. Soma os votos nominais dos
+// candidatos da chapa (a legenda não vem separada por município nos arquivos do TSE).
+const PP = { grupo: 'mun', todos: false }
+function dadosPartido(d, g) {
+  const aba = estado.aba
+  const el = eleicaoDoCargo(aba.cargo)
+  const chapa = d.candidatos.filter((c) => c.agremiacao === g.nome).sort((a, b) => b.votos - a.votos)
+  const nums = new Set(chapa.map((c) => String(c.numero)))
+  const siglas = new Set(g.partidos)
+  const M = arquivoAno(`dados2026/municipios-${el}.json`)
+  const M22 = arquivoAno(`dados2022/mun-t1-c${aba.cargo}.json`)
+  const R22 = histDe(2022).resumo
+  if (!R22) resumoAno(2022).then(() => renderizar()).catch(() => {})
+  let porMun = null, por22 = null
+  if (M.valor) {
+    porMun = new Map()
+    for (const nr of nums) for (const [cd, v] of Object.entries(M.valor.c[nr] || {})) porMun.set(cd, (porMun.get(cd) || 0) + v)
+  }
+  const el22 = R22?.eleicoes.find((e) => e.id === `t1-c${aba.cargo}`)
+  if (M22.valor && el22) {
+    por22 = new Map()
+    for (const c of el22.candidatos) {
+      if (!siglas.has(c.partido)) continue
+      for (const [cd, v] of Object.entries(M22.valor.cand[c.sq] || {})) por22.set(cd, (por22.get(cd) || 0) + v)
+    }
+  }
+  return { chapa, nums, porMun, por22, val: M.valor?.validos || {}, val22: M22.valor?.validos || {}, erro: M.erro }
+}
+// bairros do município escolhido (boletins de urna): nominais + legenda dos números do partido
+function bairrosPartido(cd, nums, partNums, el) {
+  const arq = secoesAno(2026, cd)
+  if (!arq) return null
+  const porB = new Map(), valB = new Map()
+  for (const [zs, arr] of Object.entries(arq.votos[el] || {})) {
+    const b = bairroDoLocal(arq, arq.secoes[zs])
+    for (let i = 0; i < arr.length; i += 2) {
+      const nr = arr[i], v = arr[i + 1]
+      if (nr >= 95 && nr <= 97) continue
+      valB.set(b, (valB.get(b) || 0) + v)
+      if (nums.has(String(nr)) || (nr < 100 && partNums.has(String(nr)))) porB.set(b, (porB.get(b) || 0) + v)
+    }
+  }
+  return { porB, valB }
+}
+
+function painelPartido(d) {
+  const g = estado.grupos?.find((x) => x.nome === estado.partido)
+  if (!g || estado.aba.tipo !== 'prop') return ''
+  const mun = munAtual()
+  const P = dadosPartido(d, g)
+  const nominais = P.chapa.reduce((a, c) => a + c.votos, 0)
+  const comProj = !!d.projecao?.qe
+  const cadeiras = comProj ? g.vagasProj : g.eleitos
+  const validos = d.votos?.validos || 1
+  const pctP = pctDe(g.total, validos)
+  const cor = g.cor
+  const puxadores = P.chapa.slice(0, 5)
+  const tiles = `<div class="pp-tiles">
+      <div><span>Votos${g.legenda ? ' (com legenda)' : ''}</span><strong>${fmt.format(g.total)}</strong><small>${fmtPct.format(pctP)}% dos válidos${mun ? ` em ${esc(mun.nm)}` : ''}</small></div>
+      ${mun
+        ? `<div><span>Candidatos com voto</span><strong>${P.chapa.filter((c) => c.votos > 0).length}</strong><small>de ${P.chapa.length} na chapa</small></div>`
+        : `<div><span>${comProj ? 'Cadeiras (projeção)' : 'Eleitos'}</span><strong>${cadeiras || 0}</strong><small>${comProj ? `${fmtDec(g.total / d.projecao.qe)} quocientes` : `${P.chapa.length} candidatos`}</small></div>`}
+      ${g.legenda ? `<div><span>Legenda</span><strong>${fmt.format(g.legenda)}</strong><small>${fmtPct.format(pctDe(g.legenda, g.total || 1))}% do partido</small></div>` : `<div><span>Votos nominais</span><strong>${fmt.format(nominais)}</strong><small>soma dos candidatos</small></div>`}
+      <div><span>Mais votado</span><strong class="pp-nome">${esc(puxadores[0]?.nome || '—')}</strong><small>${puxadores[0] ? `${fmtPct.format(pctDe(puxadores[0].votos, nominais || 1))}% dos nominais da chapa` : ''}</small></div>
+    </div>`
+  const chapa = `<h4>Quem puxou os votos da chapa</h4>
+    <ol class="pp-chapa">${P.chapa.slice(0, PP.todos ? 999 : 10).map((c) => `<li ${attrCand(c)}><div class="pp-l"><span class="cand-nome">${esc(c.nome)}</span> ${c.partido !== g.nome ? pill(c.partido, corPartido(c.partido)) : ''} ${c.eleito ? '<span class="pp-sit">✔ eleito</span>' : c.projecao && !c.tseDefinido ? '<span class="pp-sit">★ projeção</span>' : ''}</div>
+      <span class="pp-barra"><span style="width:${Math.max(1, (100 * c.votos) / (P.chapa[0]?.votos || 1))}%;background:${cor}"></span></span>
+      <span class="pp-num"><strong>${fmt.format(c.votos)}</strong> <small>${fmtPct.format(pctDe(c.votos, nominais || 1))}%</small></span></li>`).join('')}</ol>
+    ${P.chapa.length > 10 && !PP.todos ? `<button type="button" class="link-zonas" data-pp-todos>Ver os ${P.chapa.length} candidatos ▾</button>` : ''}`
+  // por lugar
+  const grupos = [['mun', 'Municípios'], ['assoc', 'Associações'], ...(mun && !mun.regiao ? [['bairro', `Bairros de ${mun.nm}`]] : [])]
+  const grupo = grupos.some(([k]) => k === PP.grupo) ? PP.grupo : 'mun'
+  let itens = null, aviso = ''
+  if (grupo === 'bairro') {
+    const partNums = new Set(P.chapa.map((c) => String(c.numero).slice(0, 2)))
+    const B = bairrosPartido(mun.cd, P.nums, partNums, eleicaoDoCargo(estado.aba.cargo))
+    if (B) itens = [...B.porB.entries()].map(([nome, v]) => ({ nome, v, meta: `${fmtPct.format(pctDe(v, B.valB.get(nome) || 1))}% dos votos do bairro (com legenda)` }))
+    else aviso = erroSecoes(2026, mun.cd) ? 'Os boletins deste município ainda não estão no app.' : 'Carregando os bairros…'
+  } else if (P.porMun) {
+    const cds = mun ? (mun.regiao ? mun.membros.map((m) => m.cd) : [mun.cd]) : null
+    const filtro = (cd) => !cds || cds.includes(cd)
+    if (grupo === 'mun')
+      itens = [...P.porMun.entries()].filter(([cd]) => filtro(cd)).map(([cd, v]) => ({ nome: NOME_MUN.get(cd) || cd, sub: ASSOCIACAO_MUN[cd] || '', v, v22: P.por22 ? P.por22.get(cd) || 0 : undefined, meta: `${fmtPct.format(pctDe(v, P.val[cd] || 1))}% dos votos nominais da cidade`, ir: `data-pp-mun="${esc(cd)}"` }))
+    else {
+      const A = new Map()
+      for (const [cd, v] of P.porMun) {
+        if (!filtro(cd)) continue
+        const sg = ASSOCIACAO_MUN[cd]
+        if (!sg) continue
+        const a = A.get(sg) || { v: 0, v22: 0, val: 0 }
+        a.v += v
+        a.val += P.val[cd] || 0
+        A.set(sg, a)
+      }
+      if (P.por22) for (const [cd, v] of P.por22) if (filtro(cd) && A.has(ASSOCIACAO_MUN[cd])) A.get(ASSOCIACAO_MUN[cd]).v22 += v
+      itens = [...A.entries()].map(([sg, a]) => ({ nome: sg, sub: ASSOCIACOES[sg], v: a.v, v22: P.por22 ? a.v22 : undefined, meta: `${fmtPct.format(pctDe(a.v, a.val || 1))}% dos votos nominais da região`, ir: `data-pp-assoc="${esc(sg)}"` }))
+    }
+  } else aviso = P.erro ? 'Os votos por município ainda não estão no app.' : 'Carregando os municípios…'
+  itens?.sort((a, b) => b.v - a.v)
+  const tem22 = itens?.some((i) => i.v22 !== undefined)
+  const lista = itens
+    ? itens.length
+      ? tem22
+        ? listaComparada(itens.slice(0, 15), cor)
+        : `<table class="tabela"><tbody>${itens.slice(0, 15).map((i) => `<tr><td><strong>${esc(i.nome)}</strong><div class="cand-meta">${i.meta}</div></td><td class="dir"><strong>${fmt.format(i.v)}</strong></td></tr>`).join('')}</tbody></table>`
+      : '<p class="nota">Sem votos.</p>'
+    : `<p class="nota">${aviso}</p>`
+  const v26 = itens?.reduce((a, i) => a + i.v, 0) || 0
+  const v22 = tem22 ? itens.reduce((a, i) => a + (i.v22 || 0), 0) : null
+  PP.export = itens ? { g, itens, grupo, P, d, nominais, cadeiras, mun } : null
+  const segs = `<div class="segmentado" role="group" aria-label="Agrupar por">${grupos.map(([k, rot]) => `<button type="button" data-pp-grupo="${k}" aria-pressed="${k === grupo}">${esc(rot)}</button>`).join('')}</div>`
+  return `<section class="cartao pp" style="${estiloCor(cor)}">
+    <div class="pp-cabeca"><h3>${icone('partido')} Painel ${g.partidos.length > 1 ? 'da federação' : 'do partido'} ${pill(nomeCurto(g.nome), cor)}</h3>${g.partidos.length > 1 ? `<p class="cand-meta">${esc(g.partidos.join(', '))}</p>` : ''}</div>
+    ${tiles}
+    ${chapa}
+    <h4>Onde ${esc(nomeCurto(g.nome))} teve mais votos${tem22 ? ' · 2026 × 2022' : ''}</h4>
+    ${segs}
+    ${tem22 && v22 ? `<p class="var-resumo">Soma: <strong>${fmt.format(v26)}</strong> votos nominais em 2026 × ${fmt.format(v22)} em 2022 (${esc(g.partidos.join(', '))} em 2022) ${(() => { const va = variacao(v26, v22); return va ? `<span class="var ${va.cls}">${va.txt}</span>` : '' })()}</p>` : ''}
+    ${lista}
+    ${itens && itens.length > 15 ? `<p class="nota">Mostrando 15 de ${fmt.format(itens.length)} — a lista completa vai no Excel.</p>` : ''}
+    <p class="nota">Votos nominais dos candidatos da chapa${grupo === 'bairro' ? ' + legenda' : ''} (TSE). ${tem22 ? 'Em 2022, os mesmos partidos (siglas), mesmo que em outra federação.' : ''}</p>
+    <div class="exportar">${botaoCard('partido', cardPartido(g, P, cor, cadeiras, comProj, mun))}<button type="button" class="botao secundario" data-pp-xlsx ${itens ? '' : 'disabled'}>${icone('baixar')} Excel</button>${botaoLink()}</div>
+  </section>`
+}
+
+function cardPartido(g, P, cor, cadeiras, comProj, mun) {
+  const onde = mun ? mun.nm : 'Santa Catarina'
+  const top = P.chapa.slice(0, 8)
+  const max = Math.max(1, top[0]?.votos || 1)
+  const nominais = P.chapa.reduce((a, c) => a + c.votos, 0)
+  return {
+    chapeu: `APURAÇÃO 2026 · ${onde.toUpperCase()}`, nome: nomeCurto(g.nome), cor,
+    sub: `${estado.aba.rotulo.replace(/ SC$/, '')} · ${g.partidos.join(', ')}`,
+    titulo: 'Quem puxou os votos da chapa', subtitulo: mun ? `${P.chapa.length} candidatos · votos em ${mun.nm}` : `${comProj ? 'Cadeiras pela projeção' : 'Eleitos'}: ${cadeiras || 0} · ${P.chapa.length} candidatos`,
+    total: { rot: `Votos do partido · ${onde}`, valor: `${fmt.format(g.total)} votos`, sub: g.legenda ? `legenda: ${fmt.format(g.legenda)}` : '' },
+    linhas: top.map((c) => ({ foto: c.foto, nome: c.nome, extra: `${c.partido} · nº ${c.numero}${c.eleito ? ' · ✔ eleito' : c.projecao && !c.tseDefinido ? ' · ★ projeção' : ''}`, valor: fmt.format(c.votos), dir2: `${fmtPct.format(pctDe(c.votos, nominais || 1))}% da chapa`, frac: c.votos / max, corBarra: cor })),
+  }
+}
+
+function excelPartido(botao) {
+  const X = PP.export
+  if (!X) return
+  const { g, P, itens, grupo } = X
+  const nominais = X.nominais || 1
+  const abas = [
+    { aba: 'Chapa', cab: ['Candidato', 'Partido', 'Número', 'Votos', '% da chapa', 'Situação'], linhas: P.chapa.map((c) => [c.nome, c.partido, Number(c.numero), c.votos, pctDe(c.votos, nominais), c.eleito ? 'Eleito (TSE)' : c.projecao && !c.tseDefinido ? 'Eleito pela projeção' : '']) },
+    { aba: grupo === 'bairro' ? 'Bairros' : grupo === 'assoc' ? 'Associações' : 'Municípios', cab: ['Lugar', 'Votos 2026', ...(itens.some((i) => i.v22 !== undefined) ? ['Votos 2022'] : [])], linhas: itens.map((i) => [i.sub && grupo === 'assoc' ? `${i.nome} · ${i.sub}` : i.nome, i.v, ...(i.v22 !== undefined ? [i.v22] : [])]) },
+  ]
+  baixarExcel(`${nomeArquivo(nomeCurto(g.nome))}-${nomeArquivo(estado.aba.rotulo)}-painel.xlsx`, abas, botao)
+}
+
 function corDaAgremiacao(nome) {
   return estado.grupos?.find((g) => g.nome === nome)?.cor || corPartido(nome)
 }
@@ -2507,7 +2685,7 @@ function renderProporcional(d) {
   const corpo =
     estado.visao === 'partidos'
       ? tabelaPartidos(d)
-      : `${filtros}
+      : `${filtros}${painelPartido(d)}
          <input id="busca" type="search" placeholder="Buscar por nome, partido ou número…" value="${esc(estado.busca)}" autocomplete="off">
          <div id="lista">${listaProporcional()}</div>`
   return `${!mun && d.projecao?.qe ? faixaQuociente(d) : mun && estado.qeSC?.[estado.aba.id] ? `<p class="nota">📐 Quociente eleitoral de SC: <strong>${fmt.format(estado.qeSC[estado.aba.id])}</strong> votos por vaga (a eleição de deputados é estadual; veja em "SC inteira").</p>` : ''}${bancada}
