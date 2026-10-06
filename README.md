@@ -98,3 +98,9 @@ Projeto independente, sem vínculo com a Justiça Eleitoral.
 
 O workflow `.github/workflows/boletins.yml` roda sozinho na noite do 2º turno (25/10/2026) e de madrugada no dia 26. Também pode ser disparado à mão em **Actions → Boletins de urna → Run workflow**. Ele baixa os boletins de urna de SC, gera os dados por seção e bairro (`dados2026/`) e publica. A aba "🏘️ Bairros" e a ficha passam a mostrar o 2º turno sem mudança no código. Para refazer também a área protegida (mapa, perfil, abstenção e transferência do 2º turno), cadastre o segredo **`PRO_SENHA`** em *Settings → Secrets and variables → Actions*, com a senha de um usuário da área. Os scripts estão em `scripts/` (veja `scripts/README.md`).
 
+## Testes automáticos
+
+`npm test` abre o app num Chromium de celular (Playwright) e confere as telas principais: Início, cada aba, ficha com "Onde foi mais votado", relatório em PDF, comparação entre cargos, associações, Sobre, aviso de versão nova e prévia de link. Os dados do TSE usados nos testes ficam gravados em `tests/fixtures/tse` (regravar com `npm run test:gravar`), então o resultado não depende da internet. O workflow `.github/workflows/testes.yml` roda tudo em cada PR e em cada publicação na `main`.
+
+Para rodar localmente: `npm ci && npx playwright install chromium && npm test`.
+

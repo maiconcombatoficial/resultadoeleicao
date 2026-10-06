@@ -1,0 +1,39 @@
+# Testes automáticos: rodam em cada PR e em cada publicação na main.
+# Conferem a sintaxe dos scripts e abrem o app num Chromium de celular (tests/app.spec.js),
+# com os dados do TSE gravados em tests/fixtures/tse (não dependem da internet).
+name: Testes
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Sintaxe dos scripts
+        run: for f in *.js scripts/*.mjs tests/*.js; do node --check "$f" || exit 1; done
+      - name: Instalar dependências de teste
+        run: npm ci
+      - name: Instalar o Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Testes do app
+        run: npx playwright test
+      - name: Guardar evidências da falha
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultados-dos-testes
+          path: test-results/
+          retention-days: 7

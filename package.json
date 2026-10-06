@@ -1,0 +1,13 @@
+{
+  "name": "apuracao-2026-sc",
+  "private": true,
+  "type": "module",
+  "description": "Testes automáticos do app (o site em si não tem build: é servido como está pelo GitHub Pages).",
+  "scripts": {
+    "test": "playwright test",
+    "test:gravar": "GRAVAR_TSE=1 playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}
