@@ -919,3 +919,27 @@ td .leg-ponto { margin-right: 4px; vertical-align: middle; }
 /* ---------- acabamento ---------- */
 :focus-visible { outline: 3px solid color-mix(in srgb, var(--primaria) 70%, transparent); outline-offset: 2px; border-radius: 6px; }
 .leaflet-popup-content { font-family: Inter, system-ui, sans-serif; }
+
+/* ---------- Início (painel) ---------- */
+.painel-topo h2 { font-size: 1.15rem; }
+.painel-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.painel-lista li { display: flex; align-items: center; gap: 10px; padding: 8px 4px; border-bottom: 1px solid var(--linha); cursor: pointer; }
+.painel-lista li:last-child { border-bottom: 0; }
+.painel-lista .pos { font-weight: 800; color: var(--mudo); width: 1.8em; flex: none; }
+.painel-lista .foto { width: 40px; height: 40px; flex: none; }
+.painel-info { flex: 1; min-width: 0; display: grid; gap: 5px; }
+.painel-info strong { font-weight: 700; }
+.painel-num { text-align: right; display: grid; font-variant-numeric: tabular-nums; }
+.painel-num small { color: var(--mudo); }
+.cadeiras { display: flex; height: 18px; border-radius: 9px; overflow: hidden; gap: 2px; background: var(--fundo); margin: 6px 0 10px; }
+.cadeiras span { display: block; height: 100%; }
+.cadeiras-leg { display: flex; flex-wrap: wrap; gap: 6px; }
+.cadeiras-leg .tag { display: inline-flex; align-items: center; gap: 4px; background: var(--fundo); border-radius: 999px; padding: 2px 8px 2px 2px; }
+.painel-eleitos summary { cursor: pointer; font-weight: 700; color: var(--primaria); margin-top: 6px; }
+.painel-eleitos ul { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 4px; }
+.painel-eleitos li { cursor: pointer; padding: 4px 0; border-bottom: 1px dashed var(--linha); }
+.painel-atalhos { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.painel-atalhos a { display: grid; gap: 2px; padding: 14px; border-radius: 14px; background: var(--fundo); color: var(--texto); text-decoration: none; border: 1px solid var(--linha); }
+.painel-atalhos a .ico { width: 26px; height: 26px; color: var(--primaria); margin-bottom: 4px; }
+.painel-atalhos small { color: var(--mudo); }
+.painel-convite .botao { display: inline-block; width: auto; margin: 4px 6px 0 0; text-decoration: none; }
