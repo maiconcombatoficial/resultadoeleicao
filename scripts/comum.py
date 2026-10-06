@@ -90,6 +90,8 @@ def bairros_floripa(ano):
     """Bairro de cada local de Florianópolis pela lista do TRE-SC (2022: PDF; 2026: floripa.js)."""
     if ano == 2022:
         return json.load(open(os.path.join(RAIZ, 'scripts', 'floripa_bairros_2022.json')))
+    if ano != 2026:  # outros anos: o bairro vem só do cadastro de locais do TSE (os códigos de local mudam)
+        return {}
     src = open(os.path.join(RAIZ, 'floripa.js'), encoding='utf-8').read()
     F = json.loads(src[src.index('{'):src.rindex('}') + 1])
     return {f"{l['z']}-{l['cod']}": l['bairro'] for l in F['locais']}
