@@ -97,3 +97,17 @@ test('prévia de link: meta tags e imagem', async ({ page, request }) => {
   expect((await request.get('/img/og.jpg')).ok()).toBeTruthy()
   for (const i of ['icone-192.png', 'icone-512.png', 'icone-maskable-512.png', 'favicon-32.png']) expect((await request.get(`/img/icones/${i}`)).ok()).toBeTruthy()
 })
+
+test('histórico: 2024 municipal, 2018 e série do candidato', async ({ page }) => {
+  await page.goto('/#h2022')
+  await page.locator('[data-h22-ano="2024"]').click()
+  await expect(page.locator('.resumo h2').first()).toContainText('Eleições 2024 · Vereador · SC')
+  await page.locator('[data-h22-mun="81051"]').first().click()
+  await expect(page.locator('.resumo h2').first()).toContainText('Florianópolis')
+  await page.locator('[data-h22-ano="2018"]').click()
+  await expect(page.locator('.resumo h2').first()).toContainText('Eleições 2018')
+  await page.goto('/#depest')
+  await page.locator('[data-cand]').first().click()
+  await expect(page.locator('.historico li')).toHaveCount(3)
+  await expect(page.locator('.historico')).toContainText('2018')
+})

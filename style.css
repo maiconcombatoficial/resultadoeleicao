@@ -943,3 +943,11 @@ td .leg-ponto { margin-right: 4px; vertical-align: middle; }
 .painel-atalhos a .ico { width: 26px; height: 26px; color: var(--primaria); margin-bottom: 4px; }
 .painel-atalhos small { color: var(--mudo); }
 .painel-convite .botao { display: inline-block; width: auto; margin: 4px 6px 0 0; text-decoration: none; }
+
+/* ---------- histórico eleitoral ---------- */
+.h22-anos { margin-bottom: 8px; }
+.hist-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.hist-lista li { display: flex; gap: 12px; align-items: flex-start; }
+.hist-ano { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--mudo); min-width: 2.6em; padding-top: 2px; }
+.hist-lista li.agora .hist-ano { color: var(--primaria); }
+.hist-info { flex: 1; min-width: 0; display: grid; gap: 4px; }

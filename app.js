@@ -4,12 +4,12 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { icone } from './icones.js?v=202610071700'
-import { calcularVagas } from './vagas.js?v=202610071700'
-import { chanceDe, NIVEIS } from './chances.js?v=202610071700'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610071700'
-import { FLORIPA } from './floripa.js?v=202610071700'
-import { corPartido, corTexto } from './cores.js?v=202610071700'
+import { icone } from './icones.js?v=202610071900'
+import { calcularVagas } from './vagas.js?v=202610071900'
+import { chanceDe, NIVEIS } from './chances.js?v=202610071900'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610071900'
+import { FLORIPA } from './floripa.js?v=202610071900'
+import { corPartido, corTexto } from './cores.js?v=202610071900'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -30,7 +30,7 @@ const ABAS = [
   { id: 'municipios', rotulo: '📊 Municípios', tipo: 'mun', abrangencias: ['sc'] },
   { id: 'bairros', rotulo: '🏘️ Bairros', tipo: 'bai', abrangencias: ['sc'] },
   { id: 'analises', rotulo: '🔒 Análises', tipo: 'pro', abrangencias: ['sc'] },
-  { id: 'h2022', rotulo: '📅 2022', tipo: 'h22', abrangencias: ['sc'] },
+  { id: 'h2022', rotulo: '📅 Histórico', tipo: 'h22', abrangencias: ['sc'] },
   { id: 'presidente', rotulo: 'Presidente', cargo: 1, eleicao: 'federal', tipo: 'maj', abrangencias: ['br', UF] },
   { id: 'senador', rotulo: 'Senado SC', cargo: 5, eleicao: 'estadual', tipo: 'maj', abrangencias: [UF], turno1: true },
   { id: 'depfed', rotulo: 'Dep. Federal SC', cargo: 6, eleicao: 'estadual', tipo: 'prop', abrangencias: [UF], turno1: true },
@@ -796,7 +796,7 @@ function renderPainel() {
       <a href="#bairros">${icone('bairros')}<strong>Bairros</strong><small>zona, local e seção</small></a>
       <a href="#municipios">${icone('municipios')}<strong>Municípios</strong><small>apuração em cada cidade</small></a>
       <a href="#analises">${icone('analises')}<strong>Análises</strong><small>mapa, perfil e abstenção</small></a>
-      ${PREF.mostrar2022 ? `<a href="#h2022">${icone('h2022')}<strong>2022</strong><small>resultado anterior</small></a>` : ''}
+      ${PREF.mostrar2022 ? `<a href="#h2022">${icone('h2022')}<strong>Histórico</strong><small>eleições de 2016 a 2024</small></a>` : ''}
     </div><p class="nota">Para comparar dois candidatos (inclusive de cargos diferentes), abra a ficha de um deles e toque em <strong>Comparar com outro candidato</strong>.</p></section>`
   const card = cardPainel(D)
   return topo + meus + blocoMaj('governador', 'Governador', 3) + blocoMaj('senador', 'Senado', 4) + blocoCadeiras('depfed', 'Dep. Federal') + blocoCadeiras('depest', 'Dep. Estadual') +
@@ -1333,6 +1333,12 @@ conteudo.addEventListener('click', (ev) => {
     }
   }
   if (h('[data-csv-local]') && X.csv) return baixarCSV(X.csv)
+  const anoBtn = ev.target.closest('[data-h22-ano]')
+  if (anoBtn) {
+    Object.assign(H22, { ano: Number(anoBtn.dataset.h22Ano), busca: '', foco: null })
+    statusEl.textContent = `Dados de ${H22.ano} · TSE`
+    return renderizar()
+  }
   const h22Btn = ev.target.closest('[data-h22]')
   if (h22Btn) {
     X.sel = h22Btn.dataset.h22
@@ -2538,6 +2544,7 @@ function renderDetalheConteudo() {
       ${ptsPos.length > 1 && new Set(ptsPos.map((p) => p.y)).size > 1 ? graficoLinha(ptsPos, { cor, fmtY: (v) => `${Math.round(-v)}º`, titulo: 'Posição (mais alto = melhor)' }) : ''}
     </section>
     ${secao2022(c, d, aba)}
+    ${secaoHistorico(c, d, aba)}
     ${secaoBairros(det, c, aba)}
     <section class="cartao"><h3>${c.eleito || d.tseDefinido ? 'Situação oficial (TSE)' : 'Chance de reverter'}</h3>${textoChance(d, c, aba)}</section>
     <section class="cartao"><h3>Disputa</h3>${blocoDisputa(d, c, aba)}</section>
@@ -3410,57 +3417,102 @@ function renderSobre() {
       <p class="nota">Encontrou algo estranho nos números? Fale com <a href="https://www.instagram.com/maiconcombat/" target="_blank" rel="noopener">@maiconcombat</a>.</p>
     </section>`
 }
-// "202610071700" → "07/10/2026 12:00"
+// "202610071900" → "07/10/2026 12:00"
 const versaoLegivel = () => (/^\d{12}$/.test(VERSAO) ? `${VERSAO.slice(6, 8)}/${VERSAO.slice(4, 6)}/${VERSAO.slice(0, 4)} ${VERSAO.slice(8, 10)}:${VERSAO.slice(10, 12)}` : VERSAO || 'local')
 
 /* ---------------- eleições de 2022 (SC) ---------------- */
 
 // Resultado oficial de 2022 em SC (TSE, votacao_candidato_munzona_2022), em dados2022/.
 const VERSAO = new URL(import.meta.url).searchParams.get('v') || ''
-const H22 = { resumo: null, carregando: null, mun: new Map(), atual: null, atualT: 0, sel: 't1-c7', busca: '' }
+const H22 = { resumo: null, carregando: null, mun: new Map(), atual: null, atualT: 0, sel: 't1-c7', busca: '', ano: 2022 }
+// eleições anteriores com dados no app (dados<ano>/): 2022 é o H22; as outras ficam em HIST
+const ANOS_HIST = [2024, 2022, 2020, 2018, 2016]
+const HIST = new Map([[2022, H22]])
+const histDe = (ano) => {
+  if (!HIST.has(ano)) HIST.set(ano, { resumo: null, carregando: null, mun: new Map(), indice: null })
+  return HIST.get(ano)
+}
+// cargos proporcionais (os números de 2 dígitos são votos de legenda)
+const ehProp = (cargo) => cargo === 6 || cargo === 7 || cargo === 13
+const ehMunicipal = (cargo) => cargo === 11 || cargo === 13
 const chaveNomeCompleto = (s) => semAcento(s || '').replace(/[^a-z]/g, '')
-const ROTULO_ELEICAO = { 't1-c3': 'Governador · 1º turno', 't2-c3': 'Governador · 2º turno', 't1-c5': 'Senado', 't1-c6': 'Dep. Federal', 't1-c7': 'Dep. Estadual' }
+const ROTULO_ELEICAO = { 't1-c3': 'Governador · 1º turno', 't2-c3': 'Governador · 2º turno', 't1-c5': 'Senado', 't1-c6': 'Dep. Federal', 't1-c7': 'Dep. Estadual', 't1-c11': 'Prefeito', 't2-c11': 'Prefeito · 2º turno', 't1-c13': 'Vereador' }
 const ABA_DO_CARGO = { 3: 'governador', 5: 'senador', 6: 'depfed', 7: 'depest' }
 
-function resumo2022() {
-  if (H22.resumo) return Promise.resolve(H22.resumo)
-  H22.carregando ??= fetch(`dados2022/resumo.json?v=${VERSAO}`)
+const resumo2022 = () => resumoAno(2022)
+function resumoAno(ano) {
+  const X = histDe(ano)
+  if (X.resumo) return Promise.resolve(X.resumo)
+  X.carregando ??= fetch(`dados${ano}/resumo.json?v=${VERSAO}`)
     .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
     .then((j) => {
-      H22.indice = new Map()
+      X.indice = new Map()
+      X.indice3 = new Map()
       for (const el of j.eleicoes) {
         el.id = `t${el.turno}-c${el.cargo}`
-        el.ano = 2022
+        el.ano = ano
         el.anul = new Set(j.anulados.filter((x) => x.startsWith(el.id + '-')).map((x) => Number(x.split('-')[2])))
         el.partidos = j.partidos
         el.situ = (c) => situ2022(c.sit)
         el.candidatos.forEach((x, i) => {
-          const c = { sq: x[0], numero: x[1], nome: x[2], nomeCompleto: x[3], partido: x[4], fed: x[5], votos: x[6], sit: x[7], pos: i + 1 }
+          // municipais: x[8] = município do candidato (a posição é dentro do município)
+          const c = { sq: x[0], numero: x[1], nome: x[2], nomeCompleto: x[3], partido: x[4], fed: x[5], votos: x[6], sit: x[7], pos: i + 1, cd: x[8] || null }
           el.candidatos[i] = c
           const k = chaveNomeCompleto(c.nomeCompleto)
-          if (!H22.indice.has(k)) H22.indice.set(k, [])
-          H22.indice.get(k).push({ el, c })
+          if (!X.indice.has(k)) X.indice.set(k, [])
+          X.indice.get(k).push({ el, c })
+          const k3 = tresNomes(c.nomeCompleto)
+          if (k3) X.indice3.set(k3, [...(X.indice3.get(k3) || []), { el, c }])
         })
+        if (ehMunicipal(el.cargo)) {
+          const n = new Map()
+          for (const c of el.candidatos) c.pos = (n.set(c.cd, (n.get(c.cd) || 0) + 1), n.get(c.cd))
+        }
       }
-      H22.resumo = j
+      X.resumo = j
       return j
     })
     .catch((e) => {
-      H22.carregando = null
+      X.carregando = null
       throw e
     })
-  return H22.carregando
+  return X.carregando
 }
 
-function mun2022(id) {
-  if (!H22.mun.has(id)) {
-    const p = fetch(`dados2022/mun-${id}.json?v=${VERSAO}`).then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP'))))
-    p.catch(() => H22.mun.delete(id))
-    H22.mun.set(id, p)
+const mun2022 = (id) => munAno(2022, id)
+function munAno(ano, id) {
+  const X = histDe(ano)
+  if (!X.mun.has(id)) {
+    const p = fetch(`dados${ano}/mun-${id}.json?v=${VERSAO}`).then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP'))))
+    p.catch(() => X.mun.delete(id))
+    X.mun.set(id, p)
     p.then((j) => (p.valor = j)).catch(() => {})
   }
-  return H22.mun.get(id)
+  return X.mun.get(id)
 }
+
+// todas as participações do candidato nas eleições anteriores, da mais recente à mais antiga.
+// Liga pelo nome completo; se não achar, aceita nome que só ganhou/perdeu sobrenomes no fim
+// (ex.: "ANA CAROLINE CAMPAGNOLO" → "ANA CAROLINE CAMPAGNOLO GALVAO"), com pelo menos 3 nomes iguais.
+const nomesDe = (n) => semAcento(n || '').toUpperCase().replace(/[^A-Z ]/g, ' ').split(/\s+/).filter(Boolean)
+const tresNomes = (n) => { const t = nomesDe(n); return t.length >= 3 ? t.slice(0, 3).join(' ') : '' }
+function acharAnteriores(c) {
+  if (!c?.nomeCompleto) return []
+  const k = chaveNomeCompleto(c.nomeCompleto)
+  const t = nomesDe(c.nomeCompleto)
+  return ANOS_HIST.flatMap((ano) => {
+    const X = HIST.get(ano)
+    const exato = X?.indice?.get(k)
+    if (exato?.length) return exato
+    return (X?.indice3?.get(tresNomes(c.nomeCompleto)) || []).filter(({ c: v }) => {
+      const u = nomesDe(v.nomeCompleto)
+      const [a, b] = u.length <= t.length ? [u, t] : [t, u]
+      return a.every((x, i) => x === b[i])
+    })
+  })
+}
+let historicoPronto = null
+const carregarHistorico = () => (historicoPronto ??= Promise.allSettled(ANOS_HIST.map((a) => resumoAno(a))))
 
 // Participações de um candidato de 2026 em 2022 (pelo nome completo).
 function achar2022(c) {
@@ -3472,6 +3524,31 @@ const pctDe = (v, tot) => (tot ? (100 * v) / tot : 0)
 const seta = (dp) => (Math.abs(dp) < 0.005 ? '＝' : dp > 0 ? `▲ ${fmtPct.format(dp)}` : `▼ ${fmtPct.format(-dp)}`)
 const situ2022 = (sit) =>
   /^ELEITO/.test(sit) ? `<span class="tag eleito-tse"><b>✔ ${esc(sit.toLowerCase().replace(/^./, (m) => m.toUpperCase()))}</b></span>` : `<span class="tag nao-eleito">${esc(sit.toLowerCase().replace(/^./, (m) => m.toUpperCase()))}</span>`
+
+// série histórica do candidato: todas as eleições de 2016 a 2024 em SC (pelo nome completo) + 2026
+function secaoHistorico(c, d, aba) {
+  if (!PREF.mostrar2022 || DEMO) return ''
+  if (!ANOS_HIST.every((a) => HIST.get(a)?.resumo || HIST.get(a)?.carregando)) carregarHistorico().then(() => estado.detalhe && renderDetalhe())
+  const parts = acharAnteriores(c)
+  if (!parts.length) return ''
+  const itens = [
+    ...parts.map(({ el, c: v }) => {
+      const cid = v.cd ? cidadeDe(el, v.cd) : null
+      return { ano: el.ano, rot: `${ROTULO_ELEICAO[el.id] || el.nome}${v.cd ? ` · ${NOME_MUN.get(v.cd) || ''}` : ''}`, votos: v.votos, partido: v.partido,
+        pos: `${v.pos}º de ${(cid || el).candidatos.length}`, sit: v.sit }
+    }),
+    { ano: 2026, rot: `${aba?.rotulo.replace(/ SC$/, '') || ''}${d.mun ? ` · ${d.mun.nm}` : ''}`, votos: c.votos, partido: c.partido, pos: `${d.candidatos.indexOf(c) + 1}º de ${d.candidatos.length}`, agora: true },
+  ].sort((a, b) => a.ano - b.ano || a.votos - b.votos)
+  const max = Math.max(1, ...itens.map((i) => i.votos))
+  const cor = corPartido(c.partido)
+  return `<section class="cartao historico"><h3>📜 Histórico eleitoral</h3>
+    <ol class="hist-lista">${itens
+      .map((i) => `<li ${i.agora ? 'class="agora"' : ''}><span class="hist-ano">${i.ano}</span><div class="hist-info"><div><strong>${esc(i.rot)}</strong> ${pill(i.partido)} ${i.agora ? '<span class="tag">agora</span>' : situ2022(i.sit)}</div>
+        <div class="barra fina"><span style="width:${(100 * i.votos) / max}%;background:${i.agora ? cor : 'var(--mudo)'}"></span></div>
+        <div class="cand-meta">${fmt.format(i.votos)} votos · ${i.pos}</div></div></li>`)
+      .join('')}</ol>
+    <p class="nota">Eleições em SC de 2016 a 2024 (TSE, dados abertos), ligadas pelo nome completo. Prefeito e vereador: posição dentro do município.</p></section>`
+}
 
 function secao2022(c, d, aba) {
   if (!PREF.mostrar2022) return ''
@@ -3542,9 +3619,9 @@ function linha2022Grupo(det, cds, pctAgora) {
 // aba 📅 2022
 async function carregar2022(ctrl) {
   try {
-    await resumo2022()
+    await resumoAno(H22.ano || 2022)
   } catch {
-    conteudo.innerHTML = '<div class="cartao vazio erro"><p>Não consegui carregar os dados de 2022.</p></div>'
+    conteudo.innerHTML = '<div class="cartao vazio erro"><p>Não consegui carregar os dados dessa eleição.</p></div>'
     return
   }
   estado.dados = { h22: true }
@@ -3567,7 +3644,7 @@ async function carregar2022(ctrl) {
     }
   }
   renderizar()
-  statusEl.textContent = 'Dados de 2022 · TSE'
+  statusEl.textContent = `Dados de ${H22.ano || 2022} · TSE`
   statusEl.className = 'status ok'
   if (estado.controlador === ctrl) agendar()
 }
@@ -3623,7 +3700,7 @@ function titulo22(s) {
 function agregarSecoes(arq, el, filtro, grupo, foco) {
   const votos = arq.votos[el.id] || {}
   const anul = el.anul
-  const prop = el.cargo === 6 || el.cargo === 7
+  const prop = ehProp(el.cargo)
   const total = new Map()
   const grupos = new Map()
   let validos = 0, brancos = 0, nulos = 0, secoes = 0
@@ -3654,7 +3731,7 @@ function agregarSecoes(arq, el, filtro, grupo, foco) {
 }
 
 function nomeVotavel(el, nr) {
-  if (nr < 100 && (el.cargo === 6 || el.cargo === 7)) {
+  if (nr < 100 && ehProp(el.cargo)) {
     const sg = el.partidos?.[String(nr)] || String(nr)
     return { nome: `Legenda ${sg}`, partido: sg, legenda: true }
   }
@@ -3697,7 +3774,7 @@ function renderLocal(X, el) {
   const filtro = { zona: L.zona, local: L.localVot, bairro: L.bairro, secao: L.secao }
   const ag = agregarSecoes(arq, el, filtro, grupo, X.foco)
   const ranking = [...ag.total.entries()].sort((a, b) => b[1] - a[1])
-  const prop = el.cargo === 6 || el.cargo === 7
+  const prop = ehProp(el.cargo)
   const zonas = [...new Set(Object.keys(arq.secoes).map((zs) => zs.split('-')[0]))].sort((a, b) => a - b)
   const migalhas = [
     `<button type="button" class="atalho" data-h22-nivel="mun">${esc(L.nm)}</button>`,
@@ -3815,15 +3892,23 @@ function seletorLocal(X) {
 }
 
 function render2022() {
-  const j = H22.resumo
-  if (!j) return '<div class="cartao vazio">Carregando 2022…</div>'
-  const el = j.eleicoes.find((e) => e.id === H22.sel) || j.eleicoes[0]
-  const prop = el.cargo === 6 || el.cargo === 7
-  const pills = `<div class="segmentado h22-pills" role="group">${j.eleicoes
+  const ano = H22.ano || 2022
+  const j = histDe(ano).resumo
+  const anos = `<div class="segmentado h22-anos" role="group" aria-label="Ano da eleição">${ANOS_HIST.map((a) => `<button type="button" data-h22-ano="${a}" aria-pressed="${a === ano}">${a}</button>`).join('')}</div>`
+  if (!j) {
+    resumoAno(ano).then(() => estado.aba.tipo === 'h22' && renderizar()).catch(() => {})
+    return `<section class="cartao resumo">${anos}</section>${esqueleto(`Carregando ${ano}…`)}`
+  }
+  const municipal = !!j.municipal
+  const elEstado = j.eleicoes.find((e) => e.id === H22.sel) || j.eleicoes.find((e) => e.id === (municipal ? 't1-c13' : 't1-c7')) || j.eleicoes[0]
+  // eleição municipal: com um município escolhido, só os candidatos dele (os números se repetem entre cidades)
+  const el = municipal && H22.local ? cidadeDe(elEstado, H22.local.cd) : elEstado
+  const prop = ehProp(el.cargo)
+  const pills = `${anos}<div class="segmentado h22-pills" role="group">${j.eleicoes
     .map((e) => `<button type="button" data-h22="${e.id}" aria-pressed="${e.id === el.id}">${esc(ROTULO_ELEICAO[e.id] || e.nome)}</button>`)
     .join('')}</div>`
   const eleitos = el.candidatos.filter((c) => /^ELEITO/.test(c.sit))
-  const destaque = prop ? eleitos : el.candidatos.slice(0, Math.max(eleitos.length, el.cargo === 5 ? 4 : 4))
+  const destaque = municipal && !H22.local ? el.candidatos.slice(0, 20) : prop ? eleitos : el.candidatos.slice(0, Math.max(eleitos.length, 4))
   const st26 = (c) => {
     const a = atual2026(c)
     if (!a) return H22.atual ? '<span class="mudo">Não está na disputa de 2026 em SC</span>' : '<span class="mudo">consultando 2026…</span>'
@@ -3833,18 +3918,18 @@ function render2022() {
       mesmo ? ` <span class="h22-delta ${a.c.percentual >= p22 ? 'sobe' : 'desce'}">${seta(a.c.percentual - p22)} p.p.</span>` : ''
     } ${selo(a.c)}</span>`
   }
-  const cartaoCand = (c) => {
+  const cartaoCand = (c, i) => {
     const a = atual2026(c)
     const cor = corPartido(c.partido)
     return `<li class="h22-cand" style="${estiloCor(cor)}" ${a ? attrCand(a.c, a.aba.id, UF) : ''}>
-      <div class="cand-linha"><span class="pos">${c.pos}º</span><span class="cand-nome">${esc(c.nome)}</span> ${pill(c.partido)} ${situ2022(c.sit)}</div>
-      <div class="cand-meta">${fmt.format(c.votos)} votos · ${fmtPct.format(pctDe(c.votos, el.validos))}%${c.fed ? ` · ${esc(c.fed)}` : ''}</div>
+      <div class="cand-linha"><span class="pos">${municipal && !H22.local ? el.candidatos.indexOf(c) + 1 : c.pos}º</span><span class="cand-nome">${esc(c.nome)}</span> ${pill(c.partido)} ${situ2022(c.sit)}</div>
+      <div class="cand-meta">${fmt.format(c.votos)} votos${municipal && !H22.local ? ` · ${esc(NOME_MUN.get(c.cd) || '')}` : ` · ${fmtPct.format(pctDe(c.votos, el.validos))}%`}${c.fed ? ` · ${esc(c.fed)}` : ''}</div>
       <div class="cand-meta">${st26(c)}</div>
     </li>`
   }
   // partidos: 2022 × 2026 (votos nominais do mesmo cargo)
   let partidos = ''
-  if (prop) {
+  if (prop && !municipal) {
     const g22 = new Map()
     for (const c of el.candidatos) {
       const g = g22.get(c.partido) || { votos: 0, eleitos: 0 }
@@ -3864,9 +3949,9 @@ function render2022() {
     const tot22 = [...g22.values()].reduce((a, g) => a + g.votos, 0) || 1
     const tot26 = [...g26.values()].reduce((a, g) => a + g.votos, 0) || 1
     const siglas = [...new Set([...g22.keys(), ...g26.keys()])].sort((a, b) => (g22.get(b)?.votos || 0) - (g22.get(a)?.votos || 0))
-    partidos = `<section class="cartao"><h3>Partidos: 2022 × 2026</h3>
+    partidos = `<section class="cartao"><h3>Partidos: ${ano} × 2026</h3>
       <p class="nota">% dos votos nominais do cargo. Vagas 2026 = eleitos pelo TSE ou, antes disso, a projeção do app${d26 ? ` (${fmtPct.format(d26.secoes.percentual)}% apurado)` : ''}.</p>
-      <table class="tabela h22-part"><thead><tr><th>Partido</th><th class="dir">2022</th><th class="dir">2026</th></tr></thead><tbody>${siglas
+      <table class="tabela h22-part"><thead><tr><th>Partido</th><th class="dir">${ano}</th><th class="dir">2026</th></tr></thead><tbody>${siglas
         .filter((sg) => (g22.get(sg)?.votos || 0) / tot22 > 0.003 || (g26.get(sg)?.votos || 0) / tot26 > 0.003)
         .map((sg) => {
           const a = g22.get(sg), b = g26.get(sg)
@@ -3876,27 +3961,39 @@ function render2022() {
             <td class="dir">${d26 ? `${fmtPct.format(p26)}% <span class="h22-delta ${p26 >= p22 ? 'sobe' : 'desce'}">${seta(p26 - p22)}</span><div class="cand-meta">${b?.vagas || 0} vagas</div>` : '–'}</td></tr>`
         })
         .join('')}</tbody></table>
-      <p class="nota">Partidos mudaram de nome ou se fundiram desde 2022; a comparação é pela sigla.</p></section>`
+      <p class="nota">Partidos mudaram de nome ou se fundiram desde ${ano}; a comparação é pela sigla.</p></section>`
   }
   const termo = semAcento(H22.busca.trim())
   const lista = el.candidatos.filter((c) => !termo || semAcento(`${c.nome} ${c.nomeCompleto} ${c.partido} ${c.numero}`).includes(termo))
   return `<section class="cartao resumo">
-      <div class="resumo-titulo"><h2>Eleições 2022 · ${esc(el.nome)}${el.turno === 2 ? ' (2º turno)' : ''} · SC</h2><span class="selo final">Resultado oficial</span></div>
+      <div class="resumo-titulo"><h2>Eleições ${ano} · ${esc(el.nome)}${el.turno === 2 ? ' (2º turno)' : ''} · ${municipal && H22.local ? esc(H22.local.nm) : 'SC'}</h2><span class="selo final">Resultado oficial</span></div>
       ${pills}
       ${seletorLocal(H22)}
-      <p class="nota">${fmt.format(el.validos)} votos nominais válidos · ${el.candidatos.length} candidatos${prop ? ` · ${el.vagas} vagas` : ''}.${prop && el.qe ? ` <strong>📐 Quociente eleitoral de 2022: ${fmt.format(el.qe)}</strong> (${fmt.format(el.validosTotais)} válidos com legenda ÷ ${el.vagas}).` : ''} Toque num candidato que concorre em 2026 para abrir a ficha atual.</p>
+      <p class="nota">${fmt.format(el.validos)} votos nominais válidos · ${el.candidatos.length} candidatos${prop && el.vagas ? ` · ${el.vagas} vagas` : ''}.${prop && el.qe ? ` <strong>📐 Quociente eleitoral de ${ano}: ${fmt.format(el.qe)}</strong> (${fmt.format(el.validosTotais)} válidos com legenda ÷ ${el.vagas}).` : ''} Toque num candidato que concorre em 2026 para abrir a ficha atual.</p>
     </section>
-    ${H22.local ? renderLocal(H22, el) : `<section class="cartao"><h3>${prop ? `Eleitos em 2022 (${eleitos.length}) e onde estão em 2026` : 'Principais candidatos de 2022 e onde estão em 2026'}</h3>
+    ${H22.local ? renderLocal(H22, el) : `<section class="cartao"><h3>${municipal && !H22.local ? `Mais votados de SC em ${ano} (${esc(el.nome)}) e onde estão em 2026` : prop ? `Eleitos em ${ano} (${eleitos.length}) e onde estão em 2026` : `Principais candidatos de ${ano} e onde estão em 2026`}</h3>
+      ${municipal && !H22.local ? '<p class="nota">Escolha um município acima para ver os candidatos dele e os votos por zona, bairro, local e seção.</p>' : ''}
       <ul class="h22-lista">${destaque.map(cartaoCand).join('')}</ul></section>
     ${partidos}
-    <section class="cartao"><h3>Todos os candidatos de 2022</h3>
+    <section class="cartao"><h3>Todos os candidatos de ${ano}${municipal && !H22.local ? ' em SC' : ''}</h3>
       <input id="h22-busca" type="search" placeholder="Buscar por nome, partido ou número…" value="${esc(H22.busca)}" autocomplete="off">
       <ul class="h22-lista">${lista.slice(0, termo ? 200 : 60).map(cartaoCand).join('')}</ul>
       ${lista.length > 60 && !termo ? `<p class="nota">Mostrando 60 de ${lista.length}. Use a busca.</p>` : ''}
     </section>
     `}
-    <p class="nota centro">Fonte: TSE, Portal de Dados Abertos (votação por candidato/município/zona e por seção eleitoral, 2022).</p>
+    <p class="nota centro">Fonte: TSE, Portal de Dados Abertos (votação por candidato/município/zona e por seção eleitoral, ${ano}).</p>
     <p class="centro"><label class="mini-pref"><input type="checkbox" data-pref="2022" checked> Mostrar dados de 2022 no app</label></p>`
+}
+
+// eleição municipal vista de uma cidade: só os candidatos dela, com os válidos da cidade
+function cidadeDe(el, cd) {
+  el._cidades ??= new Map()
+  if (!el._cidades.has(cd)) {
+    const candidatos = el.candidatos.filter((c) => c.cd === cd)
+    const vagas = el.cargo === 13 ? candidatos.filter((c) => /^ELEITO/.test(c.sit)).length : 1
+    el._cidades.set(cd, { ...el, candidatos, vagas, validos: candidatos.reduce((a, c) => a + c.votos, 0), porNumero: null, _cidades: null })
+  }
+  return el._cidades.get(cd)
 }
 
 /* ---------------- 2026 por bairro, local e seção (boletins de urna) ---------------- */

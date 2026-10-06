@@ -66,15 +66,17 @@ for cd, arq in arquivos.items():
     json.dump(arq, open(os.path.join(DIR, 'secoes', f'{cd}.json'), 'w'), ensure_ascii=False, separators=(',', ':'))
 log('municípios', len(arquivos), 'seções sem local no cadastro', sem)
 
-# índice de bairros por candidato
+# índice de bairros por candidato (só cargos estaduais/nacionais: em prefeito e vereador o número se repete
+# entre municípios, e o app usa direto os arquivos de seções da cidade)
+MUNICIPAL = lambda el: el.endswith(('c11', 'c13'))
 bairro_id, bairros = {}, []
 por_el = collections.defaultdict(lambda: collections.defaultdict(collections.Counter))
 validos_b = collections.defaultdict(collections.Counter)
 for cd, arq in arquivos.items():
     for el, secs in arq['votos'].items():
-        if el not in novos:
+        if el not in novos or MUNICIPAL(el):
             continue
-        prop = el.endswith(('c6', 'c7'))
+        prop = el.endswith(('c6', 'c7', 'c13'))
         for zs, arr in secs.items():
             b = arq['locais'].get(arq['secoes'].get(zs), ['', '', ''])[2] or 'Bairro não informado'
             if (cd, b) not in bairro_id:
@@ -162,7 +164,9 @@ for el, cands in por_el.items():
 
 # votos de cada candidato por município (para a ficha: "por município" em SC inteira)
 for el in novos:
-    prop = el.endswith(('c6', 'c7'))
+    if MUNICIPAL(el):
+        continue
+    prop = el.endswith(('c6', 'c7', 'c13'))
     validos, cand = collections.Counter(), collections.defaultdict(collections.Counter)
     for cd, arq in arquivos.items():
         for zs, arr in arq['votos'].get(el, {}).items():
@@ -178,6 +182,6 @@ for el in novos:
     log('municípios', el, len(cand))
 
 # índice das eleições com dados por seção
-ids = sorted(f[8:-5] for f in os.listdir(DIR) if f.startswith('bairros-') and f.endswith('.json'))
+ids = sorted({f[8:-5] for f in os.listdir(DIR) if f.startswith('bairros-') and f.endswith('.json')} | {el for el in novos if MUNICIPAL(el)})
 json.dump({'eleicoes': ids}, open(os.path.join(DIR, 'indice.json'), 'w'))
 log('índice', ids)
