@@ -992,3 +992,21 @@ td .leg-ponto { margin-right: 4px; vertical-align: middle; }
 .meta-pct { font-weight: 800; font-variant-numeric: tabular-nums; }
 .meta-campos { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; font-size: 0.88rem; }
 .meta-inp { width: 7em; font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--linha); background: var(--fundo); color: var(--texto); margin-left: 4px; }
+
+/* ---------- leitura do QR do boletim de urna ---------- */
+.qr-foto-bt { cursor: pointer; }
+.qr-colar summary { cursor: pointer; font-weight: 700; color: var(--primaria); margin: 10px 0 6px; }
+#qr-texto { width: 100%; font: 0.8rem/1.4 ui-monospace, monospace; padding: 8px; border-radius: 10px; border: 1px solid var(--linha); background: var(--fundo); color: var(--texto); }
+.qr-msg { font-weight: 700; background: var(--primaria-clara); border-radius: 10px; padding: 8px 12px; }
+.qr-ranking { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 8px; }
+.qr-ranking li { display: grid; gap: 4px; padding-left: 8px; border-left: 4px solid var(--cor); }
+.qr-secoes { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 8px; }
+.qr-secoes li { display: flex; gap: 8px; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--linha); padding: 6px 0; font-size: 0.9rem; }
+.qr-conf { font-size: 0.78rem; font-weight: 700; text-align: right; }
+.qr-conf.confere { color: #0b7a45; }
+.qr-conf.diverge { color: #c62828; }
+.qr-camera { position: fixed; inset: 0; z-index: 70; background: #000; display: grid; place-items: center; }
+.qr-camera video { width: 100%; height: 100%; object-fit: cover; }
+.qr-mira { position: absolute; width: min(70vw, 340px); aspect-ratio: 1; border: 3px solid #ffdf00; border-radius: 18px; box-shadow: 0 0 0 100vmax rgb(0 0 0 / 35%); }
+.qr-cam-msg { position: absolute; top: max(16px, env(safe-area-inset-top)); left: 16px; right: 16px; margin: 0; background: rgb(0 0 0 / 70%); color: #fff; border-radius: 12px; padding: 10px 14px; font-weight: 700; text-align: center; }
+.qr-camera .botao { position: absolute; bottom: max(20px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); width: auto; padding: 10px 22px; }
