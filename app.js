@@ -4,12 +4,12 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { icone } from './icones.js?v=202610080800'
-import { calcularVagas } from './vagas.js?v=202610080800'
-import { chanceDe, NIVEIS } from './chances.js?v=202610080800'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610080800'
-import { FLORIPA } from './floripa.js?v=202610080800'
-import { corPartido, corTexto } from './cores.js?v=202610080800'
+import { icone } from './icones.js?v=202610080900'
+import { calcularVagas } from './vagas.js?v=202610080900'
+import { chanceDe, NIVEIS } from './chances.js?v=202610080900'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610080900'
+import { FLORIPA } from './floripa.js?v=202610080900'
+import { corPartido, corTexto } from './cores.js?v=202610080900'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -444,6 +444,7 @@ function alternarFavorito(abaId, abr, c) {
 
 // Guarda a evolução (% de seções apuradas, votos) de cada candidato acompanhado.
 function registrarHistorico(abaId, abr, dados) {
+  verificarAlertas(abaId, abr, dados)
   let mudou = false
   for (const f of favoritos) {
     if (f.aba !== abaId || f.abr !== abr) continue
@@ -462,6 +463,114 @@ function registrarHistorico(abaId, abr, dados) {
   }
   if (mudou) gravarLocal(CHAVE_HIST, JSON.stringify(historico))
 }
+
+/* ---------------- alertas dos acompanhados ---------------- */
+
+// A cada atualização, compara a situação de cada candidato acompanhado com a anterior e avisa
+// (notificação do sistema, se permitida, e um aviso na tela) quando ele muda de posição, é eleito,
+// entra ou sai das vagas ou entra em risco. Funciona com o app aberto ou em segundo plano.
+const CHAVE_ALERTAS = `${PREFIXO}alertas:v1`
+const ALERTAS = { on: lerLocal(`${PREFIXO}alertas:on`, '') === '1', ult: lerJSON(CHAVE_ALERTAS, {}) }
+const DENTRO = new Set(['garantido', 'segura', 'provavel', 'risco'])
+const suportaNotificacao = () => typeof Notification !== 'undefined'
+
+function situacaoAlerta(d, c, aba, pos) {
+  const ch = chance(d, c, aba, true)
+  const dentro = !!c.eleito || (aba.tipo === 'prop' ? !!c.projecao : ch ? DENTRO.has(ch.nivel) : pos <= (d.vagas || 1))
+  return { pos, eleito: !!c.eleito, dentro, risco: ch?.nivel === 'risco', pst: d.secoes?.percentual || 0 }
+}
+function mensagensAlerta(nome, aba, a, b) {
+  const cargo = aba.rotulo.replace(/ SC$/, '')
+  if (b.eleito && !a.eleito) return `✔ ${nome} está eleito (${cargo}, conforme o TSE)`
+  if (b.dentro !== a.dentro) return b.dentro ? `⬆️ ${nome} entrou nas vagas (${cargo}) · ${b.pos}º lugar` : `⬇️ ${nome} saiu das vagas (${cargo}) · ${b.pos}º lugar`
+  if (b.risco && !a.risco) return `⚠️ ${nome}: vaga em risco (${cargo}) · ${b.pos}º lugar`
+  if (b.pos !== a.pos) return `${b.pos < a.pos ? '▲' : '▼'} ${nome} ${b.pos < a.pos ? 'subiu' : 'caiu'} para ${b.pos}º (era ${a.pos}º) · ${cargo}`
+  return null
+}
+function verificarAlertas(abaId, abr, d) {
+  const aba = ABAS.find((a) => a.id === abaId)
+  if (!aba || !d?.candidatos || d.mun) return
+  let mudou = false
+  for (const f of favoritos) {
+    if (f.aba !== abaId || f.abr !== abr) continue
+    const c = d.candidatos.find((x) => x.sqcand === f.sqcand)
+    if (!c) continue
+    const b = situacaoAlerta(d, c, aba, d.candidatos.indexOf(c) + 1)
+    const a = ALERTAS.ult[f.id]
+    // só compara com uma leitura anterior da mesma apuração (que não voltou atrás)
+    const msg = a && b.pst >= a.pst ? mensagensAlerta(c.nome, aba, a, b) : null
+    if (!a || a.pos !== b.pos || a.eleito !== b.eleito || a.dentro !== b.dentro || a.risco !== b.risco || a.pst !== b.pst) {
+      ALERTAS.ult[f.id] = b
+      mudou = true
+    }
+    if (msg && ALERTAS.on) avisar(msg, { aba: abaId, abr, sq: c.sqcand, pst: b.pst })
+  }
+  if (mudou) gravarLocal(CHAVE_ALERTAS, JSON.stringify(ALERTAS.ult))
+}
+
+function avisar(msg, alvo) {
+  const hash = hashDe(alvo.aba, { c: alvo.sq, ca: alvo.aba, cr: alvo.abr !== UF ? alvo.abr : null })
+  const corpo = `${fmtPct.format(alvo.pst)}% das seções apuradas · toque para abrir a ficha`
+  if (suportaNotificacao() && Notification.permission === 'granted') {
+    const opcoes = { body: corpo, tag: `alerta-${alvo.sq}`, renotify: true, icon: 'img/icones/icone-192.png', badge: 'img/icones/favicon-32.png', data: { url: `${location.pathname}${location.search}${hash}` } }
+    const sw = navigator.serviceWorker
+    ;(sw?.controller ? sw.ready.then((r) => r.showNotification(msg, opcoes)) : Promise.reject())
+      .catch(() => {
+        try {
+          const n = new Notification(msg, opcoes)
+          n.onclick = () => (window.focus(), (location.hash = hash))
+        } catch {}
+      })
+  }
+  avisoNaTela(msg, hash)
+}
+// aviso dentro do app (some sozinho); serve também quando a notificação não é permitida
+function avisoNaTela(msg, hash) {
+  let caixa = document.querySelector('.avisos')
+  if (!caixa) {
+    caixa = Object.assign(document.createElement('div'), { className: 'avisos' })
+    caixa.setAttribute('role', 'status')
+    caixa.setAttribute('aria-live', 'polite')
+    document.body.append(caixa)
+  }
+  const a = Object.assign(document.createElement('a'), { className: 'aviso-alerta', href: hash, textContent: msg })
+  caixa.append(a)
+  while (caixa.children.length > 3) caixa.firstElementChild.remove()
+  setTimeout(() => a.remove(), 12_000)
+}
+
+async function alternarAlertas() {
+  ALERTAS.on = !ALERTAS.on
+  gravarLocal(`${PREFIXO}alertas:on`, ALERTAS.on ? '1' : '')
+  renderizar()
+  // a pergunta do navegador pode ficar aberta: os alertas na tela já valem enquanto isso
+  if (ALERTAS.on && suportaNotificacao() && Notification.permission === 'default') {
+    try {
+      await Notification.requestPermission()
+    } catch {}
+    renderizar()
+  }
+}
+function quadroAlertas() {
+  const perm = suportaNotificacao() ? Notification.permission : 'indisponivel'
+  const estadoTxt = !ALERTAS.on
+    ? 'Receba um aviso quando um candidato acompanhado mudar de posição, for eleito, entrar ou sair das vagas ou entrar em risco.'
+    : perm === 'granted'
+      ? 'Alertas ligados: avisamos por notificação (com o app aberto ou em segundo plano) e aqui na tela.'
+      : perm === 'denied'
+        ? 'Alertas ligados só aqui na tela: as notificações estão bloqueadas para este site nas configurações do navegador.'
+        : perm === 'indisponivel'
+          ? 'Alertas ligados aqui na tela (este navegador não tem notificações; no iPhone, instale o app na tela de início).'
+          : 'Alertas ligados aqui na tela. Permita as notificações para receber também fora do app.'
+  return `<section class="cartao alertas ${ALERTAS.on ? 'ligado' : ''}">
+    <div class="alertas-linha"><p>${icone('sino')} ${estadoTxt}</p>
+    <button type="button" class="botao ${ALERTAS.on ? 'secundario' : ''}" data-alertas>${ALERTAS.on ? '🔕 Desligar alertas' : '🔔 Ativar alertas'}</button></div>
+    ${ALERTAS.on ? '<p class="nota">O app confere a cada 30 s enquanto está aberto (em segundo plano, o navegador pode espaçar as conferências). Com o app fechado não há como avisar, porque não há servidor de envio.</p>' : ''}
+  </section>`
+}
+document.addEventListener('click', (ev) => {
+  if (ev.target.closest('[data-alertas]')) alternarAlertas()
+})
 
 /* ---------------- estado e navegação ---------------- */
 
@@ -1413,14 +1522,26 @@ function agendar() {
   clearTimeout(estado.timer)
   const intervalo = munAtual()?.regiao ? Math.max(INTERVALO_MS, 120_000) : INTERVALO_MS
   estado.timer = setTimeout(() => {
-    if (document.hidden) agendar()
-    else carregar()
+    if (!document.hidden) return carregar()
+    // em segundo plano, só os acompanhados (para os alertas)
+    if (ALERTAS.on && favoritos.length) conferirAcompanhados().finally(agendar)
+    else agendar()
   }, intervalo)
 }
 
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && !estado.dados?.final) carregar()
 })
+async function conferirAcompanhados() {
+  const grupos = new Set(favoritos.map((f) => `${f.aba}|${f.abr}`))
+  await Promise.allSettled(
+    [...grupos].map(async (k) => {
+      const [abaId, abr] = k.split('|')
+      const aba = ABAS.find((a) => a.id === abaId)
+      if (aba?.cargo) registrarHistorico(abaId, abr, await buscar(aba, abr, TURNO))
+    }),
+  )
+}
 
 /* ---------------- renderização ---------------- */
 
@@ -2164,7 +2285,7 @@ function renderFavoritos() {
     if (!grupos.has(k)) grupos.set(k, [])
     grupos.get(k).push(f)
   }
-  return [...grupos.entries()]
+  return quadroAlertas() + [...grupos.entries()]
     .map(([k, lista]) => {
       const [abaId, abr] = k.split('|')
       const aba = ABAS.find((a) => a.id === abaId)

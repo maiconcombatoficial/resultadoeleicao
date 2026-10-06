@@ -347,3 +347,49 @@ test('painel do partido: chapa, municípios, associações, bairros e 2022', asy
   const img = await baixar(page, page.locator('.cartao.pp [data-card]'))
   expect(img.bytes).toBeGreaterThan(30_000)
 })
+
+test('alertas dos acompanhados: avisa quando muda de posição', async ({ page }) => {
+  // notificações de mentira: guarda o que seria mostrado
+  await page.addInitScript(() => {
+    window.__notifs = []
+    class N {
+      static get permission() {
+        return localStorage.getItem('__perm') || 'default'
+      }
+      static requestPermission() {
+        localStorage.setItem('__perm', 'granted')
+        return Promise.resolve('granted')
+      }
+      constructor(t, o) {
+        window.__notifs.push(t)
+      }
+    }
+    Object.defineProperty(window, 'Notification', { value: N, configurable: true, writable: true })
+    if (window.ServiceWorkerRegistration) ServiceWorkerRegistration.prototype.showNotification = function (t) {
+      window.__notifs.push(t)
+      return Promise.resolve()
+    }
+  })
+  await page.goto('about:blank') // documento novo, para o script acima valer
+  await page.goto('/#depfed')
+  await page.locator('[data-fav]').first().click()
+  await page.goto('/#favoritos')
+  await page.locator('[data-alertas]').click()
+  await expect(page.locator('.alertas')).toContainText('Alertas ligados')
+  // simula que, na leitura anterior, o candidato estava em 3º
+  await page.evaluate(() => {
+    const u = JSON.parse(localStorage.getItem('alertas:v1'))
+    for (const k in u) u[k].pos = 3
+    localStorage.setItem('alertas:v1', JSON.stringify(u))
+  })
+  await page.reload()
+  await expect(page.locator('.aviso-alerta')).toContainText('subiu para 1º (era 3º)')
+  await expect.poll(() => page.evaluate(() => window.__notifs.length)).toBeGreaterThan(0)
+  // o aviso abre a ficha
+  await page.locator('.aviso-alerta').first().click()
+  await expect(page.locator('.det-id h2')).toBeVisible()
+  // desligar
+  await page.goBack()
+  await page.locator('[data-alertas]').click()
+  await expect(page.locator('[data-alertas]')).toContainText('Ativar alertas')
+})

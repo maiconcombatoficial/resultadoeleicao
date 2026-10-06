@@ -24,3 +24,15 @@ self.addEventListener('fetch', (ev) => {
       .catch(() => caches.match(req, { ignoreSearch: false }).then((r) => r || caches.match(req, { ignoreSearch: true })).then((r) => r || Response.error())),
   )
 })
+// toque numa notificação de alerta: abre (ou traz para frente) o app na ficha do candidato
+self.addEventListener('notificationclick', (ev) => {
+  ev.notification.close()
+  const url = new URL(ev.notification.data?.url || './', self.location.origin).href
+  ev.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cs) => {
+      const c = cs.find((x) => new URL(x.url).pathname === new URL(url).pathname) || cs[0]
+      if (!c) return self.clients.openWindow(url)
+      return c.focus().then(() => c.navigate(url)).catch(() => self.clients.openWindow(url))
+    }),
+  )
+})
