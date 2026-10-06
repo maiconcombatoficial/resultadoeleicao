@@ -4,12 +4,12 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { icone } from './icones.js?v=202610080400'
-import { calcularVagas } from './vagas.js?v=202610080400'
-import { chanceDe, NIVEIS } from './chances.js?v=202610080400'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610080400'
-import { FLORIPA } from './floripa.js?v=202610080400'
-import { corPartido, corTexto } from './cores.js?v=202610080400'
+import { icone } from './icones.js?v=202610080500'
+import { calcularVagas } from './vagas.js?v=202610080500'
+import { chanceDe, NIVEIS } from './chances.js?v=202610080500'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610080500'
+import { FLORIPA } from './floripa.js?v=202610080500'
+import { corPartido, corTexto } from './cores.js?v=202610080500'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -945,7 +945,7 @@ function renderPainel() {
       <a href="#bairros">${icone('bairros')}<strong>Bairros</strong><small>zona, local e seção</small></a>
       <a href="#municipios">${icone('municipios')}<strong>Municípios</strong><small>apuração em cada cidade</small></a>
       <a href="#analises">${icone('analises')}<strong>Análises</strong><small>mapa, perfil e abstenção</small></a>
-      ${PREF.mostrar2022 ? `<a href="#h2022">${icone('h2022')}<strong>Histórico</strong><small>eleições de 2016 a 2024</small></a>` : ''}
+      ${PREF.mostrar2022 ? `<a href="#h2022">${icone('h2022')}<strong>Histórico</strong><small>eleições de 2012 a 2024</small></a>` : ''}
     </div><p class="nota">Para comparar dois candidatos (inclusive de cargos diferentes), abra a ficha de um deles e toque em <strong>Comparar com outro candidato</strong>.</p></section>`
   const card = cardPainel(D)
   return topo + meus + blocoMaj('governador', 'Governador', 3) + blocoMaj('senador', 'Senado', 4) + blocoCadeiras('depfed', 'Dep. Federal') + blocoCadeiras('depest', 'Dep. Estadual') +
@@ -3656,7 +3656,7 @@ const versaoLegivel = () => (/^\d{12}$/.test(VERSAO) ? `${VERSAO.slice(6, 8)}/${
 const VERSAO = new URL(import.meta.url).searchParams.get('v') || ''
 const H22 = { resumo: null, carregando: null, mun: new Map(), atual: null, atualT: 0, sel: 't1-c7', busca: '', ano: 2022 }
 // eleições anteriores com dados no app (dados<ano>/): 2022 é o H22; as outras ficam em HIST
-const ANOS_HIST = [2024, 2022, 2020, 2018, 2016]
+const ANOS_HIST = [2024, 2022, 2020, 2018, 2016, 2014, 2012]
 const HIST = new Map([[2022, H22]])
 const histDe = (ano) => {
   if (!HIST.has(ano)) HIST.set(ano, { resumo: null, carregando: null, mun: new Map(), indice: null })
@@ -3761,7 +3761,7 @@ const seta = (dp) => (Math.abs(dp) < 0.005 ? '＝' : dp > 0 ? `▲ ${fmtPct.form
 const situ2022 = (sit) =>
   /^ELEITO/.test(sit) ? `<span class="tag eleito-tse"><b>✔ ${esc(sit.toLowerCase().replace(/^./, (m) => m.toUpperCase()))}</b></span>` : `<span class="tag nao-eleito">${esc(sit.toLowerCase().replace(/^./, (m) => m.toUpperCase()))}</span>`
 
-// série histórica do candidato: todas as eleições de 2016 a 2024 em SC (pelo nome completo) + 2026
+// série histórica do candidato: todas as eleições de 2012 a 2024 em SC (pelo nome completo) + 2026
 function secaoHistorico(c, d, aba) {
   if (!PREF.mostrar2022 || DEMO) return ''
   if (!ANOS_HIST.every((a) => HIST.get(a)?.resumo || HIST.get(a)?.carregando)) carregarHistorico().then(() => estado.detalhe && renderDetalhe())
@@ -3783,7 +3783,7 @@ function secaoHistorico(c, d, aba) {
         <div class="barra fina"><span style="width:${(100 * i.votos) / max}%;background:${i.agora ? cor : 'var(--mudo)'}"></span></div>
         <div class="cand-meta">${fmt.format(i.votos)} votos · ${i.pos}</div></div></li>`)
       .join('')}</ol>
-    <p class="nota">Eleições em SC de 2016 a 2024 (TSE, dados abertos), ligadas pelo nome completo. Prefeito e vereador: posição dentro do município.</p></section>`
+    <p class="nota">Eleições em SC de 2012 a 2024 (TSE, dados abertos), ligadas pelo nome completo. Prefeito e vereador: posição dentro do município.</p></section>`
 }
 
 function secao2022(c, d, aba) {
