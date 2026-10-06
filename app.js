@@ -4,12 +4,12 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { icone } from './icones.js?v=202610080600'
-import { calcularVagas } from './vagas.js?v=202610080600'
-import { chanceDe, NIVEIS } from './chances.js?v=202610080600'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610080600'
-import { FLORIPA } from './floripa.js?v=202610080600'
-import { corPartido, corTexto } from './cores.js?v=202610080600'
+import { icone } from './icones.js?v=202610080700'
+import { calcularVagas } from './vagas.js?v=202610080700'
+import { chanceDe, NIVEIS } from './chances.js?v=202610080700'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610080700'
+import { FLORIPA } from './floripa.js?v=202610080700'
+import { corPartido, corTexto } from './cores.js?v=202610080700'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -5612,8 +5612,16 @@ const CARDS = new Map()
 // registra o card e devolve o botão que o compartilha (a chave identifica o lugar da tela)
 function botaoCard(chave, card, rotulo = `${icone('compartilhar')} Compartilhar imagem`, classe = 'botao') {
   CARDS.set(chave, card)
-  return `<button type="button" class="${classe} botao-card" data-card="${esc(chave)}">${rotulo}</button>`
+  return `<span class="card-grupo"><button type="button" class="${classe} botao-card" data-card="${esc(chave)}">${rotulo}</button><button type="button" class="fmt-card" data-fmt-card aria-pressed="${formatoCard() === 'story'}" title="Formato da imagem: Stories 9:16 (ligado) ou feed 4:5 (desligado)">Stories</button></span>`
 }
+// formato das imagens: 'feed' (1080×1350, 4:5) ou 'story' (1080×1920, 9:16); vale para todos os cards e carrosséis
+const formatoCard = () => (lerLocal('formatoCard', 'feed') === 'story' ? 'story' : 'feed')
+document.addEventListener('click', (ev) => {
+  if (!ev.target.closest('[data-fmt-card]')) return
+  const story = formatoCard() !== 'story'
+  gravarLocal('formatoCard', story ? 'story' : 'feed')
+  for (const b of document.querySelectorAll('[data-fmt-card]')) b.setAttribute('aria-pressed', String(story))
+})
 document.addEventListener('click', (ev) => {
   const b = ev.target.closest('[data-card]')
   if (!b || !CARDS.has(b.dataset.card)) return
@@ -5656,7 +5664,7 @@ const INSTAGRAM = 'https://www.instagram.com/maiconcombat/'
 const legendaShare = (titulo) => `${titulo}\n\n📲 Siga @maiconcombat 👉 ${INSTAGRAM}\nApuração 2026 · dados oficiais do TSE`
 
 async function compartilharCard(card) {
-  const { blob, nome } = await desenharCard(card)
+  const { blob, nome } = await desenharCard(card, formatoCard())
   const arq = new File([blob], nome, { type: 'image/png' })
   if (navigator.canShare?.({ files: [arq] })) {
     try {
@@ -5676,7 +5684,7 @@ async function compartilharCarrossel(cards, titulo, botao) {
   const arqs = []
   for (const [i, card] of cards.entries()) {
     if (botao) botao.innerHTML = `⏳ Gerando ${i + 1} de ${total}…`
-    const { blob, nome } = await desenharCard({ ...card, pagina: `${i + 1}/${total}` })
+    const { blob, nome } = await desenharCard({ ...card, pagina: `${i + 1}/${total}` }, formatoCard())
     arqs.push(new File([blob], `${String(i + 1).padStart(2, '0')}-${nome}`, { type: 'image/png' }))
   }
   if (botao) botao.innerHTML = rotulo
@@ -5694,16 +5702,34 @@ async function compartilharCarrossel(cards, titulo, botao) {
   }
 }
 
-async function desenharCard(card) {
-  const W = 1080, H = 1350
+async function desenharCard(card, formato = 'feed') {
+  // Stories (9:16): a mesma arte num quadro mais alto, com margens livres em cima e embaixo para a
+  // interface do Instagram (nome, respostas); o conteúdo ganha espaço para mais linhas
+  const story = formato === 'story'
+  const W = 1080, ALTO = story ? 1920 : 1350, TOPO = story ? 200 : 0, BASE = story ? 170 : 0
+  const H = ALTO - TOPO - BASE
   const fotosTopo = (await Promise.all((card.fotos || (card.foto ? [card.foto] : [])).slice(0, 2).map(carregarImagem))).filter(Boolean)
-  const fotosLinha = await Promise.all((card.linhas || []).slice(0, 8).map((l) => carregarImagem(l.foto)))
+  const fotosLinha = await Promise.all((card.linhas || []).slice(0, 14).map((l) => carregarImagem(l.foto)))
   // a fonte do app precisa estar carregada antes de desenhar no canvas
   await Promise.all([500, 600, 700, 800].map((p) => document.fonts?.load(`${p} 20px Inter`).catch(() => null)))
   const cv = document.createElement('canvas')
   cv.width = W
-  cv.height = H
+  cv.height = ALTO
   const g = cv.getContext('2d')
+  if (story) {
+    const gt = g.createLinearGradient(0, 0, W, 300)
+    gt.addColorStop(0, '#006b2d')
+    gt.addColorStop(0.5, '#009c3b')
+    gt.addColorStop(1, '#0a5ea8')
+    g.fillStyle = gt
+    g.fillRect(0, 0, W, TOPO)
+    const gb = g.createLinearGradient(0, ALTO - BASE, W, ALTO)
+    gb.addColorStop(0, '#0b3d1f')
+    gb.addColorStop(1, '#0a4a8a')
+    g.fillStyle = gb
+    g.fillRect(0, ALTO - BASE, W, BASE)
+    g.translate(0, TOPO)
+  }
   const fonte = (peso, tam) => `${peso} ${tam}px Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`
   const corta = (txt, max) => {
     let t = String(txt ?? '')
@@ -6042,7 +6068,7 @@ async function desenharCard(card) {
   g.fillText('maiconcombat.com.br', W - 64, cyF - 12)
   g.textAlign = 'left'
   const blob = await new Promise((ok) => cv.toBlob(ok, 'image/png'))
-  return { blob, nome: `${nomeArquivo(card.nome || 'apuracao')}-${nomeArquivo(card.titulo || 'card')}.png` }
+  return { blob, nome: `${nomeArquivo(card.nome || 'apuracao')}-${nomeArquivo(card.titulo || 'card')}${story ? '-stories' : ''}.png` }
 }
 
 // faixa de total do card: votos do lugar e, se houver, 2022 com a variação
