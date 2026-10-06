@@ -192,3 +192,14 @@ test('metas de votos: preencher, editar e manter salvo', async ({ page }) => {
   await page.locator('[data-cand]').nth(3).click()
   await expect(page.locator('.cartao.metas .meta-total')).toBeVisible()
 })
+
+test('leitura do QR do boletim de urna: partes fora de ordem e conferência com o TSE', async ({ page }) => {
+  await page.goto('/#bairros')
+  await page.locator('[data-b26-modo="qr"]').click()
+  await page.setInputFiles('#qr-foto', 'tests/fixtures/qr/p2.png')
+  await expect(page.locator('.qr-msg')).toContainText('Falta a parte 1')
+  await page.setInputFiles('#qr-foto', 'tests/fixtures/qr/p1.png')
+  await expect(page.locator('.qr-msg')).toContainText('Seção lida')
+  await expect(page.locator('.qr-secoes li').first()).toContainText('confere com o TSE')
+  await expect(page.locator('.qr-ranking li').first()).toContainText('JULIA ZANATTA')
+})
