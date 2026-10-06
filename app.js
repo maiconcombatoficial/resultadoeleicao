@@ -3351,7 +3351,8 @@ detalheEl.addEventListener('change', (ev) => {
     const t = (M.dados[M.nivel] ??= {})
     v ? (t[mi.dataset.metaK] = v) : delete t[mi.dataset.metaK]
     salvarMetas(M)
-    return renderDetalhe()
+    // fora do evento: redesenhar tira o campo da tela, o que dispara outro "change" (blur) no meio do redesenho
+    return setTimeout(() => estado.detalhe && renderDetalhe())
   }
   const sel = ev.target.closest('[data-bai-mun]')
   const det = estado.detalhe
