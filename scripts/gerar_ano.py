@@ -1,6 +1,6 @@
 """Gera dados<ano>/ de uma eleição anterior em SC, a partir dos dados abertos do TSE.
 
-Uso: python3 scripts/gerar_ano.py --ano 2024      (2016, 2018, 2020, 2022, 2024)
+Uso: python3 scripts/gerar_ano.py --ano 2024      (2012, 2014, 2016, 2018, 2020, 2022, 2024)
 
 Lê votacao_candidato_munzona_<ano> (candidatos, situação, votos por município) e votacao_secao_<ano>_SC
 (votos de cada seção) e grava, no mesmo formato de dados2022/:
@@ -56,8 +56,11 @@ for r in linhas(zip_tse(f'votacao_candidato_munzona_{ANO}'), f'_{UF}.csv'):
     el = f't{t}-c{c}'
     v = inteiro(r.get('QT_VOTOS_NOMINAIS_VALIDOS') or r.get('QT_VOTOS_NOMINAIS'))
     dest = r.get('NM_TIPO_DESTINACAO_VOTOS', '')
-    if dest and not dest.lower().startswith('v'):  # anulado / anulado sub judice: não conta como válido
-        anulados.add((el, r['NR_CANDIDATO']))
+    nominais = inteiro(r.get('QT_VOTOS_NOMINAIS'))
+    # anulado / anulado sub judice: não conta como válido (arquivos antigos não têm a destinação,
+    # mas trazem os votos nominais com zero válidos)
+    if (dest and not dest.lower().startswith('v')) or (r.get('QT_VOTOS_NOMINAIS_VALIDOS') is not None and v == 0 and nominais > 0):
+        anulados.add((el, r['NR_CANDIDATO'] + (f'-{cd}' if c in (11, 13) else '')))
         v = 0
     tot[(el, sq)] += v
     mun[(el, sq)][cd] += v
@@ -79,9 +82,9 @@ for el in sorted(validos, key=lambda e: (int(e[1]), int(e.split('-c')[1]))):
     resumo['eleicoes'].append({'turno': t, 'cargo': c, 'nome': CARGOS[c], 'vagas': VAGAS[c], 'validos': validos[el], 'candidatos': cands})
     m = {k[1]: {cd: v for cd, v in mun[k].items() if v} for k in ks if tot[k] > 0}
     json.dump({'validos': munval[el], 'cand': m}, open(os.path.join(DIR, f'mun-{el}.json'), 'w'), separators=(',', ':'), ensure_ascii=False)
-json.dump(resumo, open(os.path.join(DIR, 'resumo.json'), 'w'), separators=(',', ':'), ensure_ascii=False)
 
 # 2) votos por seção
+validos_nr = {(el, str(int(info[(el, sq)][0])) + (f'-{info[(el, sq)][6]}' if info[(el, sq)][6] else '')) for (el, sq) in info if tot[(el, sq)] > 0}
 locais = collections.defaultdict(dict)
 secloc = collections.defaultdict(dict)
 votos = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(list)))
@@ -92,12 +95,22 @@ for r in linhas(zip_tse(f'votacao_secao_{ANO}_{UF}'), f'_{UF}.csv'):
     loc = f"{z}-{int(r['NR_LOCAL_VOTACAO'])}" if r.get('NR_LOCAL_VOTACAO') else f'{z}-0'
     locais[cd].setdefault(loc, [r.get('NM_LOCAL_VOTACAO', '').strip(), r.get('DS_LOCAL_VOTACAO_ENDERECO', '').strip(), ''])
     secloc[cd][f'{z}-{s}'] = loc
-    votos[cd][f"t{int(r['NR_TURNO'])}-c{int(r['CD_CARGO'])}"][f'{z}-{s}'] += [int(r['NR_VOTAVEL']), int(r['QT_VOTOS'])]
+    el, nr = f"t{int(r['NR_TURNO'])}-c{int(r['CD_CARGO'])}", int(r['NR_VOTAVEL'])
+    votos[cd][el][f'{z}-{s}'] += [nr, int(r['QT_VOTOS'])]
+    # votos de candidato sem votos válidos (inapto, renúncia, cassado…): nos arquivos antigos, o munzona
+    # traz zero e a seção traz os votos, que o TSE contou como nulos
+    if nr not in (95, 96, 97) and not (int(r['CD_CARGO']) in (6, 7, 13) and nr < 100):
+        k = (el, str(nr) + (f'-{cd}' if int(r['CD_CARGO']) in (11, 13) else ''))
+        if k not in validos_nr:
+            anulados.add(k)
     n += 1
 for cd in locais:
     j = {'locais': locais[cd], 'secoes': secloc[cd], 'votos': {e: dict(v) for e, v in votos[cd].items()}}
     json.dump(j, open(os.path.join(DIR, 'secoes', f'{cd}.json'), 'w'), separators=(',', ':'), ensure_ascii=False)
 log('linhas por seção', n, 'municípios', len(locais))
+resumo['anulados'] = sorted(f'{el}-{nr}' for el, nr in anulados)
+log('anulados', len(anulados))
+json.dump(resumo, open(os.path.join(DIR, 'resumo.json'), 'w'), separators=(',', ':'), ensure_ascii=False)
 
 # 3) bairros (cadastro de locais), índices por bairro e por município
 subprocess.run([sys.executable, os.path.join(RAIZ, 'scripts', 'gerar_bairros.py'), '--ano', str(ANO)], check=True)
