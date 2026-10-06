@@ -152,3 +152,13 @@ test('análise automática na ficha', async ({ page }) => {
   const img = await baixar(page, page.locator('[data-card="analise"]'))
   expect(img.bytes).toBeGreaterThan(30_000)
 })
+
+test('mapa de votos aberto na ficha e na comparação', async ({ page }) => {
+  await page.goto('/#depfed')
+  await page.locator('[data-cand]').first().click()
+  await expect(page.locator('[data-mapa] .leaflet-interactive, [data-mapa] canvas').first()).toBeAttached({ timeout: 30_000 })
+  await page.locator('[data-comparar]').click()
+  await page.locator('[data-comp-cargo="depest"]').click()
+  await page.locator('[data-comp-sq]').first().click()
+  await expect(page.locator('.cdif [data-mapa] .leaflet-interactive, .cdif [data-mapa] canvas').first()).toBeAttached({ timeout: 30_000 })
+})
