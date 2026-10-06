@@ -4,12 +4,12 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { icone } from './icones.js?v=202610080100'
-import { calcularVagas } from './vagas.js?v=202610080100'
-import { chanceDe, NIVEIS } from './chances.js?v=202610080100'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610080100'
-import { FLORIPA } from './floripa.js?v=202610080100'
-import { corPartido, corTexto } from './cores.js?v=202610080100'
+import { icone } from './icones.js?v=202610080200'
+import { calcularVagas } from './vagas.js?v=202610080200'
+import { chanceDe, NIVEIS } from './chances.js?v=202610080200'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610080200'
+import { FLORIPA } from './floripa.js?v=202610080200'
+import { corPartido, corTexto } from './cores.js?v=202610080200'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -2557,6 +2557,7 @@ function renderDetalheConteudo() {
     ${secaoAnalise(det, c, aba, d)}
     ${secaoBairros(det, c, aba)}
     ${secaoMapaFicha(det, c, aba)}
+    ${secaoMetas(det, c, aba)}
     <section class="cartao"><h3>${c.eleito || d.tseDefinido ? 'Situação oficial (TSE)' : 'Chance de reverter'}</h3>${textoChance(d, c, aba)}</section>
     <section class="cartao"><h3>Disputa</h3>${blocoDisputa(d, c, aba)}</section>
     ${aba?.tipo === 'prop' ? secaoQuocienteFicha(d, c, det) : ''}
@@ -3231,6 +3232,7 @@ detalheEl.addEventListener('click', (ev) => {
     const cmp = CARDS.get('comparacao')
     return gerarPDF([cmp, ...det.comp.dif.export.carrossel()].filter(Boolean), `${cmp?.nome || 'comparacao'}`, cdPdf)
   }
+  if (det?.metas && tratarMetas(ev)) return
   const ccBtn = ev.target.closest('[data-comp-cargo]')
   if (ccBtn) return ((det.compCargo = ccBtn.dataset.compCargo || null), (det.buscaComp = ''), renderDetalhe())
   const D = !det?.escolhendo && det?.comp?.dif
@@ -3342,6 +3344,15 @@ detalheEl.addEventListener('click', (ev) => {
   }
 })
 detalheEl.addEventListener('change', (ev) => {
+  const mi = ev.target.closest?.('[data-meta-k]')
+  if (mi && estado.detalhe?.metas) {
+    const M = estado.detalhe.metas
+    const v = Math.max(0, Math.round(Number(String(mi.value).replace(/\D/g, '')) || 0))
+    const t = (M.dados[M.nivel] ??= {})
+    v ? (t[mi.dataset.metaK] = v) : delete t[mi.dataset.metaK]
+    salvarMetas(M)
+    return renderDetalhe()
+  }
   const sel = ev.target.closest('[data-bai-mun]')
   const det = estado.detalhe
   if (!sel || !det?.bai) return
@@ -3482,7 +3493,7 @@ function renderSobre() {
       <p class="nota">Encontrou algo estranho nos números? Fale com <a href="https://www.instagram.com/maiconcombat/" target="_blank" rel="noopener">@maiconcombat</a>.</p>
     </section>`
 }
-// "202610080100" → "07/10/2026 12:00"
+// "202610080200" → "07/10/2026 12:00"
 const versaoLegivel = () => (/^\d{12}$/.test(VERSAO) ? `${VERSAO.slice(6, 8)}/${VERSAO.slice(4, 6)}/${VERSAO.slice(0, 4)} ${VERSAO.slice(8, 10)}:${VERSAO.slice(10, 12)}` : VERSAO || 'local')
 
 /* ---------------- eleições de 2022 (SC) ---------------- */
@@ -4537,6 +4548,139 @@ function secaoAnalise(det, c, aba, d) {
 function cardAnalise(c, aba, frases) {
   return { turno: 1, foto: c.foto, nome: c.nome, cor: corPartido(c.partido), sub: `${c.partido} · nº ${c.numero} · ${aba.rotulo.replace(/ SC$/, '')}`,
     titulo: 'Análise do desempenho', subtitulo: 'Gerada a partir dos números oficiais do TSE', texto: frases }
+}
+
+/* ---------------- metas de votos por território (salvas no aparelho) ---------------- */
+
+const salvarMetas = (M) => gravarLocal(`metas:v1:${M.sq}`, JSON.stringify(M.dados))
+function lerMetas(sq) {
+  try {
+    return JSON.parse(lerLocal(`metas:v1:${sq}`, '{}')) || {}
+  } catch {
+    return {}
+  }
+}
+
+// linhas do nível: chave, nome, votos 2026 e de 2022 (quando houver)
+function baseMetas(det, c, aba, nivel, re) {
+  const elId = eleicaoDoCargo(aba.cargo)
+  const nr = Number(c.numero)
+  const p22 = PREF.mostrar2022 && H22.resumo ? achar2022(c).filter((p) => p.el.turno === 1).sort((x, y) => (y.el.cargo === aba.cargo) - (x.el.cargo === aba.cargo))[0] : null
+  if (nivel === 'mun' || nivel === 'assoc') {
+    const M = arquivoAno(`dados2026/municipios-${elId}.json`, re)
+    const m22 = p22 ? mun2022(p22.el.id) : null
+    if (m22 && !m22.valor) m22.then(re).catch(() => {})
+    if (!M.valor || (m22 && !m22.valor)) return null
+    const meus = M.valor.c[nr] || {}, v22 = m22?.valor.cand[p22.c.sq] || {}
+    const g = new Map()
+    for (const cd of Object.keys(M.valor.validos)) {
+      const k = nivel === 'mun' ? cd : ASSOCIACAO_MUN[cd]
+      if (!k) continue
+      const x = g.get(k) || { k, nome: nivel === 'mun' ? NOME_MUN.get(cd) || cd : `${k} · ${ASSOCIACOES[k] || ''}`, v: 0, v22: 0 }
+      x.v += meus[cd] || 0
+      x.v22 += v22[cd] || 0
+      g.set(k, x)
+    }
+    return { linhas: [...g.values()], tem22: !!p22 }
+  }
+  // bairros do lugar escolhido no cartão "Onde foi mais votado"
+  const L = det.bai?.mun
+  if (!L) return { linhas: [], tem22: false }
+  const g = new Map()
+  for (const cd of L.cds) {
+    const arq = secoesAno(2026, cd, re)
+    if (!arq) return null
+    for (const x of agregarSecoes(arq, { id: elId, cargo: aba.cargo, anul: new Set() }, {}, 'bairro', nr).grupos) {
+      const k = `${cd}|${x.chave}`
+      g.set(k, { k, nome: L.cds.length > 1 ? `${x.chave} · ${NOME_MUN.get(cd)}` : x.chave, v: x.foco, v22: 0 })
+    }
+    if (p22) {
+      const a22 = secoesAno(2022, cd, re)
+      if (!a22) return null
+      for (const x of agregarSecoes(a22, { id: p22.el.id, cargo: p22.el.cargo, anul: new Set() }, {}, 'bairro', Number(p22.c.numero)).grupos) {
+        const k = `${cd}|${x.chave}`
+        const y = g.get(k) || { k, nome: L.cds.length > 1 ? `${x.chave} · ${NOME_MUN.get(cd)}` : x.chave, v: 0, v22: 0 }
+        y.v22 = x.foco
+        g.set(k, y)
+      }
+    }
+  }
+  return { linhas: [...g.values()], tem22: !!p22 }
+}
+
+const COR_META = (p) => (p >= 100 ? '#0b7a45' : p >= 70 ? '#e08600' : '#c62828')
+
+function secaoMetas(det, c, aba) {
+  if (det.abr !== UF || !aba?.cargo || DEMO) return ''
+  const re = () => estado.detalhe === det && renderDetalhe()
+  const M = (det.metas ??= { sq: c.sqcand, nivel: 'mun', dados: lerMetas(c.sqcand), pct: 10, todos: false })
+  const niveis = [['mun', 'Municípios'], ['assoc', 'Associações'], ...(det.bai?.mun ? [['bairro', `Bairros · ${det.bai.mun.nm}`]] : [])]
+  if (!niveis.some(([k]) => k === M.nivel)) M.nivel = 'mun'
+  const base = baseMetas(det, c, aba, M.nivel, re)
+  const metas = M.dados[M.nivel] || {}
+  const topo = `<div class="segmentado" role="group" aria-label="Nível das metas">${niveis.map(([k, t]) => `<button type="button" data-meta-nivel="${k}" aria-pressed="${M.nivel === k}">${esc(t)}</button>`).join('')}</div>`
+  if (!base) return `<section class="cartao metas"><h3>🎯 Metas de votos</h3>${topo}<p class="nota">Carregando…</p></section>`
+  const ls = base.linhas.map((x) => ({ ...x, meta: metas[x.k] || 0 }))
+  const comMeta = ls.filter((x) => x.meta > 0)
+  const vis = (M.todos ? ls : [...comMeta, ...ls.filter((x) => !x.meta).sort((a, b) => b.v - a.v).slice(0, Math.max(0, 15 - comMeta.length))]).sort((a, b) => (b.meta > 0) - (a.meta > 0) || b.meta - a.meta || b.v - a.v)
+  const somaMeta = comMeta.reduce((a, x) => a + x.meta, 0), somaRes = comMeta.reduce((a, x) => a + x.v, 0)
+  const pTot = somaMeta ? (100 * somaRes) / somaMeta : 0
+  const linha = (x) => {
+    const p = x.meta ? (100 * x.v) / x.meta : 0
+    return `<div class="meta-linha"><div class="meta-topo"><strong>${esc(x.nome)}</strong>${x.meta ? `<span class="meta-pct" style="color:${COR_META(p)}">${fmtPct.format(p)}%</span>` : ''}</div>
+      <div class="meta-campos"><label>Meta <input type="text" inputmode="numeric" class="meta-inp" data-meta-k="${esc(x.k)}" value="${x.meta ? fmt.format(x.meta) : ''}" placeholder="—"></label>
+        <span>2026: <strong>${fmt.format(x.v)}</strong></span>${base.tem22 ? `<span class="mudo">2022: ${fmt.format(x.v22)}</span>` : ''}</div>
+      ${x.meta ? `<div class="barra fina"><span style="width:${Math.min(100, p)}%;background:${COR_META(p)}"></span></div>` : ''}</div>`
+  }
+  M.export = {
+    csv: { nome: `metas-${nomeArquivo(c.nome)}-${M.nivel}.csv`, cab: [niveis.find(([k]) => k === M.nivel)[1], 'Meta', 'Resultado 2026', 'Atingimento %', ...(base.tem22 ? ['2022'] : [])],
+      linhas: comMeta.sort((a, b) => b.meta - a.meta).map((x) => [x.nome, x.meta, x.v, (100 * x.v) / x.meta, ...(base.tem22 ? [x.v22] : [])]) },
+    card: comMeta.length ? { turno: 1, foto: c.foto, nome: c.nome, cor: corPartido(c.partido), sub: `${c.partido} · nº ${c.numero} · ${aba.rotulo.replace(/ SC$/, '')}`,
+      titulo: `Meta × resultado · ${niveis.find(([k]) => k === M.nivel)[1]}`, subtitulo: `${comMeta.length} lugares com meta · ${fmtPct.format(pTot)}% da meta atingida`,
+      tiles: [{ rot: 'Meta', valor: fmt.format(somaMeta), cor: '#6b7570' }, { rot: 'Resultado', valor: fmt.format(somaRes), sub: `${fmtPct.format(pTot)}% da meta`, corSub: COR_META(pTot), cor: corPartido(c.partido) }],
+      linhas: comMeta.sort((a, b) => b.meta - a.meta).slice(0, 5).map((x) => {
+        const p = (100 * x.v) / x.meta
+        return { nome: x.nome, par: { max: Math.max(1, ...comMeta.slice(0, 5).flatMap((y) => [y.meta, y.v])), barras: [{ rot: 'Meta', v: x.meta, cor: '#a5aca8' }, { rot: 'Resultado', v: x.v, cor: COR_META(p) }] }, dir2: `${fmtPct.format(p)}%`, corDir2: COR_META(p) }
+      }) } : null,
+  }
+  return `<section class="cartao metas"><h3>🎯 Metas de votos</h3>
+    <p class="nota">Defina uma meta para cada lugar e acompanhe meta × resultado. Fica salvo neste aparelho.</p>
+    ${topo}
+    <div class="meta-auto"><span>Preencher com</span><select id="meta-base" aria-label="Base">${base.tem22 ? '<option value="22">2022</option>' : ''}<option value="26">2026</option></select><span>+</span><input id="meta-pct" type="number" value="${M.pct}" step="5" aria-label="Percentual"><span>%</span><button type="button" class="botao secundario" data-meta-auto>Preencher</button>${comMeta.length ? '<button type="button" class="link-zonas leve" data-meta-limpar>Limpar metas</button>' : ''}</div>
+    ${comMeta.length ? `<div class="meta-total"><span>Total: <strong>${fmt.format(somaRes)}</strong> de <strong>${fmt.format(somaMeta)}</strong></span><span class="meta-pct" style="color:${COR_META(pTot)}">${fmtPct.format(pTot)}%</span><div class="barra"><span style="width:${Math.min(100, pTot)}%;background:${COR_META(pTot)}"></span></div></div>` : ''}
+    <div class="meta-lista">${vis.map(linha).join('')}</div>
+    ${!M.todos && ls.length > vis.length ? `<button type="button" class="botao secundario" data-meta-todos>Mostrar todos (${fmt.format(ls.length)})</button>` : ''}
+    ${M.export.card ? `<div class="exportar">${botaoCard('metas', M.export.card)}<button type="button" class="botao secundario" data-meta-xlsx>${icone('baixar')} Excel</button></div>` : ''}
+  </section>`
+}
+
+function tratarMetas(ev) {
+  const det = estado.detalhe
+  const M = det.metas
+  const h = (s) => ev.target.closest(s)
+  if (h('[data-meta-nivel]')) return ((M.nivel = h('[data-meta-nivel]').dataset.metaNivel), (M.todos = false), renderDetalhe(), true)
+  if (h('[data-meta-todos]')) return ((M.todos = true), renderDetalhe(), true)
+  if (h('[data-meta-limpar]')) return ((M.dados[M.nivel] = {}), salvarMetas(M), renderDetalhe(), true)
+  if (h('[data-meta-xlsx]') && M.export) return (baixarExcel(M.export.csv.nome.replace(/\.csv$/, '.xlsx'), [{ aba: 'Metas', ...M.export.csv }], h('[data-meta-xlsx]')), true)
+  if (h('[data-meta-auto]')) {
+    const d = dadosDetalhe()
+    const c = d?.candidatos.find((x) => x.sqcand === det.sqcand)
+    const aba = ABAS.find((a) => a.id === det.aba)
+    const base = c && baseMetas(det, c, aba, M.nivel, () => {})
+    if (!base) return true
+    const pct = Number(document.getElementById('meta-pct')?.value) || 0
+    const de22 = document.getElementById('meta-base')?.value === '22'
+    M.pct = pct
+    const t = (M.dados[M.nivel] = {})
+    for (const x of base.linhas) {
+      const v = Math.round((de22 ? x.v22 : x.v) * (1 + pct / 100))
+      if (v > 0) t[x.k] = v
+    }
+    salvarMetas(M)
+    renderDetalhe()
+    return true
+  }
+  return false
 }
 
 /* ---------------- mapa de votos aberto (ficha e comparação) ---------------- */

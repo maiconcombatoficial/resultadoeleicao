@@ -978,3 +978,17 @@ td .leg-ponto { margin-right: 4px; vertical-align: middle; }
 /* ---------- análise automática ---------- */
 .analise-lista { margin: 0; padding-left: 1.1em; display: grid; gap: 8px; line-height: 1.5; }
 .analise-lista li::marker { color: var(--primaria); }
+
+/* ---------- metas ---------- */
+.meta-auto { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 10px 0; font-size: 0.9rem; }
+.meta-auto select, .meta-auto input { font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--linha); background: var(--fundo); color: var(--texto); }
+.meta-auto input { width: 4.5em; }
+.meta-auto .botao { width: auto; margin: 0; padding: 6px 12px; }
+.meta-total { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--linha); }
+.meta-total .barra { grid-column: 1 / -1; }
+.meta-lista { display: grid; }
+.meta-linha { padding: 10px 0; border-bottom: 1px solid var(--linha); display: grid; gap: 6px; }
+.meta-topo { display: flex; justify-content: space-between; gap: 8px; }
+.meta-pct { font-weight: 800; font-variant-numeric: tabular-nums; }
+.meta-campos { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; font-size: 0.88rem; }
+.meta-inp { width: 7em; font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--linha); background: var(--fundo); color: var(--texto); margin-left: 4px; }
