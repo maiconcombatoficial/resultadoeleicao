@@ -4,12 +4,12 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { icone } from './icones.js?v=202610080500'
-import { calcularVagas } from './vagas.js?v=202610080500'
-import { chanceDe, NIVEIS } from './chances.js?v=202610080500'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610080500'
-import { FLORIPA } from './floripa.js?v=202610080500'
-import { corPartido, corTexto } from './cores.js?v=202610080500'
+import { icone } from './icones.js?v=202610080600'
+import { calcularVagas } from './vagas.js?v=202610080600'
+import { chanceDe, NIVEIS } from './chances.js?v=202610080600'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610080600'
+import { FLORIPA } from './floripa.js?v=202610080600'
+import { corPartido, corTexto } from './cores.js?v=202610080600'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -746,6 +746,228 @@ document.addEventListener('click', (ev) => {
   const b = ev.target.closest('[data-copiar-link]')
   if (b) copiarLink(b)
 })
+
+/* ---------------- busca única ---------------- */
+
+// Um campo para achar qualquer coisa: candidatos de 2026 (todos os cargos) e das eleições anteriores,
+// municípios, associações de municípios e bairros. O resultado abre pelo link direto.
+const BUSCA = { aberta: false, termo: '', listas: new Map(), bairros: null, ativo: 0 }
+const buscaEl = document.createElement('div')
+buscaEl.className = 'busca-global'
+buscaEl.hidden = true
+buscaEl.setAttribute('role', 'dialog')
+buscaEl.setAttribute('aria-modal', 'true')
+buscaEl.setAttribute('aria-label', 'Buscar no app')
+document.body.appendChild(buscaEl)
+
+const ABAS_BUSCA = () => ABAS.filter((a) => a.cargo && a.abrangencias.includes(UF))
+function abrirBusca() {
+  BUSCA.aberta = true
+  BUSCA.ativo = 0
+  buscaEl.hidden = false
+  document.documentElement.classList.add('com-busca')
+  buscaEl.innerHTML = `<div class="bg-caixa">
+    <div class="bg-topo">${icone('busca')}<input id="bg-input" type="search" autocomplete="off" enterkeyhint="go" placeholder="Candidato, número, partido, município, associação ou bairro…" value="${esc(BUSCA.termo)}" aria-controls="bg-res"><button type="button" class="bg-fechar" data-bg-fechar aria-label="Fechar">✕</button></div>
+    <div id="bg-res" class="bg-res" role="listbox"></div></div>`
+  const inp = $('#bg-input')
+  inp.focus()
+  inp.select()
+  // candidatos de 2026 de todos os cargos de SC (os que já estão carregados vêm na hora)
+  for (const aba of ABAS_BUSCA()) {
+    if (BUSCA.listas.has(aba.id)) continue
+    const d = dadosCarregados(aba.id, UF)
+    if (d) BUSCA.listas.set(aba.id, d)
+    else {
+      BUSCA.listas.set(aba.id, null)
+      buscar(aba, UF, TURNO)
+        .then((x) => (BUSCA.listas.set(aba.id, x), BUSCA.aberta && desenharBusca()))
+        .catch(() => BUSCA.listas.delete(aba.id))
+    }
+  }
+  desenharBusca()
+}
+function fecharBusca() {
+  BUSCA.aberta = false
+  buscaEl.hidden = true
+  buscaEl.innerHTML = ''
+  document.documentElement.classList.remove('com-busca')
+}
+
+// carrega o que só faz sentido buscar com um termo (eleições anteriores e bairros)
+function carregarExtrasBusca() {
+  for (const ano of ANOS_HIST) {
+    const X = histDe(ano)
+    if (!X.resumo && !X.carregando) resumoAno(ano).then(() => BUSCA.aberta && desenharBusca()).catch(() => {})
+  }
+  if (!BUSCA.bairros) {
+    BUSCA.bairros = []
+    fetch(`dados2026/bairros-t1-c7.json?v=${VERSAO}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!j) return
+        const vistos = new Set()
+        BUSCA.bairros = j.b.filter(([cd, nome]) => nome && nome !== 'Bairro não informado' && !vistos.has(cd + nome) && vistos.add(cd + nome)).map(([cd, nome, val]) => ({ cd, nome, val, chave: semAcento(`${nome} ${NOME_MUN.get(cd) || ''}`) }))
+        if (BUSCA.aberta) desenharBusca()
+      })
+      .catch(() => {})
+  }
+}
+
+// todas as palavras do termo aparecem no texto; quem começa com o termo vem antes
+const casa = (texto, palavras) => palavras.every((p) => texto.includes(p))
+function resultadosBusca(termo) {
+  const t = semAcento(termo.trim())
+  const palavras = t.split(/\s+/).filter(Boolean)
+  if (!palavras.length) return []
+  const num = /^\d+$/.test(t)
+  const grupos = []
+  const peso = (nome) => (semAcento(nome).startsWith(t) ? 0 : 1)
+  // 2026
+  const c26 = []
+  for (const aba of ABAS_BUSCA()) {
+    const d = BUSCA.listas.get(aba.id)
+    if (!d?.candidatos) continue
+    for (const c of d.candidatos) {
+      const txt = semAcento(`${c.nome} ${c.nomeCompleto || ''} ${c.partido} ${c.numero}`)
+      if (num ? String(c.numero) === t : casa(txt, palavras)) c26.push({ c, aba, p: peso(c.nome) })
+    }
+  }
+  c26.sort((a, b) => a.p - b.p || b.c.votos - a.c.votos)
+  const ehAba = estado.aba.tipo === 'maj' || estado.aba.tipo === 'prop'
+  if (c26.length)
+    grupos.push({
+      rot: 'Candidatos 2026',
+      itens: c26.slice(0, 8).map(({ c, aba }) => ({
+        hash: hashDe(estado.aba.id, { ...paramsAba(), c: c.sqcand, ca: aba.id }),
+        cor: corPartido(c.partido),
+        tit: c.nome,
+        sub: `${aba.rotulo.replace(/ SC$/, '')} · ${c.partido} · nº ${c.numero} · ${fmt.format(c.votos)} votos`,
+      })),
+    })
+  // eleições anteriores
+  if (t.length >= 3) {
+    const ant = []
+    for (const ano of ANOS_HIST) {
+      const R = histDe(ano).resumo
+      if (!R) continue
+      for (const el of R.eleicoes)
+        for (const c of el.candidatos) {
+          if (num ? String(c.numero) !== t : !casa(semAcento(`${c.nome} ${c.nomeCompleto} ${c.partido}`), palavras)) continue
+          if (num && ehMunicipal(el.cargo)) continue // número de vereador/prefeito se repete em cada cidade
+          ant.push({ ano, el, c, p: peso(c.nome) })
+        }
+    }
+    ant.sort((a, b) => a.p - b.p || b.ano - a.ano || b.c.votos - a.c.votos)
+    if (ant.length)
+      grupos.push({
+        rot: 'Eleições anteriores',
+        itens: ant.slice(0, 8).map(({ ano, el, c }) => ({
+          hash: hashDe('h2022', { ano, e: el.id, m: c.cd, f: c.numero }),
+          cor: corPartido(c.partido),
+          tit: c.nome,
+          sub: `${ano} · ${el.nome}${el.turno === 2 ? ' (2º turno)' : ''}${c.cd ? ` · ${NOME_MUN.get(c.cd) || ''}` : ''} · ${c.partido} · ${fmt.format(c.votos)} votos${c.sit ? ` · ${situ2022(c.sit).replace(/<[^>]+>/g, '').trim()}` : ''}`,
+        })),
+      })
+  }
+  if (!num) {
+    const abaMun = ehAba ? estado.aba.id : 'depest'
+    const mun = MUNICIPIOS_SC.filter((m) => casa(semAcento(m[2]), palavras)).sort((a, b) => peso(a[2]) - peso(b[2]))
+    if (mun.length)
+      grupos.push({
+        rot: 'Municípios',
+        itens: mun.slice(0, 8).map((m) => ({
+          hash: hashDe(abaMun, { m: m[0] }),
+          tit: m[2],
+          sub: `${ASSOCIACAO_MUN[m[0]] ? `${ASSOCIACAO_MUN[m[0]]} · ` : ''}resultado de ${ABAS.find((a) => a.id === abaMun).rotulo.replace(/ SC$/, '')}`,
+          extra: { hash: hashDe('bairros', { m: m[0] }), rot: '🏘️ Bairros e seções' },
+        })),
+      })
+    const assoc = Object.entries(ASSOCIACOES).filter(([sg, nm]) => casa(semAcento(`${sg} ${nm}`), palavras))
+    if (assoc.length)
+      grupos.push({
+        rot: 'Associações de municípios',
+        itens: assoc.slice(0, 8).map(([sg, nm]) => ({ hash: hashDe(abaMun, { m: `assoc:${sg}` }), tit: `${sg} · ${nm}`, sub: `${regiao(`assoc:${sg}`)?.membros.length || 0} municípios` })),
+      })
+    if (t.length >= 3 && BUSCA.bairros?.length) {
+      const bs = BUSCA.bairros.filter((b) => casa(b.chave, palavras)).sort((a, b) => peso(a.nome) - peso(b.nome) || b.val - a.val)
+      if (bs.length)
+        grupos.push({
+          rot: 'Bairros',
+          itens: bs.slice(0, 8).map((b) => ({ hash: hashDe('bairros', { m: b.cd, b: b.nome }), tit: b.nome, sub: `${NOME_MUN.get(b.cd) || b.cd} · ${fmt.format(b.val)} votos válidos (Dep. Estadual)` })),
+        })
+    }
+  }
+  return grupos
+}
+
+function desenharBusca() {
+  const res = $('#bg-res')
+  if (!res) return
+  const termo = BUSCA.termo.trim()
+  if (termo.length >= 3) carregarExtrasBusca()
+  if (!termo) {
+    res.innerHTML = `<p class="nota bg-dica">Busque por nome, número ou partido de candidatos (2026 e eleições de ${ANOS_HIST[ANOS_HIST.length - 1]} a ${ANOS_HIST[0]}), por município, associação de municípios (ex.: AMFRI) ou bairro. Atalho: tecla <kbd>/</kbd>.</p>`
+    return
+  }
+  const grupos = resultadosBusca(termo)
+  const carregando = [...BUSCA.listas.values()].some((x) => x === null) || (termo.length >= 3 && ANOS_HIST.some((a) => !histDe(a).resumo))
+  let i = 0
+  res.innerHTML =
+    grupos
+      .map(
+        (g) => `<div class="bg-grupo" data-bg-grupo="${esc(g.rot)}"><h3>${esc(g.rot)}</h3>${g.itens
+          .map(
+            (x) => `<div class="bg-item${i === BUSCA.ativo ? ' ativo' : ''}"${x.cor ? ` style="${estiloCor(x.cor)}"` : ''}><a href="${esc(x.hash)}" role="option" data-bg-i="${i++}" aria-selected="${i - 1 === BUSCA.ativo}"><strong>${esc(x.tit)}</strong><small>${esc(x.sub)}</small></a>${
+              x.extra ? `<a class="bg-extra" href="${esc(x.extra.hash)}">${esc(x.extra.rot)}</a>` : ''
+            }</div>`,
+          )
+          .join('')}</div>`,
+      )
+      .join('') + (carregando ? '<p class="nota bg-dica">Carregando mais resultados…</p>' : grupos.length ? '' : '<p class="nota bg-dica">Nada encontrado.</p>')
+  BUSCA.total = i
+}
+
+buscaEl.addEventListener('input', (ev) => {
+  if (ev.target.id !== 'bg-input') return
+  BUSCA.termo = ev.target.value
+  BUSCA.ativo = 0
+  desenharBusca()
+})
+buscaEl.addEventListener('click', (ev) => {
+  if (ev.target === buscaEl || ev.target.closest('[data-bg-fechar]')) return fecharBusca()
+  // links: o hashchange abre o destino (aplicarLink)
+  const a = ev.target.closest('a[href^="#"]')
+  if (a) {
+    ev.preventDefault()
+    fecharBusca()
+    location.hash = a.getAttribute('href')
+  }
+})
+buscaEl.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape') return fecharBusca()
+  if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+    ev.preventDefault()
+    BUSCA.ativo = Math.max(0, Math.min((BUSCA.total || 1) - 1, BUSCA.ativo + (ev.key === 'ArrowDown' ? 1 : -1)))
+    desenharBusca()
+    buscaEl.querySelector('.bg-item.ativo')?.scrollIntoView({ block: 'nearest' })
+  }
+  if (ev.key === 'Enter') {
+    const a = buscaEl.querySelector(`[data-bg-i="${BUSCA.ativo}"]`)
+    if (a) {
+      ev.preventDefault()
+      fecharBusca()
+      location.hash = a.getAttribute('href')
+    }
+  }
+})
+document.addEventListener('keydown', (ev) => {
+  if (ev.key !== '/' || BUSCA.aberta || ev.ctrlKey || ev.metaKey) return
+  if (ev.target.closest?.('input, textarea, select, [contenteditable]')) return
+  ev.preventDefault()
+  abrirBusca()
+})
+$('#buscar-tudo').innerHTML = icone('busca')
+$('#buscar-tudo').addEventListener('click', () => abrirBusca())
 
 function trocarAba(id) {
   const aba = ABAS.find((a) => a.id === id)
