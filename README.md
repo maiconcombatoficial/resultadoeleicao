@@ -29,6 +29,8 @@ App web para acompanhar a apuração das **Eleições Gerais 2026** com os dados
 
 **🎞️ Carrossel:** na ficha, o cartão "Onde foi mais votado" gera uma sequência de imagens (até 20, como um carrossel do Instagram), compartilhadas de uma vez: capa com o total e as zonas, e depois todos os bairros de cada zona (ou todas as linhas do nível escolhido), 6 por imagem, com 2022 × 2026 alinhados, variação, posição e número da página. Sem suporte a compartilhar vários arquivos, baixa as imagens uma a uma.
 
+**📄 Relatório em PDF:** na ficha do candidato, "Relatório em PDF" junta numa só peça (A4, com cabeçalho, fonte e data) o desempenho, os municípios, as associações e os bairros onde foi mais votado; na comparação, o PDF traz o resumo e as páginas de "Onde a diferença foi maior". Usa jsPDF (MIT, em `lib/jspdf`), carregado só na hora.
+
 **📸 Imagens para compartilhar e ⬇️ planilha:** o botão "📸 Compartilhar imagem" gera uma imagem 1080×1350 (formato do Instagram), com a foto e o @maiconcombat no rodapé, em: resultado de cada cargo (os 8 primeiros), ficha do candidato (números, 2022 e bairros mais fortes), comparação entre dois candidatos, bairros onde foi mais votado, explorador por zona/bairro/local/seção (mais votados aqui, ou onde o candidato em foco foi melhor) e, na área protegida, mapa de votos, perfil do eleitor, abstenção e transferência entre turnos (com o selo "Análise exclusiva"). No celular, abre o menu de compartilhar; no computador, baixa o PNG. O mesmo cartão e o explorador por zona, bairro, local e seção baixam a tabela em CSV no padrão do Excel em português (";", vírgula decimal, UTF-8).
 
 **📲 Instalar como app (PWA):** `manifest.webmanifest`, ícones em `img/icones/` e um service worker (`sw.js`) que busca sempre a versão nova e só usa o cache sem internet; os dados ao vivo do TSE não passam por ele. Na aba "Sobre", um botão (Android/Chrome) ou as instruções (iPhone) para instalar.
@@ -95,4 +97,10 @@ Projeto independente, sem vínculo com a Justiça Eleitoral.
 ## Atualização automática (2º turno)
 
 O workflow `.github/workflows/boletins.yml` roda sozinho na noite do 2º turno (25/10/2026) e de madrugada no dia 26. Também pode ser disparado à mão em **Actions → Boletins de urna → Run workflow**. Ele baixa os boletins de urna de SC, gera os dados por seção e bairro (`dados2026/`) e publica. A aba "🏘️ Bairros" e a ficha passam a mostrar o 2º turno sem mudança no código. Para refazer também a área protegida (mapa, perfil, abstenção e transferência do 2º turno), cadastre o segredo **`PRO_SENHA`** em *Settings → Secrets and variables → Actions*, com a senha de um usuário da área. Os scripts estão em `scripts/` (veja `scripts/README.md`).
+
+## Testes automáticos
+
+`npm test` abre o app num Chromium de celular (Playwright) e confere as telas principais: Início, cada aba, ficha com "Onde foi mais votado", relatório em PDF, comparação entre cargos, associações, Sobre, aviso de versão nova e prévia de link. Os dados do TSE usados nos testes ficam gravados em `tests/fixtures/tse` (regravar com `npm run test:gravar`), então o resultado não depende da internet. O workflow `.github/workflows/testes.yml` roda tudo em cada PR e em cada publicação na `main`.
+
+Para rodar localmente: `npm ci && npx playwright install chromium && npm test`.
 

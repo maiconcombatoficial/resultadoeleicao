@@ -1,0 +1,99 @@
+import { test, expect, baixar } from './apoio.js'
+
+test.beforeEach(async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => localStorage.clear())
+})
+
+test('Início abre por padrão com o resumo de SC', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.locator('[data-aba="inicio"][aria-selected="true"]')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Eleições 2026 · Santa Catarina' })).toBeVisible()
+  await expect(page.locator('.painel-cadeiras')).toHaveCount(2)
+  const img = await baixar(page, page.locator('[data-card="painel"]'))
+  expect(img.nome).toMatch(/\.png$/)
+  expect(img.bytes).toBeGreaterThan(30_000)
+})
+
+for (const aba of ['depfed', 'depest', 'governador', 'senador', 'municipios', 'bairros', 'h2022', 'sobre']) {
+  test(`aba ${aba} abre sem erro`, async ({ page }) => {
+    await page.goto(`/#${aba}`)
+    await expect(page.locator(`[data-aba="${aba}"][aria-selected="true"]`)).toBeVisible()
+    await expect(page.locator('#conteudo .cartao').first()).toBeVisible()
+    await expect(page.locator('#status')).not.toHaveClass(/carregando/, { timeout: 30_000 })
+    await expect(page.locator('#status')).not.toHaveClass(/erro/)
+    await expect(page.locator('#conteudo .esq')).toHaveCount(0)
+    if (['depfed', 'depest', 'governador', 'senador'].includes(aba)) await expect(page.locator('#conteudo [data-cand]').first()).toBeVisible()
+  })
+}
+
+test('ficha: onde foi mais votado, associações e ordem por crescimento', async ({ page }) => {
+  await page.goto('/#depfed')
+  await page.locator('[data-cand]').first().click()
+  const card = page.locator('.cartao.bai')
+  await expect(card).toBeVisible()
+  await card.locator('[data-bai-grupo="assoc"]').click()
+  await expect(card.locator('.cmp-linha, .cand-meta').first()).toBeVisible()
+  await card.locator('[data-bai-grupo="mun"]').click()
+  await expect(card).toContainText('Votou em')
+  const img = await baixar(page, card.locator('[data-card]').first())
+  expect(img.bytes).toBeGreaterThan(30_000)
+})
+
+test('relatório em PDF da ficha', async ({ page }) => {
+  await page.goto('/#depest')
+  await page.locator('[data-cand]').first().click()
+  await expect(page.locator('[data-relatorio]')).toBeVisible()
+  const pdf = await baixar(page, page.locator('[data-relatorio]'))
+  expect(pdf.nome).toMatch(/^relatorio-.*\.pdf$/)
+  expect(pdf.bytes).toBeGreaterThan(200_000)
+})
+
+test('comparação entre cargos: Dep. Federal × Dep. Estadual', async ({ page }) => {
+  await page.goto('/#depfed')
+  await page.locator('[data-cand]').first().click()
+  await page.locator('[data-comparar]').click()
+  await page.locator('[data-comp-cargo="depest"]').click()
+  await page.locator('[data-comp-sq]').first().click()
+  await expect(page.locator('.comp-cargo')).toHaveCount(2)
+  const dif = page.locator('.cartao.cdif')
+  await expect(dif.locator('.comp-placar')).toContainText('na frente em')
+  for (const modo of ['b', 'eq', 'v', 'a']) await dif.locator(`[data-cd-modo="${modo}"]`).click()
+  await dif.locator('[data-cd-grupo="assoc"]').click()
+  await expect(dif.locator('.cmp-linha').first()).toBeVisible()
+  const csv = await baixar(page, dif.locator('[data-cd-csv]'))
+  expect(csv.nome).toMatch(/\.csv$/)
+  const pdf = await baixar(page, dif.locator('[data-cd-pdf]'))
+  expect(pdf.nome).toMatch(/\.pdf$/)
+})
+
+test('associações aparecem nas abas de SC e na busca', async ({ page }) => {
+  await page.goto('/#depest')
+  await expect(page.locator('.assoc-chips [data-regiao]')).toHaveCount(21)
+  await page.locator('.assoc-chips [data-regiao="assoc:AMVE"]').click()
+  await expect(page.locator('.resumo h2').first()).toContainText('AMVE · Vale Europeu (14 municípios)')
+})
+
+test('Sobre traz metodologia, privacidade e versão', async ({ page }) => {
+  await page.goto('/#sobre')
+  await expect(page.getByRole('heading', { name: /Como os números são calculados/ })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /Privacidade/ })).toBeVisible()
+  await expect(page.getByText(/^Versão /)).toBeVisible()
+})
+
+test('aviso de versão nova', async ({ page }) => {
+  await page.route(/\?checar=/, async (r) => {
+    const res = await r.fetch()
+    r.fulfill({ status: 200, body: (await res.text()).replace(/app\.js\?v=\d+/, 'app.js?v=209912312359'), headers: { 'content-type': 'text/html' } })
+  })
+  await page.goto('/#sobre')
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+  await expect(page.locator('#versao-nova')).toContainText('Nova versão')
+})
+
+test('prévia de link: meta tags e imagem', async ({ page, request }) => {
+  await page.goto('/')
+  await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', /img\/og\.jpg$/)
+  expect((await request.get('/img/og.jpg')).ok()).toBeTruthy()
+  for (const i of ['icone-192.png', 'icone-512.png', 'icone-maskable-512.png', 'favicon-32.png']) expect((await request.get(`/img/icones/${i}`)).ok()).toBeTruthy()
+})
