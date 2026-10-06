@@ -4,12 +4,12 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { icone } from './icones.js?v=202610072300'
-import { calcularVagas } from './vagas.js?v=202610072300'
-import { chanceDe, NIVEIS } from './chances.js?v=202610072300'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610072300'
-import { FLORIPA } from './floripa.js?v=202610072300'
-import { corPartido, corTexto } from './cores.js?v=202610072300'
+import { icone } from './icones.js?v=202610080000'
+import { calcularVagas } from './vagas.js?v=202610080000'
+import { chanceDe, NIVEIS } from './chances.js?v=202610080000'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610080000'
+import { FLORIPA } from './floripa.js?v=202610080000'
+import { corPartido, corTexto } from './cores.js?v=202610080000'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -2458,6 +2458,7 @@ function renderDetalhe() {
   const idFoco = ['det-busca-mun', 'comp-busca', 'det-busca-bairro-mun'].includes(document.activeElement?.id) ? document.activeElement.id : null
   const focoBusca = idFoco ? document.activeElement.selectionStart : null
   renderDetalheConteudo()
+  for (const div of detalheEl.querySelectorAll('[data-mapa]')) montarMapaAberto(div)
   if (focoBusca != null) {
     const el = document.getElementById(idFoco)
     el?.focus()
@@ -2554,6 +2555,7 @@ function renderDetalheConteudo() {
     ${secaoHistorico(c, d, aba)}
     ${secaoAnalise(det, c, aba, d)}
     ${secaoBairros(det, c, aba)}
+    ${secaoMapaFicha(det, c, aba)}
     <section class="cartao"><h3>${c.eleito || d.tseDefinido ? 'Situação oficial (TSE)' : 'Chance de reverter'}</h3>${textoChance(d, c, aba)}</section>
     <section class="cartao"><h3>Disputa</h3>${blocoDisputa(d, c, aba)}</section>
     ${aba?.tipo === 'prop' ? secaoQuocienteFicha(d, c, det) : ''}
@@ -3137,7 +3139,8 @@ function secaoCompDiferenca(det, lista) {
         linhas: vis.map((x) => { const ord = ordemNoLugar(x); return [x.nome, x.sub || '', ...x.v, P[ord[0]].nome, x.v[ord[0]] - x.v[ord[1]], ...x.v.map((v, i) => pctDe(v, x.val[i]))] }) },
     }
   }
-  return `<section class="cartao bai cdif"><h3>📍 Onde a diferença foi maior</h3>${controles}${corpo}
+  const mapa = !r.erro && !r.msg ? mapaComparacao(D, P, r.linhas) : ''
+  return `<section class="cartao bai cdif"><h3>📍 Onde a diferença foi maior</h3>${controles}${corpo}${mapa}
     ${D.export ? `<div class="exportar">${botaoCard('comp-diferenca', D.export.card)}<button type="button" class="botao" data-cd-carrossel>${icone('carrossel')} Carrossel (${D.export.paginas} imagens)</button><button type="button" class="botao secundario" data-cd-csv>${icone('baixar')} Planilha (CSV)</button><button type="button" class="botao secundario" data-cd-pdf>${icone('pdf')} Relatório em PDF</button><button type="button" class="botao secundario" data-cd-legenda>${icone('copiar')} Copiar legenda com o link do Instagram</button></div>` : ''}
   </section>`
 }
@@ -3475,7 +3478,7 @@ function renderSobre() {
       <p class="nota">Encontrou algo estranho nos números? Fale com <a href="https://www.instagram.com/maiconcombat/" target="_blank" rel="noopener">@maiconcombat</a>.</p>
     </section>`
 }
-// "202610072300" → "07/10/2026 12:00"
+// "202610080000" → "07/10/2026 12:00"
 const versaoLegivel = () => (/^\d{12}$/.test(VERSAO) ? `${VERSAO.slice(6, 8)}/${VERSAO.slice(4, 6)}/${VERSAO.slice(0, 4)} ${VERSAO.slice(8, 10)}:${VERSAO.slice(10, 12)}` : VERSAO || 'local')
 
 /* ---------------- eleições de 2022 (SC) ---------------- */
@@ -4529,6 +4532,120 @@ function secaoAnalise(det, c, aba, d) {
 function cardAnalise(c, aba, frases) {
   return { turno: 1, foto: c.foto, nome: c.nome, cor: corPartido(c.partido), sub: `${c.partido} · nº ${c.numero} · ${aba.rotulo.replace(/ SC$/, '')}`,
     titulo: 'Análise do desempenho', subtitulo: 'Gerada a partir dos números oficiais do TSE', texto: frases }
+}
+
+/* ---------------- mapa de votos aberto (ficha e comparação) ---------------- */
+
+const MAPAS = new Map() // id → pontos { lat, lon, tam, cor, html }
+function coordsLocais(re) {
+  const a = arquivoAno('dados2026/locais-mapa.json', re)
+  if (a.valor && !a.valor._mun) {
+    a.valor._mun = {}
+    for (const [cd, ls] of Object.entries(a.valor)) {
+      if (cd === '_mun') continue
+      const v = Object.values(ls)
+      a.valor._mun[cd] = [v.reduce((t, x) => t + x[0], 0) / v.length, v.reduce((t, x) => t + x[1], 0) / v.length]
+    }
+  }
+  return a
+}
+
+// mapa da ficha: municípios (SC) ou locais de votação (lugar escolhido no cartão "Onde foi mais votado")
+function secaoMapaFicha(det, c, aba) {
+  if (det.abr !== UF || !aba?.cargo || DEMO) return ''
+  const re = () => estado.detalhe === det && renderDetalhe()
+  const C = coordsLocais(re)
+  if (C.erro) return ''
+  const elId = eleicaoDoCargo(aba.cargo)
+  const nr = Number(c.numero)
+  const B = det.bai || {}
+  const p22 = PREF.mostrar2022 && H22.resumo ? achar2022(c).filter((p) => p.el.turno === 1).sort((x, y) => (y.el.cargo === aba.cargo) - (x.el.cargo === aba.cargo))[0] : null
+  let pts = null
+  if (C.valor && !B.mun) {
+    const M = arquivoAno(`dados2026/municipios-${elId}.json`, re)
+    const m22 = p22 ? mun2022(p22.el.id) : null
+    if (m22 && !m22.valor) m22.then(re).catch(() => {})
+    if (M.valor && (!m22 || m22.valor)) {
+      const meus = M.valor.c[nr] || {}, v22 = m22?.valor.cand[p22.c.sq] || null
+      pts = Object.entries(C.valor._mun).map(([cd, [lat, lon]]) => {
+        const v = meus[cd] || 0, a = v22 ? v22[cd] || 0 : null, va = variacao(v, a)
+        return { lat, lon, tam: v, cor: COR_VAR[va?.cls || 'var-igual'], nome: NOME_MUN.get(cd), html: `<strong>${esc(NOME_MUN.get(cd) || cd)}</strong><br>${fmt.format(v)} votos · ${fmtPct.format(pctDe(v, M.valor.validos[cd]))}%${a != null ? `<br>2022: ${fmt.format(a)}${va ? ` · <strong>${va.txt}</strong>` : ''}` : ''}` }
+      }).filter((p) => p.tam > 0)
+    }
+  } else if (C.valor) {
+    pts = []
+    for (const cd of B.mun.cds) {
+      const arq = secoesAno(2026, cd, re)
+      if (!arq) continue
+      const ag = agregarSecoes(arq, { id: elId, cargo: aba.cargo, anul: new Set() }, {}, 'local', nr)
+      for (const g of ag.grupos) {
+        const xy = C.valor[cd]?.[g.chave]
+        if (!xy || !g.foco) continue
+        const pos = posicaoNoGrupo(g, nr)
+        pts.push({ lat: xy[0], lon: xy[1], tam: g.foco, cor: corPartido(c.partido), nome: tituloLocal(arq.locais[g.chave]?.[0] || g.chave),
+          html: `<strong>${esc(tituloLocal(arq.locais[g.chave]?.[0] || g.chave))}</strong><br>${esc(bairroDoLocal(arq, g.chave))}<br>${fmt.format(g.foco)} votos · ${fmtPct.format(pctDe(g.foco, g.validos))}%${pos ? ` · ${pos.p}º de ${pos.n}` : ''}` })
+      }
+    }
+  }
+  const id = `ficha-${det.sqcand}-${B.mun?.id || 'sc'}`
+  if (pts) MAPAS.set(id, pts)
+  const leg = !B.mun && p22
+    ? `<div class="var-legenda"><span class="mudo">Tamanho = votos · cor = variação desde 2022:</span>${[['var-alta-forte', '▲ +20% ou mais'], ['var-alta', '▲ subiu'], ['var-queda', '▼ caiu'], ['var-queda-forte', '▼ −20% ou mais']].map(([k, t]) => `<span class="leg-ponto"><i style="background:${COR_VAR[k]}"></i>${t}</span>`).join('')}</div>`
+    : '<p class="nota">Tamanho do círculo = votos.</p>'
+  return `<section class="cartao"><h3>🗺️ Mapa de votos · ${esc(B.mun ? B.mun.nm : 'Santa Catarina')}</h3>
+    ${pts ? `<div class="pro-mapa" data-mapa="${esc(id)}" role="region" aria-label="Mapa de votos"></div>${leg}<p class="nota">${B.mun ? 'Cada círculo é um local de votação.' : 'Cada círculo é um município (centro dos seus locais de votação).'} Para ver um município por local, escolha-o em "Onde foi mais votado". Toque num círculo para ver os números.</p>` : '<p class="nota">Carregando o mapa…</p>'}
+  </section>`
+}
+
+// mapa da comparação: cor de quem venceu em cada município ou local
+function mapaComparacao(D, P, linhas) {
+  if (D.grupo !== 'mun' && D.grupo !== 'local') return ''
+  const C = coordsLocais(() => estado.detalhe && renderDetalhe())
+  if (!C.valor) return ''
+  const pts = linhas.map((x) => {
+    const [cd, loc] = D.grupo === 'mun' ? [x.k, null] : x.k.split('|')
+    const xy = loc ? C.valor[cd]?.[loc] : C.valor._mun[cd]
+    if (!xy) return null
+    const o = ordemNoLugar(x)
+    const tam = x.v.reduce((a, v) => a + v, 0)
+    return tam ? { lat: xy[0], lon: xy[1], tam, cor: P[o[0]].cor, html: `<strong>${esc(x.nome)}</strong>${x.sub ? `<br>${esc(x.sub)}` : ''}<br>${o.map((i, n) => `${n + 1}º ${esc(P[i].nome)}: ${fmt.format(x.v[i])}`).join('<br>')}` } : null
+  }).filter(Boolean)
+  const id = `comp-${D.grupo}-${D.mun?.id || 'sc'}-${P.map((p) => p.nr).join('-')}`
+  MAPAS.set(id, pts)
+  return `<div class="pro-mapa" data-mapa="${esc(id)}" role="region" aria-label="Mapa da comparação"></div>
+    <div class="var-legenda"><span class="mudo">Cor de quem teve mais votos · tamanho = votos somados:</span>${P.map((p) => `<span class="leg-ponto"><i style="background:${p.cor}"></i>${esc(p.nome)}</span>`).join('')}</div>`
+}
+
+async function montarMapaAberto(div) {
+  const pts = MAPAS.get(div.dataset.mapa)
+  if (!pts) return
+  let L
+  try {
+    L = await carregarLeaflet()
+  } catch {
+    div.innerHTML = '<p class="nota">Não consegui carregar o mapa agora.</p>'
+    return
+  }
+  if (!document.body.contains(div)) return
+  const escuro = matchMedia('(prefers-color-scheme: dark)').matches
+  const mapa = L.map(div, { zoomControl: true, attributionControl: true, preferCanvas: true, scrollWheelZoom: false })
+  mapa.attributionControl.setPrefix('<a href="https://leafletjs.com">Leaflet</a>')
+  div.classList.toggle('mapa-escuro', escuro)
+  const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(mapa)
+  let falhas = 0
+  osm.on('tileerror', () => {
+    if (++falhas !== 4) return
+    mapa.removeLayer(osm)
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', { maxZoom: 16, attribution: 'Mapa &copy; Esri, HERE, Garmin, &copy; OpenStreetMap' }).addTo(mapa)
+  })
+  const max = Math.max(1, ...pts.map((p) => p.tam))
+  const bounds = []
+  for (const p of [...pts].sort((a, b) => b.tam - a.tam)) {
+    L.circleMarker([p.lat, p.lon], { radius: Math.max(3, 24 * Math.sqrt(p.tam / max)), color: escuro ? '#1b1f1d' : '#ffffff', weight: 1.5, fillColor: p.cor, fillOpacity: 0.78 }).bindPopup(p.html).addTo(mapa)
+    bounds.push([p.lat, p.lon])
+  }
+  if (bounds.length) mapa.fitBounds(bounds, { padding: [16, 16], maxZoom: 15 })
+  else mapa.setView([-27.6, -50.5], 7)
 }
 
 /* ---------------- relatório em PDF (páginas A4 com os cards do app) ---------------- */

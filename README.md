@@ -33,6 +33,8 @@ App web para acompanhar a apuração das **Eleições Gerais 2026** com os dados
 
 **🎞️ Carrossel:** na ficha, o cartão "Onde foi mais votado" gera uma sequência de imagens (até 20, como um carrossel do Instagram), compartilhadas de uma vez: capa com o total e as zonas, e depois todos os bairros de cada zona (ou todas as linhas do nível escolhido), 6 por imagem, com 2022 × 2026 alinhados, variação, posição e número da página. Sem suporte a compartilhar vários arquivos, baixa as imagens uma a uma.
 
+**🗺️ Mapa de votos aberto:** na ficha, o mapa mostra os votos do candidato por município (cor = variação desde 2022) ou, com um lugar escolhido em "Onde foi mais votado", por local de votação; na comparação, cada município ou local leva a cor de quem teve mais votos. Coordenadas públicas do cadastro de locais do TSE em `dados2026/locais-mapa.json` (`scripts/gerar_locais_mapa.py`).
+
 **🧠 Análise do desempenho:** na ficha, um texto gerado automaticamente a partir dos números (sem IA paga): concentração da votação e redutos, maior reduto e posição, municípios onde foi o mais votado, onde tem mais peso, associações mais forte e mais fraca, bairro mais forte, evolução desde 2022 (municípios que subiram e caíram, maior alta e maior queda) e quem mais ganhou votos onde ele mais perdeu. Tem card próprio e entra no Relatório em PDF.
 
 **📄 Relatório em PDF:** na ficha do candidato, "Relatório em PDF" junta numa só peça (A4, com cabeçalho, fonte e data) o desempenho, os municípios, as associações e os bairros onde foi mais votado; na comparação, o PDF traz o resumo e as páginas de "Onde a diferença foi maior". Usa jsPDF (MIT, em `lib/jspdf`), carregado só na hora.
