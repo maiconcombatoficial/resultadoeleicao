@@ -1046,3 +1046,13 @@ html.com-busca { overflow: hidden; }
 .bg-item:hover, .bg-item.ativo { background: var(--fundo); }
 .bg-extra { flex: none; font-size: 0.78rem; font-weight: 700; color: inherit; text-decoration: none; border: 1px solid var(--linha); border-radius: 999px; padding: 4px 10px; margin-right: 6px; white-space: nowrap; }
 .bg-extra:hover { background: var(--cartao); }
+
+/* ---------- formato das imagens (feed 4:5 ou Stories 9:16) ---------- */
+.card-grupo { display: inline-flex; align-items: stretch; gap: 6px; min-width: 0; }
+.card-grupo > .botao-card { flex: 1 1 auto; min-width: 0; }
+.exportar > .card-grupo { flex: 1 1 200px; }
+.fmt-card {
+  flex: none; border: 1px dashed var(--linha); background: var(--cartao); color: var(--mudo);
+  font: inherit; font-size: 0.74rem; font-weight: 800; border-radius: 10px; padding: 0 8px; cursor: pointer; min-height: 36px;
+}
+.fmt-card[aria-pressed="true"] { border-style: solid; border-color: #0a5ea8; background: #0a5ea8; color: #fff; }

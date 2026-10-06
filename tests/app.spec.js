@@ -296,3 +296,26 @@ test('busca única: candidatos de 2026 e anteriores, municípios, associações 
   await expect(page.locator('[data-aba="h2022"][aria-selected="true"]')).toBeVisible()
   await expect(page.locator('.resumo h2').first()).toContainText('Florianópolis')
 })
+
+test('imagens no formato Stories 9:16', async ({ page }) => {
+  await page.goto('/#depfed')
+  await page.locator('[data-cand]').first().click()
+  const fmt = page.locator('.det-cabeca [data-fmt-card]').first()
+  await expect(fmt).toHaveAttribute('aria-pressed', 'false')
+  // feed: 1080×1350
+  const dims = async () => {
+    const [d] = await Promise.all([page.waitForEvent('download', { timeout: 60_000 }), page.locator('.det-cabeca [data-card]').first().click()])
+    const fs = await import('fs')
+    const buf = fs.readFileSync(await d.path())
+    return { nome: d.suggestedFilename(), w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) }
+  }
+  expect(await dims()).toMatchObject({ w: 1080, h: 1350 })
+  await fmt.click()
+  await expect(page.locator('[data-fmt-card]').first()).toHaveAttribute('aria-pressed', 'true')
+  const st = await dims()
+  expect(st).toMatchObject({ w: 1080, h: 1920 })
+  expect(st.nome).toMatch(/-stories\.png$/)
+  // a escolha fica guardada
+  await page.reload()
+  await expect(page.locator('.det-cabeca [data-fmt-card]').first()).toHaveAttribute('aria-pressed', 'true')
+})
