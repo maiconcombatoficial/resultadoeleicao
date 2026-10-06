@@ -859,3 +859,11 @@ td .leg-ponto { margin-right: 4px; vertical-align: middle; }
 .qe-lista { list-style: none; padding: 0; margin: 10px 0 4px; display: grid; gap: 6px; }
 .qe-lista li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 10px; background: var(--fundo); border-left: 4px solid var(--cor, var(--linha)); cursor: pointer; font-size: 0.9rem; }
 .qe-lista li.qe-perto { opacity: 0.8; }
+
+/* ---------- comparação: onde a diferença foi maior ---------- */
+.cmp-ano.duo { grid-template-columns: 6.5em 1fr 4.6em; }
+.cmp-ano.duo .cmp-rot { color: var(--texto); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-left: 4px solid var(--cor); padding-left: 5px; }
+.cmp-ano.duo.b .cmp-trilho span { background-image: repeating-linear-gradient(135deg, rgb(255 255 255 / 35%) 0 3px, transparent 3px 6px); }
+.var.var-a, .var.var-b { color: var(--texto); background: var(--fundo); border-color: var(--linha); border-left: 5px solid var(--cor); }
+.comp-cargos { margin-bottom: 10px; }
+.comp-cargo { font-size: 0.78rem; font-weight: 700; color: var(--mudo); text-transform: uppercase; letter-spacing: 0.03em; }
