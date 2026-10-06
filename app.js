@@ -4,12 +4,12 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { icone } from './icones.js?v=202610071900'
-import { calcularVagas } from './vagas.js?v=202610071900'
-import { chanceDe, NIVEIS } from './chances.js?v=202610071900'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610071900'
-import { FLORIPA } from './floripa.js?v=202610071900'
-import { corPartido, corTexto } from './cores.js?v=202610071900'
+import { icone } from './icones.js?v=202610072000'
+import { calcularVagas } from './vagas.js?v=202610072000'
+import { chanceDe, NIVEIS } from './chances.js?v=202610072000'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610072000'
+import { FLORIPA } from './floripa.js?v=202610072000'
+import { corPartido, corTexto } from './cores.js?v=202610072000'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -1325,6 +1325,8 @@ conteudo.addEventListener('click', (ev) => {
     }
     if (h('[data-b26-cand]')) return ((B26.foco = Number(h('[data-b26-cand]').dataset.b26Cand)), (B26.buscaCand = ''), B26.local && (B26.grupo = 'bairro'), renderizar())
     if (h('[data-b26-limpar]')) return ((B26.foco = null), (B26.semAuto ??= new Set()).add(B26.sel), renderizar())
+    if (h('[data-b26-modo]')) return ((B26.modo = h('[data-b26-modo]').dataset.b26Modo), renderizar())
+    if (tratarTerritorio(h)) return
     const ir = h('[data-b26-ir]')
     if (ir) {
       Object.assign(B26, { local: { cd: ir.dataset.b26Ir, nm: NOME_MUN.get(ir.dataset.b26Ir) || ir.dataset.b26Ir, bairro: ir.dataset.b26Bairro }, grupo: 'local', verTodos: false, verGrupos: false })
@@ -1414,6 +1416,7 @@ conteudo.addEventListener('input', (ev) => {
     mostrarSugestoes()
     return
   }
+  if (['terr-mun', 'terr-ref-busca', 'terr-nome'].includes(ev.target.id)) return inputTerritorio(ev.target)
   if (ev.target.id === 'b26-busca') {
     B26.buscaCand = ev.target.value
     renderizar()
@@ -2167,7 +2170,7 @@ function renderizar() {
     return
   }
   if (estado.aba.tipo === 'h22' || estado.aba.tipo === 'bai' || estado.aba.tipo === 'pro') {
-    const idf = ['h22-busca', 'h22-mun', 'pro-busca', 'b26-busca'].includes(document.activeElement?.id) ? document.activeElement.id : null
+    const idf = ['h22-busca', 'h22-mun', 'pro-busca', 'b26-busca', 'terr-mun', 'terr-ref-busca', 'terr-nome'].includes(document.activeElement?.id) ? document.activeElement.id : null
     const foco = idf ? document.activeElement.selectionStart : null
     conteudo.innerHTML = estado.aba.tipo === 'pro' ? renderPro() : estado.aba.tipo === 'bai' ? renderBairros26() : render2022()
     if (estado.aba.tipo === 'pro' && PRO.chave && PRO.aba === 'mapa') montarMapaPro()
@@ -3417,7 +3420,7 @@ function renderSobre() {
       <p class="nota">Encontrou algo estranho nos números? Fale com <a href="https://www.instagram.com/maiconcombat/" target="_blank" rel="noopener">@maiconcombat</a>.</p>
     </section>`
 }
-// "202610071900" → "07/10/2026 12:00"
+// "202610072000" → "07/10/2026 12:00"
 const versaoLegivel = () => (/^\d{12}$/.test(VERSAO) ? `${VERSAO.slice(6, 8)}/${VERSAO.slice(4, 6)}/${VERSAO.slice(0, 4)} ${VERSAO.slice(8, 10)}:${VERSAO.slice(10, 12)}` : VERSAO || 'local')
 
 /* ---------------- eleições de 2022 (SC) ---------------- */
@@ -4047,6 +4050,221 @@ async function carregarBairros(ctrl) {
   statusEl.className = 'status ok'
 }
 
+/* ---------------- Meu território: os votos "entregues" nas escolas e seções de uma liderança ---------------- */
+
+// itens: { "cd|z-loc": [] (local inteiro) ou ["z-s", …] (só essas seções) } · ref: candidato municipal de comparação
+const TERR = (() => {
+  try {
+    const t = JSON.parse(lerLocal('territorio:v1', 'null'))
+    if (t?.itens) return { cdEdit: null, buscaMun: '', buscaRef: '', abertos: new Set(), ...t }
+  } catch {}
+  return { nome: 'Meu território', itens: {}, ref: null, cdEdit: null, buscaMun: '', buscaRef: '', abertos: new Set() }
+})()
+const salvarTerr = () => gravarLocal('territorio:v1', JSON.stringify({ nome: TERR.nome, itens: TERR.itens, ref: TERR.ref }))
+const terrCds = () => [...new Set(Object.keys(TERR.itens).map((k) => k.split('|')[0]))]
+
+// seções (z-s) do território num arquivo de seções do município cd
+function secoesDoTerr(arq, cd) {
+  const out = []
+  for (const [zs, loc] of Object.entries(arq.secoes)) {
+    const it = TERR.itens[`${cd}|${loc}`]
+    if (it && (!it.length || it.includes(zs))) out.push([zs, loc])
+  }
+  return out
+}
+
+// soma uma eleição nas seções do território, por local; foco = número do candidato
+function somaTerr(ano, elId, cargo, foco, anul = new Set(), re) {
+  const porLocal = new Map(), total = new Map()
+  let validos = 0, faltam = 0
+  for (const cd of terrCds()) {
+    const arq26 = secoesAno(2026, cd, re)
+    const arq = ano === 2026 ? arq26 : secoesAno(ano, cd, re)
+    if (!arq26 || !arq) {
+      if (!erroSecoes(ano, cd)) faltam++
+      continue
+    }
+    for (const [zs, loc] of secoesDoTerr(arq26, cd)) {
+      const arr = arq.votos[elId]?.[zs]
+      if (!arr) continue
+      const k = `${cd}|${loc}`
+      const g = porLocal.get(k) || { cd, loc, nome: tituloLocal((arq26.locais[loc] || [loc])[0]), bairro: bairroDoLocal(arq26, loc), foco: 0, validos: 0, secoes: 0 }
+      g.secoes++
+      for (let i = 0; i < arr.length; i += 2) {
+        const nr = arr[i], v = arr[i + 1]
+        if (nr === 95 || nr === 96 || nr === 97 || anul.has(nr)) continue
+        g.validos += v
+        validos += v
+        if (nr === foco) g.foco += v
+        if (!ehProp(cargo) || nr > 99) total.set(nr, (total.get(nr) || 0) + v)
+      }
+      porLocal.set(k, g)
+    }
+  }
+  const focoTot = [...porLocal.values()].reduce((a, g) => a + g.foco, 0)
+  const rank = [...total.entries()].sort((a, b) => b[1] - a[1])
+  return { porLocal, focoTot, validos, pos: focoTot ? rank.findIndex(([nr]) => nr === foco) + 1 : 0, n: rank.length, faltam, rank }
+}
+
+function renderTerritorio(el) {
+  const re = () => estado.aba.tipo === 'bai' && renderizar()
+  const nItens = Object.keys(TERR.itens).length
+  const cds = terrCds()
+  // editor: escolher município e marcar escolas (locais) ou seções
+  const termo = semAcento(TERR.buscaMun.trim())
+  const achados = termo ? MUNICIPIOS_SC.filter((m) => semAcento(m[2]).includes(termo)).slice(0, 10) : []
+  const cdE = TERR.cdEdit
+  let lista = ''
+  if (cdE) {
+    const arq = secoesAno(2026, cdE, re)
+    if (!arq) lista = `<p class="nota">${erroSecoes(2026, cdE) ? 'Os boletins deste município ainda não estão no app.' : 'Carregando os locais de votação…'}</p>`
+    else {
+      const porBairro = new Map()
+      const secsDe = new Map()
+      for (const [zs, loc] of Object.entries(arq.secoes)) secsDe.set(loc, [...(secsDe.get(loc) || []), zs])
+      for (const loc of secsDe.keys()) {
+        const b = bairroDoLocal(arq, loc)
+        porBairro.set(b, [...(porBairro.get(b) || []), loc])
+      }
+      lista = [...porBairro.entries()].sort((a, b) => a[0].localeCompare(b[0], 'pt-BR')).map(([b, locs]) => `<div class="terr-bairro"><span class="atalhos-rot">${esc(b)}</span>${locs
+        .map((loc) => {
+          const k = `${cdE}|${loc}`
+          const it = TERR.itens[k]
+          const secs = secsDe.get(loc).sort((x, y) => Number(x.split('-')[1]) - Number(y.split('-')[1]))
+          const parcial = it?.length ? ` (${it.length} de ${secs.length} seções)` : ''
+          const aberto = TERR.abertos.has(k)
+          return `<div class="terr-local ${it ? 'marcado' : ''}"><button type="button" class="terr-marca" data-terr-local="${esc(k)}" aria-pressed="${!!it}">${it ? '☑' : '☐'} ${esc(tituloLocal((arq.locais[loc] || [loc])[0]))}<small>${secs.length} seções${parcial}</small></button>
+            <button type="button" class="link-zonas leve" data-terr-abrir="${esc(k)}" aria-expanded="${aberto}">${aberto ? 'fechar' : 'seções'}</button>
+            ${aberto ? `<div class="atalhos-chips terr-secoes">${secs.map((zs) => { const on = it && (!it.length || it.includes(zs)); return `<button type="button" class="atalho ${on ? 'ativo' : ''}" data-terr-secao="${esc(k)}|${esc(zs)}">${on ? '✓ ' : ''}${Number(zs.split('-')[0])}ª/${zs.split('-')[1]}</button>` }).join('')}</div>` : ''}</div>`
+        })
+        .join('')}</div>`).join('')
+    }
+  }
+  const editor = `<section class="cartao terr-editor"><h3>📍 ${esc(TERR.nome)} <span class="mudo">· ${nItens} ${nItens === 1 ? 'local' : 'locais'}${cds.length > 1 ? ` em ${cds.length} municípios` : cds.length ? ` · ${esc(NOME_MUN.get(cds[0]) || '')}` : ''}</span></h3>
+      <p class="nota">Marque as escolas (locais de votação) ou as seções onde você trabalhou. Fica salvo neste aparelho.</p>
+      <input id="terr-nome" type="text" maxlength="40" value="${esc(TERR.nome)}" aria-label="Nome do território">
+      <div class="atalhos-chips">${cds.map((cd) => `<button type="button" class="atalho ${cd === cdE ? 'ativo' : ''}" data-terr-cd="${cd}">${esc(NOME_MUN.get(cd) || cd)}</button>`).join('')}</div>
+      <input id="terr-mun" type="search" autocomplete="off" placeholder="🔎 Escolher município para marcar escolas…" value="${esc(TERR.buscaMun)}">
+      ${termo ? `<div class="atalhos-chips">${achados.map((m) => `<button type="button" class="atalho" data-terr-cd="${m[0]}">${esc(m[2])}</button>`).join('') || '<span class="nota">Nenhum município encontrado.</span>'}</div>` : ''}
+      ${cdE ? `<div class="terr-lista"><div class="terr-lista-topo"><strong>Escolas de ${esc(NOME_MUN.get(cdE) || cdE)}</strong><button type="button" class="botao" data-terr-cd="">✓ Pronto</button></div>${lista}<button type="button" class="botao" data-terr-cd="">✓ Pronto</button></div>` : ''}
+      ${nItens ? '<button type="button" class="botao secundario" data-terr-limpar>Limpar território</button>' : ''}
+    </section>`
+  if (!nItens) return editor
+  const c = el.porNumero?.get(String(B26.foco)) || el.candidatos.find((x) => Number(x.numero) === B26.foco)
+  if (!c) return `${editor}<div class="cartao vazio">Escolha um candidato acima (seus ❤️ ou a busca) para ver os votos dele no seu território.</div>`
+  const nr = Number(c.numero)
+  const T = somaTerr(2026, el.id, el.cargo, nr, el.anul, re)
+  if (T.faltam && !T.porLocal.size) return `${editor}${esqueleto('Carregando as seções do território…')}`
+  // 2022: mesmo candidato, nas mesmas seções
+  if (PREF.mostrar2022 && !H22.resumo) resumo2022().then(re).catch(() => {})
+  const p22 = PREF.mostrar2022 && H22.resumo ? achar2022(c).filter((p) => p.el.turno === 1).sort((x, y) => (y.el.cargo === el.cargo) - (x.el.cargo === el.cargo))[0] : null
+  const T22 = p22 ? somaTerr(2022, p22.el.id, p22.el.cargo, Number(p22.c.numero), p22.el.anul, re) : null
+  // referência municipal (ex.: o vereador que trabalhou essas seções em 2024)
+  const ref = TERR.ref
+  const TR = ref ? somaTerr(ref.ano, ref.id, ref.cargo, Number(ref.nr), new Set(), re) : null
+  if (ref && !histDe(ref.ano).resumo) resumoAno(ref.ano).then(re).catch(() => {})
+  const cor = corPartido(c.partido)
+  const locais = [...T.porLocal.values()].sort((a, b) => b.foco - a.foco)
+  const de22 = (g) => T22?.porLocal.get(`${g.cd}|${g.loc}`)?.foco ?? 0
+  const deRef = (g) => TR?.porLocal.get(`${g.cd}|${g.loc}`)?.foco ?? 0
+  const pctSC = pctDe(T.focoTot, c.votos)
+  const resumo = `<section class="cartao terr-res" style="${estiloCor(cor)}"><h3>${esc(c.nome)} no seu território</h3>
+      <div class="fav-nums">
+        <div><span class="fav-rot">Votos</span><strong>${fmt.format(T.focoTot)}</strong>${T22 ? `<span class="mudo">2022: ${fmt.format(T22.focoTot)}</span>` : ''}</div>
+        <div><span class="fav-rot">% dos válidos</span><strong>${fmtPct.format(pctDe(T.focoTot, T.validos))}%</strong><span class="mudo">${fmt.format(T.validos)} válidos</span></div>
+        <div><span class="fav-rot">Posição</span><strong>${T.pos ? `${T.pos}º` : '–'}</strong><span class="mudo">de ${T.n}</span></div>
+      </div>
+      <p class="nota">${fmtPct.format(pctSC)}% de todos os votos de ${esc(c.nome)} em SC vieram daqui · ${locais.length} locais, ${locais.reduce((a, g) => a + g.secoes, 0)} seções${T22 && T22.focoTot ? ` · 2022 nas mesmas seções: ${fmt.format(T22.focoTot)} (${esc(ROTULO_ELEICAO[p22.el.id] || '')})` : ''}</p>
+      ${T.faltam ? `<p class="nota">Carregando mais ${T.faltam} município(s)…</p>` : ''}
+      ${T22 ? listaComparada(locais.map((g) => ({ nome: g.nome, sub: g.bairro, v: g.foco, v22: de22(g), meta: `${fmtPct.format(pctDe(g.foco, g.validos))}% dos votos do local · ${g.secoes} seções` })), cor)
+        : `<div class="cmp-lista">${locais.map((g) => `<div class="cmp-linha"><div class="cmp-topo"><div class="cmp-nome"><strong>${esc(g.nome)}</strong> <span class="mudo">· ${esc(g.bairro)}</span></div><strong class="cmp-total">${fmt.format(g.foco)}</strong></div><div class="cand-meta">${fmtPct.format(pctDe(g.foco, g.validos))}% dos votos do local · ${g.secoes} seções</div></div>`).join('')}</div>`}
+      <div class="exportar">${botaoCard('territorio', cardTerritorio(c, el, T, T22, TR, locais))}<button type="button" class="botao secundario" data-terr-csv>${icone('baixar')} Planilha (CSV)</button></div>
+    </section>`
+  // comparação com um candidato municipal (vereador/prefeito) nas mesmas seções
+  const cidades = cds.filter((cd) => cd)
+  const anoRef = TERR.anoRef || 2024
+  const R = histDe(anoRef).resumo
+  if (!R) resumoAno(anoRef).then(re).catch(() => {})
+  const tr = semAcento(TERR.buscaRef.trim())
+  const candsRef = R && tr.length >= 2 ? R.eleicoes.filter((e) => ehMunicipal(e.cargo)).flatMap((e) => cidades.flatMap((cd) => cidadeDe(e, cd).candidatos.map((x) => ({ e, x })))).filter(({ x }) => semAcento(`${x.nome} ${x.nomeCompleto} ${x.numero}`).includes(tr)).slice(0, 12) : []
+  const refCard = `<section class="cartao"><h3>🤝 Comparar com os seus votos</h3>
+      <p class="nota">Vereador ou candidato a prefeito? Escolha a sua candidatura (2024 ou 2020) e veja, nas mesmas seções, quantos votos você teve e quantos ${esc(c.nome)} teve.</p>
+      <div class="segmentado" role="group">${[2024, 2020, 2016].map((a) => `<button type="button" data-terr-anoref="${a}" aria-pressed="${a === anoRef}">${a}</button>`).join('')}</div>
+      <input id="terr-ref-busca" type="search" autocomplete="off" placeholder="🔎 Seu nome ou número em ${anoRef}…" value="${esc(TERR.buscaRef)}">
+      ${candsRef.length ? `<div class="atalhos-chips">${candsRef.map(({ e, x }) => `<button type="button" class="atalho" data-terr-ref="${anoRef}|${e.id}|${e.cargo}|${x.numero}|${esc(x.nome)}|${x.cd}" style="${estiloCor(corPartido(x.partido))}">${esc(x.nome)} <small>${esc(ROTULO_ELEICAO[e.id] || '')} · ${esc(NOME_MUN.get(x.cd) || '')}</small></button>`).join('')}</div>` : tr.length >= 2 && R ? '<p class="nota">Ninguém com esse nome nos municípios do território.</p>' : ''}
+      ${ref && TR ? `<div class="terr-ref"><p><strong>${esc(ref.nome)}</strong> (${esc(ROTULO_ELEICAO[ref.id] || '')} ${ref.ano}): <strong>${fmt.format(TR.focoTot)}</strong> votos nessas seções × <strong>${esc(c.nome)}</strong> (2026): <strong>${fmt.format(T.focoTot)}</strong> votos${TR.focoTot ? ` · ${fmtDec(T.focoTot / TR.focoTot)}× os seus votos` : ''}. <button type="button" class="link-zonas leve" data-terr-ref-limpar>✕</button></p>
+        ${listaDuelo(locais.map((g) => ({ nome: g.nome, sub: g.bairro, a: deRef(g), b: g.foco, valA: 0 })).sort((x, y) => y.a + y.b - (x.a + x.b)), { nome: `${ref.nome} ${ref.ano}`, cor: '#6b7570' }, { nome: `${c.nome} 2026`, cor })}</div>` : ''}
+    </section>`
+  TERR.csv = { nome: `territorio-${nomeArquivo(TERR.nome)}-${nomeArquivo(c.nome)}.csv`, cab: ['Local', 'Bairro', 'Município', 'Seções', `${c.nome} 2026`, '% do local', ...(T22 ? ['2022'] : []), ...(TR ? [`${ref.nome} ${ref.ano}`] : [])],
+    linhas: locais.map((g) => [g.nome, g.bairro, NOME_MUN.get(g.cd) || g.cd, g.secoes, g.foco, pctDe(g.foco, g.validos), ...(T22 ? [de22(g)] : []), ...(TR ? [deRef(g)] : [])]) }
+  return editor + resumo + refCard
+}
+
+function cardTerritorio(c, el, T, T22, TR, locais) {
+  const max = Math.max(1, ...locais.slice(0, 6).map((g) => Math.max(g.foco, T22?.porLocal.get(`${g.cd}|${g.loc}`)?.foco || 0)))
+  return {
+    turno: turnoDe(el.id), foto: c.foto, nome: c.nome, cor: corPartido(c.partido), sub: `${c.partido} · nº ${c.numero} · ${ROTULO_26[el.id] || ''}`,
+    titulo: `${TERR.nome}`, subtitulo: `${locais.length} locais de votação · ${fmtPct.format(pctDe(T.focoTot, T.validos))}% dos válidos${T.pos ? ` · ${T.pos}º lugar` : ''}`,
+    tiles: [{ rot: 'Votos entregues', valor: fmt.format(T.focoTot), sub: `${fmtPct.format(pctDe(T.focoTot, T.validos))}% dos válidos${T.pos ? ` · ${T.pos}º lugar` : ''}`, cor: corPartido(c.partido) },
+      ...(TR ? [{ rot: `${TERR.ref.nome} · ${TERR.ref.ano}`, valor: fmt.format(TR.focoTot), sub: 'nas mesmas seções', cor: '#6b7570' }] : T22 ? [{ rot: 'Em 2022 (mesmas seções)', valor: fmt.format(T22.focoTot), sub: variacao(T.focoTot, T22.focoTot)?.txt || '', cor: '#a5aca8' }] : [])],
+    total: { ...totalCard('Votos entregues no território', T.focoTot, T22 ? T22.focoTot : null), quem: c.nome },
+    linhas: locais.slice(0, 6).map((g) => {
+      const v22 = T22?.porLocal.get(`${g.cd}|${g.loc}`)?.foco
+      return T22 ? { nome: g.nome, extra: g.bairro, par: { v22: v22 || 0, v26: g.foco, max }, dir2: variacao(g.foco, v22 || 0)?.txt || '', corDir2: COR_VAR[variacao(g.foco, v22 || 0)?.cls] } : { nome: g.nome, extra: g.bairro, valor: fmt.format(g.foco), dir2: `${fmtPct.format(pctDe(g.foco, g.validos))}%`, frac: g.foco / max, corBarra: corPartido(c.partido) }
+    }),
+    rodape: `Entreguei ${fmt.format(T.focoTot)} votos para ${c.nome}`,
+  }
+}
+
+function tratarTerritorio(h) {
+  const b = (sel) => h(sel)
+  let x
+  if ((x = b('[data-terr-cd]'))) return ((TERR.cdEdit = x.dataset.terrCd || null), (TERR.buscaMun = ''), renderizar(), true)
+  if ((x = b('[data-terr-local]'))) {
+    const k = x.dataset.terrLocal
+    k in TERR.itens ? delete TERR.itens[k] : (TERR.itens[k] = [])
+    return (salvarTerr(), renderizar(), true)
+  }
+  if ((x = b('[data-terr-abrir]'))) {
+    const k = x.dataset.terrAbrir
+    TERR.abertos.has(k) ? TERR.abertos.delete(k) : TERR.abertos.add(k)
+    return (renderizar(), true)
+  }
+  if ((x = b('[data-terr-secao]'))) {
+    const [cd, loc, zs] = x.dataset.terrSecao.split('|')
+    const k = `${cd}|${loc}`
+    const arq = secoesAno(2026, cd)
+    const todas = arq ? Object.entries(arq.secoes).filter(([, l]) => l === loc).map(([s]) => s) : []
+    let sel = k in TERR.itens ? (TERR.itens[k].length ? [...TERR.itens[k]] : [...todas]) : []
+    sel = sel.includes(zs) ? sel.filter((s) => s !== zs) : [...sel, zs]
+    if (!sel.length) delete TERR.itens[k]
+    else TERR.itens[k] = sel.length === todas.length ? [] : sel
+    return (salvarTerr(), renderizar(), true)
+  }
+  if (b('[data-terr-limpar]')) return ((TERR.itens = {}), (TERR.ref = null), salvarTerr(), renderizar(), true)
+  if ((x = b('[data-terr-anoref]'))) return ((TERR.anoRef = Number(x.dataset.terrAnoref)), (TERR.buscaRef = ''), renderizar(), true)
+  if ((x = b('[data-terr-ref]'))) {
+    const [ano, id, cargo, nr, nome, cd] = x.dataset.terrRef.split('|')
+    TERR.ref = { ano: Number(ano), id, cargo: Number(cargo), nr, nome, cd }
+    TERR.buscaRef = ''
+    return (salvarTerr(), renderizar(), true)
+  }
+  if (b('[data-terr-ref-limpar]')) return ((TERR.ref = null), salvarTerr(), renderizar(), true)
+  if (b('[data-terr-csv]') && TERR.csv) return (baixarCSV(TERR.csv), true)
+  return false
+}
+
+function inputTerritorio(alvo) {
+  if (alvo.id === 'terr-mun') TERR.buscaMun = alvo.value
+  if (alvo.id === 'terr-ref-busca') TERR.buscaRef = alvo.value
+  if (alvo.id === 'terr-nome') {
+    TERR.nome = alvo.value.trim() || 'Meu território'
+    salvarTerr()
+    return
+  }
+  renderizar()
+}
+
 function renderBairros26() {
   if (DEMO) return '<div class="cartao vazio">Os bairros usam os boletins de urna reais do TSE e não aparecem no modo demonstração.</div>'
   const el = B26.els.get(B26.sel)
@@ -4056,11 +4274,12 @@ function renderBairros26() {
   return `<section class="cartao resumo">
       <div class="resumo-titulo"><h2>Bairros, locais e seções · 2026</h2><span class="selo final">Boletins de urna</span></div>
       ${pills}
+      <div class="segmentado b26-modo" role="group" aria-label="Modo"><button type="button" data-b26-modo="explorar" aria-pressed="${B26.modo !== 'territorio'}">Explorar</button><button type="button" data-b26-modo="territorio" aria-pressed="${B26.modo === 'territorio'}">📍 Meu território</button></div>
       ${el ? seletorCandidatoB26(el) : ''}
-      ${seletorLocal(B26)}
+      ${B26.modo === 'territorio' ? '' : seletorLocal(B26)}
       <p class="nota">Votos de cada seção eleitoral do ${turnoDe(B26.sel)}º turno, lidos dos boletins de urna publicados pelo TSE e somados pelo bairro do local de votação. Escolha um município para ver por zona, bairro, local e seção.${TURNO === 2 && !INDICE26.has('t2-c1') && !INDICE26.has('t2-c3') ? ' <strong>Os boletins do 2º turno entram aqui assim que forem processados.</strong>' : ''}</p>
     </section>
-    ${!el ? (B26.erro ? '<div class="cartao vazio">Não consegui carregar os candidatos agora.</div>' : esqueleto('Carregando os candidatos…')) : B26.local ? renderLocal(B26, el) : B26.foco != null ? bairrosDoCandidatoSC(el) : fortesPorBairro(el)}`
+    ${!el ? (B26.erro ? '<div class="cartao vazio">Não consegui carregar os candidatos agora.</div>' : esqueleto('Carregando os candidatos…')) : B26.modo === 'territorio' ? renderTerritorio(el) : B26.local ? renderLocal(B26, el) : B26.foco != null ? bairrosDoCandidatoSC(el) : fortesPorBairro(el)}`
 }
 
 // candidato em foco na aba Bairros: os ❤️ acompanhados (de qualquer cargo) e uma busca
