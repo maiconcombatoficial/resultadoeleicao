@@ -4,12 +4,12 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { icone } from './icones.js?v=202610080300'
-import { calcularVagas } from './vagas.js?v=202610080300'
-import { chanceDe, NIVEIS } from './chances.js?v=202610080300'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610080300'
-import { FLORIPA } from './floripa.js?v=202610080300'
-import { corPartido, corTexto } from './cores.js?v=202610080300'
+import { icone } from './icones.js?v=202610080400'
+import { calcularVagas } from './vagas.js?v=202610080400'
+import { chanceDe, NIVEIS } from './chances.js?v=202610080400'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610080400'
+import { FLORIPA } from './floripa.js?v=202610080400'
+import { corPartido, corTexto } from './cores.js?v=202610080400'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -466,7 +466,7 @@ function registrarHistorico(abaId, abr, dados) {
 /* ---------------- estado e navegação ---------------- */
 
 const estado = {
-  aba: ABAS.find((a) => a.id === (location.hash.slice(1) || lerLocal('aba', 'inicio'))) || ABAS[0],
+  aba: ABAS.find((a) => a.id === (location.hash.slice(1).split('?')[0] || lerLocal('aba', 'inicio'))) || ABAS[0],
   abr: {},
   busca: '',
   visao: 'candidatos', // proporcionais: candidatos | partidos
@@ -593,9 +593,157 @@ $('#abas').addEventListener('click', (ev) => {
   trocarAba(b.dataset.aba)
 })
 
-window.addEventListener('hashchange', () => {
-  const id = location.hash.slice(1)
-  if (id && id !== estado.aba.id) trocarAba(id)
+window.addEventListener('hashchange', () => aplicarLink())
+
+/* ---------------- link direto ---------------- */
+
+// O endereço guarda o que está na tela: #<aba>?<parâmetros>. Aba: r = abrangência, m = município ou região,
+// z = zona; explorador de seções (Bairros/Histórico): ano, e = eleição, m/z/b/lv/s = lugar, f = candidato;
+// ficha: c = candidato, ca = cargo (aba), cr = abrangência, l = lugar dos bairros; comparação: vs/va, v3/v3a, dl.
+const CHAVES_FICHA = ['c', 'ca', 'cr', 'l', 'vs', 'va', 'v3', 'v3a', 'dl']
+function lerHash(h = location.hash) {
+  const t = h.replace(/^#/, '')
+  const i = t.indexOf('?')
+  return { id: i < 0 ? t : t.slice(0, i), p: new URLSearchParams(i < 0 ? '' : t.slice(i + 1)) }
+}
+const hashDe = (id, p) => {
+  const q = new URLSearchParams(Object.entries(p).filter(([, v]) => v != null && v !== '' && v !== false)).toString()
+  return `#${id}${q ? `?${q}` : ''}`
+}
+const munDoLink = (m, z) => (!m ? null : m.includes(':') ? regiao(m) : NOME_MUN.get(m) ? { cd: m, nm: NOME_MUN.get(m), zona: z || undefined } : null)
+
+function paramsAba() {
+  const a = estado.aba
+  const p = {}
+  if (a.tipo === 'maj' || a.tipo === 'prop') {
+    if (abrAtual() !== a.abrangencias[0]) p.r = abrAtual()
+    const m = munAtual()
+    if (m) Object.assign(p, { m: m.regiao || m.cd, z: m.zona })
+  }
+  if (a.tipo === 'bai' || a.tipo === 'h22') {
+    const X = estadoLocal()
+    if (a.tipo === 'h22' && (H22.ano || 2022) !== 2022) p.ano = H22.ano
+    if (X.sel && X.sel !== 't1-c7') p.e = X.sel
+    const L = X.local
+    if (L) Object.assign(p, { m: L.cd, z: L.zona, b: L.bairro, lv: L.localVot, s: L.secao })
+    if (X.foco != null) p.f = X.foco
+  }
+  return p
+}
+function paramsFicha(det) {
+  const p = { c: det.sqcand, ca: det.aba, cr: det.abr !== ABAS.find((a) => a.id === det.aba)?.abrangencias[0] ? det.abr : null, l: det.bai?.mun?.id }
+  if (det.comp) Object.assign(p, { vs: det.comp.sqcand, va: det.comp.aba, v3: det.comp.extra?.sq, v3a: det.comp.extra?.aba, dl: det.comp.dif?.mun?.id })
+  return p
+}
+const hashDesejado = () => hashDe(estado.aba.id, { ...paramsAba(), ...(estado.detalhe ? paramsFicha(estado.detalhe) : {}) })
+// endereço completo para compartilhar o que está na tela
+const linkAtual = () => `${location.origin}${location.pathname}${location.search}${hashDesejado()}`
+
+// mantém o endereço em dia sem criar entradas no histórico
+function sincronizarLink() {
+  const h = hashDesejado()
+  if (location.hash !== h) history.replaceState(history.state, '', `${location.search}${h}`)
+}
+
+// abre o que o endereço pede (ao iniciar, ao colar um link ou ao voltar/avançar)
+function aplicarLink() {
+  const { id, p } = lerHash()
+  if (!id) return
+  const aba = ABAS.find((a) => a.id === id)
+  if (!aba) return
+  const antesAba = hashDe(estado.aba.id, paramsAba())
+  if (aba !== estado.aba) {
+    estado.aba = aba
+    Object.assign(estado, { busca: '', visao: 'candidatos', partido: null, dados: null, anterior: new Map() })
+    gravarLocal('aba', id)
+    montarAbas()
+  }
+  const temParams = [...p.keys()].length > 0
+  if (aba.tipo === 'maj' || aba.tipo === 'prop') {
+    const r = p.get('r')
+    if (r && aba.abrangencias.includes(r)) estado.abr[aba.id] = r
+    else if (temParams) delete estado.abr[aba.id]
+    if (temParams) {
+      estado.mun = munDoLink(p.get('m'), p.get('z'))
+      gravarLocal(`${PREFIXO}municipio:v1`, JSON.stringify(estado.mun))
+    }
+  }
+  if ((aba.tipo === 'bai' || aba.tipo === 'h22') && temParams) {
+    const X = aba.tipo === 'bai' ? B26 : H22
+    if (aba.tipo === 'h22') H22.ano = ANOS_HIST.includes(Number(p.get('ano'))) ? Number(p.get('ano')) : 2022
+    X.sel = p.get('e') || 't1-c7'
+    const m = p.get('m')
+    X.local = m && NOME_MUN.get(m) ? { cd: m, nm: NOME_MUN.get(m), zona: p.get('z') || null, bairro: p.get('b') || null, localVot: p.get('lv') || null, secao: p.get('s') || null } : null
+    X.foco = p.get('f') != null && p.get('f') !== '' ? Number(p.get('f')) : null
+    X.grupo = X.local?.secao ? 'secao' : X.local?.localVot ? 'secao' : X.local?.bairro || X.local?.zona ? 'local' : X.local && X.foco != null ? 'bairro' : 'zona'
+  }
+  if (hashDe(estado.aba.id, paramsAba()) !== antesAba || !estado.dados) {
+    estado.dados = null
+    carregar()
+  }
+  // ficha (e comparação)
+  const c = p.get('c')
+  const det = estado.detalhe
+  if (!c) {
+    if (det) fecharDetalhe(false)
+    return
+  }
+  const ca = ABAS.find((a) => a.id === p.get('ca') && a.cargo) || (aba.cargo ? aba : null)
+  if (!ca) return
+  const cr = ca.abrangencias.includes(p.get('cr')) ? p.get('cr') : ca.abrangencias[0]
+  if (!det || det.sqcand !== c || det.aba !== ca.id || det.abr !== cr) {
+    if (det) fecharDetalhe(false)
+    abrirDetalhe({ aba: ca.id, abr: cr, sqcand: c, substituir: true })
+  }
+  const d2 = estado.detalhe
+  const l = p.get('l')
+  if (l) d2.bai = { mun: lugarBairros(l), modo: 'v', todos: false, painel: false, busca: '', grupo: 'bairro' }
+  const vs = p.get('vs')
+  if (vs) {
+    const va = ABAS.find((a) => a.id === p.get('va') && a.cargo)?.id || null
+    if (d2.comp?.sqcand !== vs || (d2.comp?.aba || null) !== va)
+      d2.comp = { sqcand: vs, aba: va, porMun: null, dif: { grupo: 'mun', modo: 'w0', mun: null, painel: false, busca: '', todos: false } }
+    const v3 = p.get('v3')
+    const v3a = ABAS.find((a) => a.id === p.get('v3a') && a.cargo)?.id || null
+    d2.comp.extra = v3 ? { sq: v3, aba: v3a } : null
+    const dl = p.get('dl')
+    if (dl) {
+      const L = lugarBairros(dl)
+      Object.assign(d2.comp.dif, { mun: L, grupo: L?.cds.length > 1 ? 'mun' : 'zona' })
+    }
+    for (const x of [va, v3a]) if (x) carregarListaComp(d2, x)
+  } else d2.comp = null
+  d2.escolhendo = false
+  renderDetalhe()
+}
+
+// copia (ou compartilha, no celular) o link do que está na tela
+async function copiarLink(botao) {
+  const url = linkAtual()
+  const ok = () => {
+    if (!botao) return
+    const antes = botao.innerHTML
+    botao.innerHTML = `${icone('link')} Link copiado!`
+    setTimeout(() => (botao.innerHTML = antes), 2500)
+  }
+  if (navigator.share && matchMedia('(pointer: coarse)').matches) {
+    try {
+      return await navigator.share({ url, title: document.title })
+    } catch (e) {
+      if (e?.name === 'AbortError') return
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(url)
+    ok()
+  } catch {
+    window.prompt('Copie o link:', url)
+  }
+}
+const botaoLink = (classe = 'botao secundario') => `<button type="button" class="${classe}" data-copiar-link>${icone('link')} Copiar link</button>`
+document.addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-copiar-link]')
+  if (b) copiarLink(b)
 })
 
 function trocarAba(id) {
@@ -2151,6 +2299,7 @@ function renderProporcional(d) {
 
 function renderizar() {
   if (estado.detalhe) renderDetalhe()
+  else sincronizarLink()
   const d = estado.dados
   if (!d) return
   if (document.activeElement?.id === 'mun-busca') {
@@ -2275,10 +2424,10 @@ detalheEl.setAttribute('role', 'dialog')
 detalheEl.setAttribute('aria-modal', 'true')
 document.body.appendChild(detalheEl)
 
-function abrirDetalhe({ aba, abr, sqcand }) {
+function abrirDetalhe({ aba, abr, sqcand, substituir = false }) {
   const mun = estado.aba.id === aba && abrAtual() === abr ? munAtual() : null
   estado.detalhe = { aba, abr, sqcand, mun, floripa: null }
-  history.pushState({ detalhe: true }, '', location.href)
+  history[substituir ? 'replaceState' : 'pushState']({ detalhe: true }, '', `${location.search}${hashDesejado()}`)
   document.documentElement.classList.add('com-detalhe')
   detalheEl.hidden = false
   detalheEl.scrollTop = 0
@@ -2461,6 +2610,7 @@ function renderDetalhe() {
   const idFoco = ['det-busca-mun', 'comp-busca', 'det-busca-bairro-mun'].includes(document.activeElement?.id) ? document.activeElement.id : null
   const focoBusca = idFoco ? document.activeElement.selectionStart : null
   renderDetalheConteudo()
+  sincronizarLink()
   for (const div of detalheEl.querySelectorAll('[data-mapa]')) montarMapaAberto(div)
   if (focoBusca != null) {
     const el = document.getElementById(idFoco)
@@ -2474,7 +2624,7 @@ function renderDetalheConteudo() {
   const aba = ABAS.find((a) => a.id === det.aba)
   const d = dadosDetalhe()
   const voltar = `<div class="det-topo"><button type="button" class="det-voltar" data-fechar>‹ Voltar</button>
-    <span class="det-onde">${esc(aba ? aba.rotulo.replace(/ SC$/, '') : '')} · ${esc(det.mun ? `${det.mun.nm} (SC)${det.mun.zona ? ` · ${Number(det.mun.zona)}ª zona` : ''}` : NOMES_ABR[det.abr] || det.abr.toUpperCase())}</span></div>`
+    <span class="det-onde">${esc(aba ? aba.rotulo.replace(/ SC$/, '') : '')} · ${esc(det.mun ? `${det.mun.nm} (SC)${det.mun.zona ? ` · ${Number(det.mun.zona)}ª zona` : ''}` : NOMES_ABR[det.abr] || det.abr.toUpperCase())}</span>${botaoLink('det-link')}</div>`
   if (!d) {
     detalheEl.innerHTML = `<div class="det-corpo">${voltar}${det.erro ? '<div class="cartao vazio">Não consegui carregar os dados agora.</div>' : esqueleto('Carregando a ficha…')}</div>`
     return
@@ -3496,7 +3646,7 @@ function renderSobre() {
       <p class="nota">Encontrou algo estranho nos números? Fale com <a href="https://www.instagram.com/maiconcombat/" target="_blank" rel="noopener">@maiconcombat</a>.</p>
     </section>`
 }
-// "202610080300" → "07/10/2026 12:00"
+// "202610071200" → "07/10/2026 12:00"
 const versaoLegivel = () => (/^\d{12}$/.test(VERSAO) ? `${VERSAO.slice(6, 8)}/${VERSAO.slice(4, 6)}/${VERSAO.slice(0, 4)} ${VERSAO.slice(8, 10)}:${VERSAO.slice(10, 12)}` : VERSAO || 'local')
 
 /* ---------------- eleições de 2022 (SC) ---------------- */
@@ -3530,7 +3680,13 @@ function resumoAno(ano) {
       for (const el of j.eleicoes) {
         el.id = `t${el.turno}-c${el.cargo}`
         el.ano = ano
-        el.anul = new Set(j.anulados.filter((x) => x.startsWith(el.id + '-')).map((x) => Number(x.split('-')[2])))
+        el.anul = new Set()
+        // municipais: o número se repete entre as cidades, então o anulado vem com o município ("t1-c11-15-81051")
+        for (const x of j.anulados.filter((x) => x.startsWith(el.id + '-'))) {
+          const [, , nr, cd] = x.split('-')
+          if (cd) (el.anulMun ??= new Map()).set(cd, (el.anulMun.get(cd) || new Set()).add(Number(nr)))
+          else if (el.cargo !== 11 && el.cargo !== 13) el.anul.add(Number(nr))
+        }
         el.partidos = j.partidos
         el.situ = (c) => situ2022(c.sit)
         el.candidatos.forEach((x, i) => {
@@ -3778,7 +3934,7 @@ function titulo22(s) {
 // Soma os votos das seções do município filtrando por zona/local/bairro/seção, e agrupa.
 function agregarSecoes(arq, el, filtro, grupo, foco) {
   const votos = arq.votos[el.id] || {}
-  const anul = el.anul
+  const anul = el.anulMun?.get(arq.cd) || el.anul
   const prop = ehProp(el.cargo)
   const total = new Map()
   const grupos = new Map()
@@ -3930,7 +4086,7 @@ function renderLocal(X, el) {
         })
         .join('')}</tbody></table>
       ${linhasGrupo.length > maxLinhas ? `<button type="button" class="botao secundario" data-h22-vergrupos>Mostrar todas as ${fmt.format(linhasGrupo.length)} ${grupo === 'secao' ? 'seções' : 'linhas'}</button>` : ''}
-      <div class="exportar">${botaoCard(`local-${el.ano}`, cardLocal(X, el, L, arq, grupo, linhasGrupo, ranking, ag, focoInfo, rotuloSimples))}<button type="button" class="botao secundario" data-csv-local>${icone('baixar')} Baixar planilha (CSV)</button><button type="button" class="botao secundario" data-xlsx-local>${icone('baixar')} Excel</button></div>
+      <div class="exportar">${botaoCard(`local-${el.ano}`, cardLocal(X, el, L, arq, grupo, linhasGrupo, ranking, ag, focoInfo, rotuloSimples))}<button type="button" class="botao secundario" data-csv-local>${icone('baixar')} Baixar planilha (CSV)</button><button type="button" class="botao secundario" data-xlsx-local>${icone('baixar')} Excel</button>${botaoLink()}</div>
       <p class="nota">Toque numa linha para entrar nela. Fonte: TSE, ${el.ano === 2026 ? 'boletins de urna de cada seção (2026)' : 'votação por seção eleitoral (2022)'}. Bairros pelo cadastro de locais de votação ${floripa ? 'do TRE-SC' : `do TSE (${el.ano})`}.</p>
     </section>`
 }
@@ -6611,4 +6767,5 @@ if (DEMO) {
 }
 if (TURNO === 2) $('.sub').textContent = 'Eleições Gerais · 2º turno · foco em Santa Catarina'
 montarAbas()
-carregar()
+if (lerHash().p.toString()) aplicarLink()
+else carregar()

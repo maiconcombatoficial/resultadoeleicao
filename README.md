@@ -19,6 +19,8 @@ App web para acompanhar a apuração das **Eleições Gerais 2026** com os dados
 
 **📷 Ler boletim de urna (apuração paralela no aparelho):** na aba 🏘️ Bairros, "Ler boletim" lê o QR code impresso no boletim de urna de cada seção pela câmera (BarcodeDetector do navegador ou jsQR, Apache-2.0, em `lib/jsqr`), por uma foto ou colando o texto (ex.: do app Boletim na Mão). Junta as partes (`QRBU:i:n`) em qualquer ordem, confere a soma de cada cargo com o total impresso e compara a seção com o boletim publicado pelo TSE (✅ confere / ⚠️ diferente). Soma os votos das seções lidas por cargo, com card, CSV e Excel. Tudo fica no aparelho; o painel central para várias pessoas ficou para depois.
 
+**🔗 Link direto:** o endereço acompanha o que está na tela — a ficha de um candidato, a comparação (2 ou 3 candidatos, até de cargos diferentes), o lugar escolhido em "Onde foi mais votado", a aba Bairros/Histórico com ano, município, zona, bairro, local e seção. O botão "🔗 Copiar link" (no topo da ficha e no explorador de seções) copia o endereço (no celular, abre o compartilhar); quem recebe cai direto na mesma tela. Ex.: `#depfed?c=<sq>&ca=depfed&vs=<sq>&va=depest`, `#h2022?ano=2024&m=81051`. A prévia no WhatsApp continua a geral do app (o GitHub Pages é estático).
+
 **🏠 Início:** a aba de abertura reúne o andamento da apuração em SC, os seus candidatos acompanhados (❤️), Governador e Senado, as cadeiras de Dep. Federal e Estadual por partido (eleitos pelo TSE ou, antes disso, pela projeção), atalhos e um card "Compartilhar resumo de SC".
 
 **⚖️ Comparar candidatos:** na ficha de qualquer candidato, "Comparar com outro candidato" mostra os dois lado a lado (votos, % dos válidos, posição, ganho na última atualização, quem está à frente e por quanto), se a diferença está aumentando ou diminuindo, gráficos com as duas evoluções e onde cada um é mais forte. Dá para incluir um **3º candidato** ("+ Comparar com mais um"): o placar mostra quantos lugares cada um venceu e cada linha traz o 1º, 2º e 3º. O outro candidato pode ser **de outro cargo** (ex.: Dep. Federal × Dep. Estadual, botões de cargo no topo da escolha). O cartão "📍 Onde a diferença foi maior" usa os votos dos boletins de urna já no app (`dados2026/municipios-*.json` e `dados2026/secoes`) e mostra, por município, associação (FECAM) ou região e, num lugar escolhido, por zona, bairro ou local: as duas barras lado a lado, quantos votos um teve a mais que o outro e em quantos lugares cada um ficou na frente, nas ordens "A na frente", "B na frente", "≈ Mais parecidos" (menor diferença proporcional) e "Mais votos"; com imagem, carrossel (capa + até 9 páginas) e CSV. Sem esses arquivos (ex.: Presidente fora de SC), vale a consulta ao TSE por município de antes.
@@ -93,6 +95,9 @@ Parâmetros de URL:
 | `?turno=2` | 2º turno (Presidente e Governador; Senado e Deputados continuam no 1º) |
 | `?base=https://…` | troca a URL base do TSE (ex.: um proxy próprio) |
 | `#favoritos`, `#municipios`, `#presidente`, `#senador`, `#depfed`, `#depest`, `#governador` | abre direto numa aba |
+| `#<aba>?c=<sq>&ca=<aba do cargo>` | abre a ficha do candidato (`vs`/`va` e `v3`/`v3a`: comparação; `l`: lugar dos bairros; `dl`: lugar da comparação) |
+| `#<aba>?m=<município ou região>&z=<zona>` | abre a aba já num município (`r=br` para Brasil) |
+| `#h2022?ano=2024&e=t1-c13&m=81051&b=<bairro>&lv=<local>&s=<seção>&f=<número>` | explorador de seções (também `#bairros?…`) |
 
 ## Fonte dos dados
 
