@@ -1,3 +1,10 @@
+/* Fonte do app: Inter (SIL Open Font License), servida do próprio site */
+@font-face { font-family: Inter; font-style: normal; font-weight: 400; font-display: swap; src: url(lib/fonts/inter-latin-400-normal.woff2) format('woff2'); }
+@font-face { font-family: Inter; font-style: normal; font-weight: 500; font-display: swap; src: url(lib/fonts/inter-latin-500-normal.woff2) format('woff2'); }
+@font-face { font-family: Inter; font-style: normal; font-weight: 600; font-display: swap; src: url(lib/fonts/inter-latin-600-normal.woff2) format('woff2'); }
+@font-face { font-family: Inter; font-style: normal; font-weight: 700; font-display: swap; src: url(lib/fonts/inter-latin-700-normal.woff2) format('woff2'); }
+@font-face { font-family: Inter; font-style: normal; font-weight: 800; font-display: swap; src: url(lib/fonts/inter-latin-800-normal.woff2) format('woff2'); }
+
 :root {
   --fundo: #eef3f1;
   --cartao: #ffffff;
@@ -46,7 +53,8 @@ body {
   overflow-x: clip;
   background: var(--fundo);
   color: var(--texto);
-  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 15px/1.45 Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-feature-settings: "cv11", "ss01"; -webkit-font-smoothing: antialiased;
   -webkit-text-size-adjust: 100%;
 }
 
@@ -886,3 +894,28 @@ td .leg-ponto { margin-right: 4px; vertical-align: middle; }
 .metodo summary::after { content: '▾'; color: var(--mudo); }
 .metodo details[open] summary::after { content: '▴'; }
 .metodo details p { margin: 8px 0 0; font-size: 0.92rem; line-height: 1.5; }
+
+/* ---------- ícones ---------- */
+.ico { width: 1.15em; height: 1.15em; vertical-align: -0.2em; flex: none; }
+.botao .ico, .abas .ico { margin-right: 2px; }
+#atualizar .ico { width: 20px; height: 20px; vertical-align: middle; }
+.controles:has(.status.carregando) #atualizar .ico { animation: girar 0.9s linear infinite; }
+@keyframes girar { to { transform: rotate(360deg); } }
+
+/* ---------- esqueleto de carregamento ---------- */
+.esq { display: grid; gap: 12px; }
+.esq-txt { font-size: 0.85rem; color: var(--mudo); font-weight: 600; }
+.esq-bloco { height: 14px; border-radius: 7px; background: linear-gradient(90deg, var(--linha) 25%, var(--fundo) 50%, var(--linha) 75%); background-size: 200% 100%; animation: brilho 1.3s ease-in-out infinite; }
+.esq-titulo { height: 22px; width: 60%; }
+.esq-grade { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.esq-grade .esq-bloco { height: 52px; border-radius: 10px; }
+.esq-linha { display: flex; gap: 10px; align-items: center; }
+.esq-avatar { width: 38px; height: 38px; border-radius: 50%; flex: none; }
+.esq-col { flex: 1; display: grid; gap: 6px; }
+.esq-fino { height: 10px; }
+@keyframes brilho { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .esq-bloco, #atualizar .ico { animation: none !important; } }
+
+/* ---------- acabamento ---------- */
+:focus-visible { outline: 3px solid color-mix(in srgb, var(--primaria) 70%, transparent); outline-offset: 2px; border-radius: 6px; }
+.leaflet-popup-content { font-family: Inter, system-ui, sans-serif; }

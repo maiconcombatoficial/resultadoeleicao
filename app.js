@@ -4,11 +4,12 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610071300'
-import { chanceDe, NIVEIS } from './chances.js?v=202610071300'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610071300'
-import { FLORIPA } from './floripa.js?v=202610071300'
-import { corPartido, corTexto } from './cores.js?v=202610071300'
+import { icone } from './icones.js?v=202610071500'
+import { calcularVagas } from './vagas.js?v=202610071500'
+import { chanceDe, NIVEIS } from './chances.js?v=202610071500'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610071500'
+import { FLORIPA } from './floripa.js?v=202610071500'
+import { corPartido, corTexto } from './cores.js?v=202610071500'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -568,10 +569,17 @@ function escolherMunicipio(mun) {
   carregar()
 }
 
+// rótulo sem o emoji do começo ("📊 Municípios" → "Municípios")
+const semEmoji = (t) => String(t).replace(/^(?:[^\p{L}\p{N}]|ℹ)+\s*/u, '')
+// placeholder animado enquanto os dados chegam (o texto fica para leitores de tela)
+const esqueleto = (texto, extra = '', linhas = 6) => `<div class="cartao esq" role="status" aria-busy="true"><span class="esq-txt">${esc(texto)}</span>${extra}
+  <div class="esq-bloco esq-titulo"></div><div class="esq-grade"><div class="esq-bloco"></div><div class="esq-bloco"></div><div class="esq-bloco"></div><div class="esq-bloco"></div></div>
+  ${Array.from({ length: linhas }, (_, i) => `<div class="esq-linha"><div class="esq-bloco esq-avatar"></div><div class="esq-col"><div class="esq-bloco" style="width:${70 - ((i * 13) % 35)}%"></div><div class="esq-bloco esq-fino" style="width:${45 - ((i * 7) % 20)}%"></div></div></div>`).join('')}</div>`
+const ICONE_ABA = { inicio: 'inicio', favoritos: 'acompanhados', municipios: 'municipios', bairros: 'bairros', analises: 'analises', h2022: 'h2022', sobre: 'sobre' }
 function montarAbas() {
   $('#abas').innerHTML = ABAS.filter((a) => a.tipo !== 'h22' || PREF.mostrar2022).map(
     (a) =>
-      `<button role="tab" type="button" data-aba="${a.id}" aria-selected="${a === estado.aba}">${esc(a.rotulo)}${
+      `<button role="tab" type="button" data-aba="${a.id}" aria-selected="${a === estado.aba}">${ICONE_ABA[a.id] ? `${icone(ICONE_ABA[a.id])} ${esc(semEmoji(a.rotulo))}` : esc(a.rotulo)}${
         a.tipo === 'fav' && favoritos.length ? ` <span class="contador">${favoritos.length}</span>` : ''
       }</button>`,
   ).join('')
@@ -604,6 +612,8 @@ function trocarAba(id) {
   carregar()
 }
 
+$('#atualizar').innerHTML = icone('atualizar')
+$('#atualizar').setAttribute('aria-label', 'Atualizar agora')
 $('#atualizar').addEventListener('click', () => carregar())
 
 /* ---------------- ciclo de atualização ---------------- */
@@ -617,7 +627,7 @@ async function carregar() {
   const abr = abrAtual()
   statusEl.textContent = 'Atualizando…'
   statusEl.className = 'status carregando'
-  if (!estado.dados) conteudo.innerHTML = (['fav', 'mun', 'h22', 'bai', 'pro', 'sobre'].includes(aba.tipo) ? '' : cabecalhoAbrangencia()) + `<div class="cartao vazio">Carregando ${esc(aba.rotulo)}${munAtual() ? ` em ${esc(munAtual().nm)}` : ''}…${munAtual()?.regiao ? '<br><small id="progresso-regiao" class="mudo"></small>' : ''}</div>`
+  if (!estado.dados) conteudo.innerHTML = (['fav', 'mun', 'h22', 'bai', 'pro', 'sobre'].includes(aba.tipo) ? '' : cabecalhoAbrangencia()) + esqueleto(`Carregando ${semEmoji(aba.rotulo)}${munAtual() ? ` em ${munAtual().nm}` : ''}…`, munAtual()?.regiao ? '<small id="progresso-regiao" class="mudo"></small>' : '')
   if (aba.tipo === 'fav') return carregarFavoritos(ctrl)
   if (aba.tipo === 'mun') return carregarPainelMunicipios(ctrl)
   if (aba.tipo === 'h22') {
@@ -2330,7 +2340,7 @@ function renderDetalheConteudo() {
   const voltar = `<div class="det-topo"><button type="button" class="det-voltar" data-fechar>‹ Voltar</button>
     <span class="det-onde">${esc(aba ? aba.rotulo.replace(/ SC$/, '') : '')} · ${esc(det.mun ? `${det.mun.nm} (SC)${det.mun.zona ? ` · ${Number(det.mun.zona)}ª zona` : ''}` : NOMES_ABR[det.abr] || det.abr.toUpperCase())}</span></div>`
   if (!d) {
-    detalheEl.innerHTML = `<div class="det-corpo">${voltar}<div class="cartao vazio">${det.erro ? 'Não consegui carregar os dados agora.' : 'Carregando…'}</div></div>`
+    detalheEl.innerHTML = `<div class="det-corpo">${voltar}${det.erro ? '<div class="cartao vazio">Não consegui carregar os dados agora.</div>' : esqueleto('Carregando a ficha…')}</div>`
     return
   }
   const c = d.candidatos.find((x) => x.sqcand === det.sqcand)
@@ -2396,8 +2406,8 @@ function renderDetalheConteudo() {
         <div><span class="fav-rot">Posição</span><strong>${pos}º</strong><span class="mudo">de ${total}</span></div>
       </div>
       <p class="nota">${fmtPct.format(d.secoes.percentual)}% das seções apuradas · dados do TSE de ${esc(d.atualizadoEm || '—')}</p>
-      <button type="button" class="botao comparar" data-comparar>⚖️ Comparar com outro candidato</button>
-      <div class="exportar">${botaoCard('ficha-resumo', cardFicha(det, d, c, aba, pos, total), '📸 Compartilhar desempenho', 'botao secundario')}</div>
+      <button type="button" class="botao comparar" data-comparar>${icone('comparar')} Comparar com outro candidato</button>
+      <div class="exportar">${botaoCard('ficha-resumo', cardFicha(det, d, c, aba, pos, total), `${icone('compartilhar')} Compartilhar desempenho`, 'botao secundario')}</div>
     </section>
     <section class="cartao"><h3>Tendência</h3>${tendTxt}
       ${graficoLinha(ptsPct, { cor, fmtY: (v) => `${fmtPct.format(v)}%`, titulo: '% dos votos válidos' })}
@@ -2949,7 +2959,7 @@ function secaoCompDiferenca(det, a, b, corA, corB, aba, aba2) {
     }
   }
   return `<section class="cartao bai cdif"><h3>📍 Onde a diferença foi maior</h3>${controles}${corpo}
-    ${D.export ? `<div class="exportar">${botaoCard('comp-diferenca', D.export.card)}<button type="button" class="botao" data-cd-carrossel>🎞️ Carrossel (${D.export.paginas} imagens)</button><button type="button" class="botao secundario" data-cd-csv>⬇️ Planilha (CSV)</button><button type="button" class="botao secundario" data-cd-legenda>📋 Copiar legenda com o link do Instagram</button></div>` : ''}
+    ${D.export ? `<div class="exportar">${botaoCard('comp-diferenca', D.export.card)}<button type="button" class="botao" data-cd-carrossel>${icone('carrossel')} Carrossel (${D.export.paginas} imagens)</button><button type="button" class="botao secundario" data-cd-csv>${icone('baixar')} Planilha (CSV)</button><button type="button" class="botao secundario" data-cd-legenda>${icone('copiar')} Copiar legenda com o link do Instagram</button></div>` : ''}
   </section>`
 }
 
@@ -3270,7 +3280,7 @@ function renderSobre() {
       <p class="nota">Encontrou algo estranho nos números? Fale com <a href="https://www.instagram.com/maiconcombat/" target="_blank" rel="noopener">@maiconcombat</a>.</p>
     </section>`
 }
-// "202610071300" → "07/10/2026 12:00"
+// "202610071500" → "07/10/2026 12:00"
 const versaoLegivel = () => (/^\d{12}$/.test(VERSAO) ? `${VERSAO.slice(6, 8)}/${VERSAO.slice(4, 6)}/${VERSAO.slice(0, 4)} ${VERSAO.slice(8, 10)}:${VERSAO.slice(10, 12)}` : VERSAO || 'local')
 
 /* ---------------- eleições de 2022 (SC) ---------------- */
@@ -3634,7 +3644,7 @@ function renderLocal(X, el) {
         })
         .join('')}</tbody></table>
       ${linhasGrupo.length > maxLinhas ? `<button type="button" class="botao secundario" data-h22-vergrupos>Mostrar todas as ${fmt.format(linhasGrupo.length)} ${grupo === 'secao' ? 'seções' : 'linhas'}</button>` : ''}
-      <div class="exportar">${botaoCard(`local-${el.ano}`, cardLocal(X, el, L, arq, grupo, linhasGrupo, ranking, ag, focoInfo, rotuloSimples))}<button type="button" class="botao secundario" data-csv-local>⬇️ Baixar planilha (CSV)</button></div>
+      <div class="exportar">${botaoCard(`local-${el.ano}`, cardLocal(X, el, L, arq, grupo, linhasGrupo, ranking, ag, focoInfo, rotuloSimples))}<button type="button" class="botao secundario" data-csv-local>${icone('baixar')} Baixar planilha (CSV)</button></div>
       <p class="nota">Toque numa linha para entrar nela. Fonte: TSE, ${el.ano === 2026 ? 'boletins de urna de cada seção (2026)' : 'votação por seção eleitoral (2022)'}. Bairros pelo cadastro de locais de votação ${floripa ? 'do TRE-SC' : `do TSE (${el.ano})`}.</p>
     </section>`
 }
@@ -3823,7 +3833,7 @@ function renderBairros26() {
       ${seletorLocal(B26)}
       <p class="nota">Votos de cada seção eleitoral do ${turnoDe(B26.sel)}º turno, lidos dos boletins de urna publicados pelo TSE e somados pelo bairro do local de votação. Escolha um município para ver por zona, bairro, local e seção.${TURNO === 2 && !INDICE26.has('t2-c1') && !INDICE26.has('t2-c3') ? ' <strong>Os boletins do 2º turno entram aqui assim que forem processados.</strong>' : ''}</p>
     </section>
-    ${!el ? `<div class="cartao vazio">${B26.erro ? 'Não consegui carregar os candidatos agora.' : 'Carregando…'}</div>` : B26.local ? renderLocal(B26, el) : B26.foco != null ? bairrosDoCandidatoSC(el) : fortesPorBairro(el)}`
+    ${!el ? (B26.erro ? '<div class="cartao vazio">Não consegui carregar os candidatos agora.</div>' : esqueleto('Carregando os candidatos…')) : B26.local ? renderLocal(B26, el) : B26.foco != null ? bairrosDoCandidatoSC(el) : fortesPorBairro(el)}`
 }
 
 // candidato em foco na aba Bairros: os ❤️ acompanhados (de qualquer cargo) e uma busca
@@ -3935,7 +3945,7 @@ const nomeArquivo = (s) => semAcento(s).replace(/[^a-z0-9]+/g, '-').replace(/^-|
 //   rodape, fonte, exclusivo          → rodapé (com a foto e o @ do criador)
 const CARDS = new Map()
 // registra o card e devolve o botão que o compartilha (a chave identifica o lugar da tela)
-function botaoCard(chave, card, rotulo = '📸 Compartilhar imagem', classe = 'botao') {
+function botaoCard(chave, card, rotulo = `${icone('compartilhar')} Compartilhar imagem`, classe = 'botao') {
   CARDS.set(chave, card)
   return `<button type="button" class="${classe} botao-card" data-card="${esc(chave)}">${rotulo}</button>`
 }
@@ -4023,11 +4033,13 @@ async function desenharCard(card) {
   const W = 1080, H = 1350
   const fotosTopo = (await Promise.all((card.fotos || (card.foto ? [card.foto] : [])).slice(0, 2).map(carregarImagem))).filter(Boolean)
   const fotosLinha = await Promise.all((card.linhas || []).slice(0, 8).map((l) => carregarImagem(l.foto)))
+  // a fonte do app precisa estar carregada antes de desenhar no canvas
+  await Promise.all([500, 600, 700, 800].map((p) => document.fonts?.load(`${p} 20px Inter`).catch(() => null)))
   const cv = document.createElement('canvas')
   cv.width = W
   cv.height = H
   const g = cv.getContext('2d')
-  const fonte = (peso, tam) => `${peso} ${tam}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`
+  const fonte = (peso, tam) => `${peso} ${tam}px Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`
   const corta = (txt, max) => {
     let t = String(txt ?? '')
     if (g.measureText(t).width <= max) return t
@@ -4556,7 +4568,7 @@ function secaoBairros(det, c, aba) {
     ${B.export?.zonas?.length > 1 ? `<div class="zonas-comp"><span class="atalhos-rot">📤 Zonas no compartilhamento</span><div class="atalhos-chips">${B.export.zonas
       .map((z) => `<button type="button" class="atalho ${z.dentro ? 'ativo' : ''}" data-bai-zona-comp="${esc(z.k)}" aria-pressed="${z.dentro}">${z.dentro ? '✓ ' : ''}${esc(z.nome)}</button>`)
       .join('')}</div>${B.export.zonas.every((z) => !z.dentro) ? '<p class="nota">Marque ao menos uma zona.</p>' : ''}</div>` : ''}
-    ${B.export ? `<div class="exportar">${botaoCard('ficha-bairros', B.export.card)}<button type="button" class="botao" data-bai-carrossel>🎞️ ${B.grupo === 'zona' ? 'Carrossel: zonas e todos os bairros' : `Carrossel com todos (${B.export.paginas} imagens)`}</button><button type="button" class="botao secundario" data-bai-csv>⬇️ Planilha (CSV)</button><button type="button" class="botao secundario" data-bai-legenda>📋 Copiar legenda com o link do Instagram</button></div>` : ''}
+    ${B.export ? `<div class="exportar">${botaoCard('ficha-bairros', B.export.card)}<button type="button" class="botao" data-bai-carrossel>${icone('carrossel')} ${B.grupo === 'zona' ? 'Carrossel: zonas e todos os bairros' : `Carrossel com todos (${B.export.paginas} imagens)`}</button><button type="button" class="botao secundario" data-bai-csv>${icone('baixar')} Planilha (CSV)</button><button type="button" class="botao secundario" data-bai-legenda>${icone('copiar')} Copiar legenda com o link do Instagram</button></div>` : ''}
     <button type="button" class="botao secundario pro-atalho" data-pro-abrir>🔒 Mapa, perfil do eleitor e abstenção</button>
     <p class="nota">Fonte: boletins de urna do ${turnoDe(elId)}º turno (TSE) e cadastro de locais de votação. 2022 ligado pelo nome completo do candidato. Toque numa linha para abrir na aba Bairros.</p></section>`
 }
@@ -4845,7 +4857,7 @@ function renderPro() {
       ${PRO.aba !== 'abst' && PRO.aba !== 'transf' ? seletorCandidatoPro(el) : ''}
     </section>`
   if (PRO.aba === 'transf') return topo + renderTransfPro()
-  if (!el && PRO.aba !== 'abst') return topo + '<div class="cartao vazio">Carregando os candidatos…</div>'
+  if (!el && PRO.aba !== 'abst') return topo + esqueleto('Carregando os candidatos…')
   return topo + (PRO.aba === 'mapa' ? renderMapaPro(el) : PRO.aba === 'perfil' ? renderPerfilPro(el) : renderAbstPro())
 }
 
