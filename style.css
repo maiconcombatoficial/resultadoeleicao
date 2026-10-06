@@ -966,3 +966,11 @@ td .leg-ponto { margin-right: 4px; vertical-align: middle; }
 .terr-lista-topo { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 8px 0; }
 .terr-lista-topo .botao, .terr-lista > .botao { width: auto; padding: 6px 14px; margin: 0; }
 .terr-lista > .botao { margin-top: 8px; }
+
+/* ---------- comparação com 3 ---------- */
+.comp-topo.tres { gap: 4px; }
+.comp-topo.tres .comp-lado .foto { width: 54px; height: 54px; }
+.comp-topo.tres .comp-nome-g { font-size: 0.85rem; }
+.comp-tabela.tres { width: 100%; margin-top: 10px; font-size: 0.85rem; }
+.comp-tabela.tres th, .comp-tabela.tres td { text-align: center; padding: 6px 4px; }
+.comp-tabela.tres thead th { font-size: 0.75rem; }
