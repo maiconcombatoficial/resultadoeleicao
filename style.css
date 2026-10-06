@@ -1056,3 +1056,24 @@ html.com-busca { overflow: hidden; }
   font: inherit; font-size: 0.74rem; font-weight: 800; border-radius: 10px; padding: 0 8px; cursor: pointer; min-height: 36px;
 }
 .fmt-card[aria-pressed="true"] { border-style: solid; border-color: #0a5ea8; background: #0a5ea8; color: #fff; }
+
+/* ---------- painel do partido ---------- */
+.pp { border-top: 6px solid var(--cor); display: grid; gap: 10px; margin: 12px 0; }
+.pp h3 { margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pp h3 .ico { width: 20px; height: 20px; }
+.pp h4 { margin: 8px 0 0; font-size: 0.95rem; }
+.pp-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.pp-tiles > div { background: var(--fundo); border-radius: 12px; padding: 10px 12px; border-left: 4px solid var(--cor); display: grid; gap: 2px; min-width: 0; }
+.pp-tiles span { font-size: 0.75rem; color: var(--mudo); text-transform: uppercase; letter-spacing: 0.03em; }
+.pp-tiles strong { font-size: 1.3rem; overflow-wrap: anywhere; }
+.pp-tiles strong.pp-nome { font-size: 0.92rem; overflow-wrap: break-word; }
+.pp-sit { font-size: 0.72rem; font-weight: 800; color: #0b7a45; white-space: nowrap; }
+.pp-sit.sup { color: var(--mudo); }
+.pp-tiles small { color: var(--mudo); font-size: 0.78rem; }
+.pp-chapa { margin: 0; padding: 0 0 0 26px; display: grid; gap: 8px; }
+.pp-chapa li { cursor: pointer; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; }
+.pp-chapa .pp-l { grid-column: 1; min-width: 0; overflow-wrap: anywhere; }
+.pp-chapa .pp-barra { grid-column: 1; height: 6px; border-radius: 3px; background: var(--fundo); overflow: hidden; display: block; }
+.pp-chapa .pp-barra > span { display: block; height: 100%; border-radius: 3px; }
+.pp-chapa .pp-num { grid-column: 2; grid-row: 1 / span 2; text-align: right; white-space: nowrap; }
+.pp-chapa .pp-num small { color: var(--mudo); display: block; }
