@@ -1077,3 +1077,18 @@ html.com-busca { overflow: hidden; }
 .pp-chapa .pp-barra > span { display: block; height: 100%; border-radius: 3px; }
 .pp-chapa .pp-num { grid-column: 2; grid-row: 1 / span 2; text-align: right; white-space: nowrap; }
 .pp-chapa .pp-num small { color: var(--mudo); display: block; }
+
+/* ---------- alertas dos acompanhados ---------- */
+.alertas .alertas-linha { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.alertas .alertas-linha p { margin: 0; flex: 1 1 220px; display: flex; gap: 8px; align-items: flex-start; }
+.alertas .alertas-linha .ico { flex: none; width: 20px; height: 20px; margin-top: 2px; }
+.alertas.ligado { border-left: 4px solid var(--amarelo); }
+.alertas .nota { margin: 8px 0 0; }
+.avisos { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 70; display: grid; gap: 8px; width: min(520px, calc(100% - 32px)); }
+.aviso-alerta {
+  display: block; background: #17201b; color: #fff; text-decoration: none; font-weight: 700; font-size: 0.92rem;
+  border-left: 5px solid var(--amarelo); border-radius: 12px; padding: 12px 14px; box-shadow: 0 10px 30px rgb(0 0 0 / 30%);
+  animation: aviso-entra 0.25s ease-out;
+}
+@keyframes aviso-entra { from { transform: translateY(12px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .aviso-alerta { animation: none; } }
