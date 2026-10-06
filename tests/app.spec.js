@@ -143,3 +143,12 @@ test('comparação com 3 candidatos', async ({ page }) => {
   const img = await baixar(page, dif.locator('[data-card]'))
   expect(img.bytes).toBeGreaterThan(30_000)
 })
+
+test('análise automática na ficha', async ({ page }) => {
+  await page.goto('/#depfed')
+  await page.locator('[data-cand]').first().click()
+  await expect(page.locator('.analise li').first()).toContainText('municípios')
+  await expect(page.locator('.analise')).toContainText('Maior reduto')
+  const img = await baixar(page, page.locator('[data-card="analise"]'))
+  expect(img.bytes).toBeGreaterThan(30_000)
+})

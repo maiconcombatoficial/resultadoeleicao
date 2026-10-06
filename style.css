@@ -974,3 +974,7 @@ td .leg-ponto { margin-right: 4px; vertical-align: middle; }
 .comp-tabela.tres { width: 100%; margin-top: 10px; font-size: 0.85rem; }
 .comp-tabela.tres th, .comp-tabela.tres td { text-align: center; padding: 6px 4px; }
 .comp-tabela.tres thead th { font-size: 0.75rem; }
+
+/* ---------- análise automática ---------- */
+.analise-lista { margin: 0; padding-left: 1.1em; display: grid; gap: 8px; line-height: 1.5; }
+.analise-lista li::marker { color: var(--primaria); }

@@ -4,12 +4,12 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { icone } from './icones.js?v=202610072200'
-import { calcularVagas } from './vagas.js?v=202610072200'
-import { chanceDe, NIVEIS } from './chances.js?v=202610072200'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610072200'
-import { FLORIPA } from './floripa.js?v=202610072200'
-import { corPartido, corTexto } from './cores.js?v=202610072200'
+import { icone } from './icones.js?v=202610072300'
+import { calcularVagas } from './vagas.js?v=202610072300'
+import { chanceDe, NIVEIS } from './chances.js?v=202610072300'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610072300'
+import { FLORIPA } from './floripa.js?v=202610072300'
+import { corPartido, corTexto } from './cores.js?v=202610072300'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -2552,6 +2552,7 @@ function renderDetalheConteudo() {
     </section>
     ${secao2022(c, d, aba)}
     ${secaoHistorico(c, d, aba)}
+    ${secaoAnalise(det, c, aba, d)}
     ${secaoBairros(det, c, aba)}
     <section class="cartao"><h3>${c.eleito || d.tseDefinido ? 'Situação oficial (TSE)' : 'Chance de reverter'}</h3>${textoChance(d, c, aba)}</section>
     <section class="cartao"><h3>Disputa</h3>${blocoDisputa(d, c, aba)}</section>
@@ -3474,7 +3475,7 @@ function renderSobre() {
       <p class="nota">Encontrou algo estranho nos números? Fale com <a href="https://www.instagram.com/maiconcombat/" target="_blank" rel="noopener">@maiconcombat</a>.</p>
     </section>`
 }
-// "202610072200" → "07/10/2026 12:00"
+// "202610072300" → "07/10/2026 12:00"
 const versaoLegivel = () => (/^\d{12}$/.test(VERSAO) ? `${VERSAO.slice(6, 8)}/${VERSAO.slice(4, 6)}/${VERSAO.slice(0, 4)} ${VERSAO.slice(8, 10)}:${VERSAO.slice(10, 12)}` : VERSAO || 'local')
 
 /* ---------------- eleições de 2022 (SC) ---------------- */
@@ -4420,6 +4421,116 @@ function porBairro(arq, elId, cargo, nr) {
 
 /* ---------------- planilha (CSV) e card para compartilhar ---------------- */
 
+/* ---------------- análise automática do desempenho (regras, a partir dos números do TSE) ---------------- */
+
+// devolve as frases da análise (texto simples) ou null enquanto os arquivos carregam
+function analiseAutomatica(det, c, aba, d, re) {
+  if (det.abr !== UF || !aba?.cargo || DEMO) return { frases: [] }
+  const elId = eleicaoDoCargo(aba.cargo)
+  const M = arquivoAno(`dados2026/municipios-${elId}.json`, re)
+  const Bx = arquivoAno(`dados2026/bairros-${elId}.json`, re)
+  if (!M.valor || !Bx.valor) return M.erro ? { frases: [] } : null
+  const nr = Number(c.numero)
+  const meus = M.valor.c[nr] || {}
+  const tot = Object.values(meus).reduce((a, v) => a + v, 0)
+  if (!tot) return { frases: [] }
+  const F = []
+  const nomeM = (cd) => NOME_MUN.get(cd) || cd
+  const posEm = (cd) => {
+    const v = meus[cd] || 0
+    let p = 1
+    for (const o of Object.values(M.valor.c)) if ((o[cd] || 0) > v) p++
+    return p
+  }
+  // 1) concentração e redutos
+  const ord = Object.entries(meus).sort((a, b) => b[1] - a[1])
+  const top5 = ord.slice(0, 5)
+  const pTop5 = pctDe(top5.reduce((a, [, v]) => a + v, 0), tot)
+  const perfil = pTop5 >= 60 ? 'muito concentrada' : pTop5 >= 40 ? 'concentrada' : pTop5 <= 25 ? 'bem espalhada pelo estado' : 'espalhada'
+  F.push(`Votação ${perfil}: teve votos em ${fmt.format(ord.length)} dos ${MUNICIPIOS_SC.length} municípios, e os 5 maiores redutos (${top5.map(([cd]) => nomeM(cd)).join(', ')}) somam ${fmtPct.format(pTop5)}% dos votos.`)
+  const [cd1, v1] = ord[0]
+  const p1 = posEm(cd1)
+  F.push(`Maior reduto: ${nomeM(cd1)}, com ${fmt.format(v1)} votos (${fmtPct.format(pctDe(v1, M.valor.validos[cd1]))}% dos válidos da cidade, ${p1}º lugar ali).`)
+  const lideres = Object.keys(meus).filter((cd) => posEm(cd) === 1)
+  if (lideres.length) F.push(`Foi o mais votado do cargo em ${fmt.format(lideres.length)} ${lideres.length === 1 ? 'município' : 'municípios'}${lideres.length <= 4 ? ` (${lideres.map(nomeM).join(', ')})` : ''}.`)
+  // 2) peso relativo: onde a fatia do eleitorado é maior (cidades com pelo menos 1.000 válidos)
+  const peso = ord.filter(([cd]) => (M.valor.validos[cd] || 0) >= 1000).map(([cd, v]) => [cd, pctDe(v, M.valor.validos[cd])]).sort((a, b) => b[1] - a[1])
+  if (peso.length && peso[0][0] !== cd1) F.push(`Onde tem mais peso: ${nomeM(peso[0][0])}, com ${fmtPct.format(peso[0][1])}% dos votos válidos da cidade.`)
+  // 3) associações de municípios
+  const assoc = new Map()
+  for (const [cd, val] of Object.entries(M.valor.validos)) {
+    const sg = ASSOCIACAO_MUN[cd]
+    if (!sg) continue
+    const x = assoc.get(sg) || { v: 0, val: 0 }
+    x.v += meus[cd] || 0
+    x.val += val
+    assoc.set(sg, x)
+  }
+  const ass = [...assoc.entries()].map(([sg, x]) => [sg, pctDe(x.v, x.val), x.v]).sort((a, b) => b[1] - a[1])
+  if (ass.length > 2) F.push(`Por associação de municípios, é mais forte na ${ass[0][0]} (${fmtPct.format(ass[0][1])}% dos válidos) e mais fraco na ${ass[ass.length - 1][0]} (${fmtPct.format(ass[ass.length - 1][1])}%).`)
+  // 4) bairros
+  const xb = Bx.valor.c[nr]
+  if (xb?.v?.length) {
+    const [bi, vb] = xb.v[0]
+    const [cdb, nomeB] = Bx.valor.b[bi]
+    F.push(`No mapa de bairros, o mais forte é ${nomeB} (${nomeM(cdb)}), com ${fmt.format(vb)} votos; teve votos em ${fmt.format(xb.n)} bairros de SC.`)
+  }
+  // 5) comparação com 2022 e "para quem perdeu"
+  const p22 = PREF.mostrar2022 && H22.resumo ? achar2022(c).filter((p) => p.el.turno === 1).sort((x, y) => (y.el.cargo === aba.cargo) - (x.el.cargo === aba.cargo))[0] : null
+  if (p22) {
+    const m22 = mun2022(p22.el.id)
+    if (!m22.valor) {
+      m22.then(re).catch(() => {})
+      return null
+    }
+    const v22 = m22.valor.cand[p22.c.sq] || {}
+    const cds = new Set([...Object.keys(meus), ...Object.keys(v22)])
+    const dif = [...cds].map((cd) => [cd, (meus[cd] || 0) - (v22[cd] || 0), v22[cd] || 0])
+    const sobe = dif.filter((x) => x[1] > 0).sort((a, b) => b[1] - a[1]), cai = dif.filter((x) => x[1] < 0).sort((a, b) => a[1] - b[1])
+    const tot22 = Object.values(v22).reduce((a, v) => a + v, 0)
+    const dT = tot - tot22
+    const evol = !tot22 ? 'é a primeira comparação possível' : dT >= 0 ? `cresceu ${fmtPct.format((100 * dT) / tot22)}% (+${fmt.format(dT)} votos)` : `caiu ${fmtPct.format((-100 * dT) / tot22)}% (${fmt.format(dT)} votos)`
+    F.push(`Em relação a 2022 (${ROTULO_ELEICAO[p22.el.id] || p22.el.nome}, ${fmt.format(tot22)} votos), ${evol}: subiu em ${fmt.format(sobe.length)} municípios e caiu em ${fmt.format(cai.length)}.`)
+    if (sobe.length) F.push(`Maior crescimento: ${nomeM(sobe[0][0])} (+${fmt.format(sobe[0][1])} votos${sobe[0][2] >= 20 ? `, +${fmtPct.format((100 * sobe[0][1]) / sobe[0][2])}%` : ''}).`)
+    if (cai.length) {
+      const [cdq, dq] = cai[0]
+      let quem = ''
+      // quem mais ganhou votos ali desde 2022, entre os candidatos do mesmo cargo (2026 × a própria votação de 2022)
+      if (p22.el.cargo === aba.cargo && d?.candidatos) {
+        let melhor = null
+        for (const o of d.candidatos) {
+          if (o === c || !o.valido) continue
+          const agora = M.valor.c[Number(o.numero)]?.[cdq] || 0
+          if (!agora) continue
+          const o22 = achar2022(o).find((p) => p.el.id === p22.el.id)
+          const antes = o22 ? m22.valor.cand[o22.c.sq]?.[cdq] || 0 : 0
+          if (!melhor || agora - antes > melhor.g) melhor = { o, g: agora - antes, novo: !o22 }
+        }
+        if (melhor?.g > 0) quem = ` Lá, quem mais ganhou votos desde 2022 foi ${melhor.o.nome} (${melhor.o.partido}, +${fmt.format(melhor.g)}${melhor.novo ? ', que não disputou esse cargo em 2022' : ''}).`
+      }
+      F.push(`Maior queda: ${nomeM(cdq)} (${fmt.format(dq)} votos).${quem}`)
+    }
+  }
+  return { frases: F }
+}
+
+function secaoAnalise(det, c, aba, d) {
+  const re = () => estado.detalhe === det && renderDetalhe()
+  const A = analiseAutomatica(det, c, aba, d, re)
+  if (A && !A.frases.length) return ''
+  det.analise = A ? { frases: A.frases, card: cardAnalise(c, aba, A.frases) } : null
+  return `<section class="cartao analise"><h3>🧠 Análise do desempenho</h3>
+    ${A ? `<ul class="analise-lista">${A.frases.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>
+      <p class="nota">Gerada automaticamente a partir dos números oficiais do TSE (boletins de urna de 2026 e resultado de 2022). "Quem mais ganhou votos" indica tendência, não transferência comprovada.</p>
+      <div class="exportar">${botaoCard('analise', det.analise.card, `${icone('compartilhar')} Compartilhar análise`, 'botao secundario')}</div>` : '<p class="nota">Preparando a análise…</p>'}
+  </section>`
+}
+
+function cardAnalise(c, aba, frases) {
+  return { turno: 1, foto: c.foto, nome: c.nome, cor: corPartido(c.partido), sub: `${c.partido} · nº ${c.numero} · ${aba.rotulo.replace(/ SC$/, '')}`,
+    titulo: 'Análise do desempenho', subtitulo: 'Gerada a partir dos números oficiais do TSE', texto: frases }
+}
+
 /* ---------------- relatório em PDF (páginas A4 com os cards do app) ---------------- */
 
 function carregarScript(src) {
@@ -4488,7 +4599,7 @@ async function gerarRelatorio(botao) {
   const c = d?.candidatos.find((x) => x.sqcand === det.sqcand)
   const aba = ABAS.find((a) => a.id === det.aba)
   if (!c) return
-  const cards = [CARDS.get('ficha-resumo')].filter(Boolean)
+  const cards = [CARDS.get('ficha-resumo'), det.analise?.card].filter(Boolean)
   if (det.abr === UF && aba?.cargo && !DEMO) {
     if (botao) (botao.disabled = true), (botao.innerHTML = '⏳ Juntando os dados…')
     for (const [grupo, max] of [['mun', 3], ['assoc', 5], ['bairro', 3]]) {
@@ -4707,6 +4818,29 @@ async function desenharCard(card) {
       }
     })
     y += Math.ceil(tiles.length / 2) * (th + 12) + 2
+  }
+  // texto corrido (análise): parágrafos com quebra de linha
+  if (card.texto?.length) {
+    g.textAlign = 'left'
+    for (const par of card.texto) {
+      g.font = fonte(500, 27)
+      const palavras = String(par).split(' ')
+      let linha = '', linhas = []
+      for (const w of palavras) {
+        const t = linha ? `${linha} ${w}` : w
+        if (g.measureText(t).width > W - 150 && linha) (linhas.push(linha), (linha = w))
+        else linha = t
+      }
+      if (linha) linhas.push(linha)
+      if (y + linhas.length * 36 + 14 > LIM) break
+      g.fillStyle = cor
+      g.beginPath()
+      g.arc(62, y + 16, 6, 0, Math.PI * 2)
+      g.fill()
+      g.fillStyle = '#17201b'
+      linhas.forEach((l, k) => g.fillText(l, 80, y + 26 + k * 36))
+      y += linhas.length * 36 + 16
+    }
   }
   // lista
   for (const [i, l] of (card.linhas || []).entries()) {
