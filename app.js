@@ -4,12 +4,12 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { icone } from './icones.js?v=202610071600'
-import { calcularVagas } from './vagas.js?v=202610071600'
-import { chanceDe, NIVEIS } from './chances.js?v=202610071600'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610071600'
-import { FLORIPA } from './floripa.js?v=202610071600'
-import { corPartido, corTexto } from './cores.js?v=202610071600'
+import { icone } from './icones.js?v=202610071700'
+import { calcularVagas } from './vagas.js?v=202610071700'
+import { chanceDe, NIVEIS } from './chances.js?v=202610071700'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610071700'
+import { FLORIPA } from './floripa.js?v=202610071700'
+import { corPartido, corTexto } from './cores.js?v=202610071700'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -2530,7 +2530,7 @@ function renderDetalheConteudo() {
       </div>
       <p class="nota">${fmtPct.format(d.secoes.percentual)}% das seções apuradas · dados do TSE de ${esc(d.atualizadoEm || '—')}</p>
       <button type="button" class="botao comparar" data-comparar>${icone('comparar')} Comparar com outro candidato</button>
-      <div class="exportar">${botaoCard('ficha-resumo', cardFicha(det, d, c, aba, pos, total), `${icone('compartilhar')} Compartilhar desempenho`, 'botao secundario')}</div>
+      <div class="exportar">${botaoCard('ficha-resumo', cardFicha(det, d, c, aba, pos, total), `${icone('compartilhar')} Compartilhar desempenho`, 'botao secundario')}<button type="button" class="botao secundario" data-relatorio>${icone('pdf')} Relatório em PDF</button></div>
     </section>
     <section class="cartao"><h3>Tendência</h3>${tendTxt}
       ${graficoLinha(ptsPct, { cor, fmtY: (v) => `${fmtPct.format(v)}%`, titulo: '% dos votos válidos' })}
@@ -3082,7 +3082,7 @@ function secaoCompDiferenca(det, a, b, corA, corB, aba, aba2) {
     }
   }
   return `<section class="cartao bai cdif"><h3>📍 Onde a diferença foi maior</h3>${controles}${corpo}
-    ${D.export ? `<div class="exportar">${botaoCard('comp-diferenca', D.export.card)}<button type="button" class="botao" data-cd-carrossel>${icone('carrossel')} Carrossel (${D.export.paginas} imagens)</button><button type="button" class="botao secundario" data-cd-csv>${icone('baixar')} Planilha (CSV)</button><button type="button" class="botao secundario" data-cd-legenda>${icone('copiar')} Copiar legenda com o link do Instagram</button></div>` : ''}
+    ${D.export ? `<div class="exportar">${botaoCard('comp-diferenca', D.export.card)}<button type="button" class="botao" data-cd-carrossel>${icone('carrossel')} Carrossel (${D.export.paginas} imagens)</button><button type="button" class="botao secundario" data-cd-csv>${icone('baixar')} Planilha (CSV)</button><button type="button" class="botao secundario" data-cd-pdf>${icone('pdf')} Relatório em PDF</button><button type="button" class="botao secundario" data-cd-legenda>${icone('copiar')} Copiar legenda com o link do Instagram</button></div>` : ''}
   </section>`
 }
 
@@ -3153,6 +3153,13 @@ detalheEl.addEventListener('click', (ev) => {
     det.ctrlComp?.abort()
     det.comp = null
     return renderDetalhe()
+  }
+  const relBt = ev.target.closest('[data-relatorio]')
+  if (relBt) return gerarRelatorio(relBt)
+  const cdPdf = ev.target.closest('[data-cd-pdf]')
+  if (cdPdf && det?.comp?.dif?.export) {
+    const cmp = CARDS.get('comparacao')
+    return gerarPDF([cmp, ...det.comp.dif.export.carrossel()].filter(Boolean), `${cmp?.nome || 'comparacao'}`, cdPdf)
   }
   const ccBtn = ev.target.closest('[data-comp-cargo]')
   if (ccBtn) return ((det.compCargo = ccBtn.dataset.compCargo || null), (det.buscaComp = ''), renderDetalhe())
@@ -3403,7 +3410,7 @@ function renderSobre() {
       <p class="nota">Encontrou algo estranho nos números? Fale com <a href="https://www.instagram.com/maiconcombat/" target="_blank" rel="noopener">@maiconcombat</a>.</p>
     </section>`
 }
-// "202610071600" → "07/10/2026 12:00"
+// "202610071700" → "07/10/2026 12:00"
 const versaoLegivel = () => (/^\d{12}$/.test(VERSAO) ? `${VERSAO.slice(6, 8)}/${VERSAO.slice(4, 6)}/${VERSAO.slice(0, 4)} ${VERSAO.slice(8, 10)}:${VERSAO.slice(10, 12)}` : VERSAO || 'local')
 
 /* ---------------- eleições de 2022 (SC) ---------------- */
@@ -4043,6 +4050,89 @@ function porBairro(arq, elId, cargo, nr) {
 
 /* ---------------- planilha (CSV) e card para compartilhar ---------------- */
 
+/* ---------------- relatório em PDF (páginas A4 com os cards do app) ---------------- */
+
+function carregarScript(src) {
+  return new Promise((ok, falha) => {
+    const el = Object.assign(document.createElement('script'), { src, onload: ok, onerror: falha })
+    document.head.append(el)
+  })
+}
+
+// monta um PDF com uma página A4 por card (capa + seções), com cabeçalho e rodapé
+async function gerarPDF(cards, titulo, botao) {
+  const rotulo = botao?.innerHTML
+  try {
+    if (botao) (botao.disabled = true), (botao.innerHTML = '⏳ Preparando o PDF…')
+    if (!window.jspdf) await carregarScript(`lib/jspdf/jspdf.umd.min.js?v=${VERSAO}`)
+    const pdf = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4', compress: true })
+    const quando = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+    pdf.setProperties({ title: `${titulo} · Apuração 2026 SC`, author: 'Maicon Combat (@maiconcombat)', creator: 'Apuração 2026 SC' })
+    for (const [i, card] of cards.entries()) {
+      if (botao) botao.innerHTML = `⏳ Página ${i + 1} de ${cards.length}…`
+      const { blob } = await desenharCard({ ...card, pagina: null })
+      const bmp = await createImageBitmap(blob)
+      const cv = Object.assign(document.createElement('canvas'), { width: bmp.width, height: bmp.height })
+      cv.getContext('2d').drawImage(bmp, 0, 0)
+      if (i) pdf.addPage()
+      pdf.setFont('helvetica', 'bold').setFontSize(10).setTextColor(23, 32, 27)
+      pdf.text(`${titulo} · Apuração 2026 SC`.slice(0, 95), 15, 14)
+      pdf.setDrawColor(0, 156, 59).setLineWidth(0.6).line(15, 17, 195, 17)
+      pdf.addImage(cv.toDataURL('image/jpeg', 0.9), 'JPEG', 24, 24, 162, 202.5)
+      pdf.setFont('helvetica', 'normal').setFontSize(8).setTextColor(95, 107, 101)
+      pdf.text(`Fonte: TSE (divulgação de resultados e boletins de urna) · gerado em ${quando}`, 15, 284)
+      pdf.text(`maiconcombat.com.br · @maiconcombat · página ${i + 1} de ${cards.length}`, 195, 289, { align: 'right' })
+    }
+    const nome = `relatorio-${nomeArquivo(titulo)}.pdf`
+    const arq = new File([pdf.output('blob')], nome, { type: 'application/pdf' })
+    if (navigator.canShare?.({ files: [arq] })) {
+      try {
+        return await navigator.share({ files: [arq], title: titulo })
+      } catch (e) {
+        if (e?.name === 'AbortError') return
+      }
+    }
+    baixarArquivo(nome, arq)
+  } catch (e) {
+    alert('Não consegui gerar o PDF agora. Tente de novo em instantes.')
+  } finally {
+    if (botao) (botao.disabled = false), (botao.innerHTML = rotulo)
+  }
+}
+
+// prepara o cartão "Onde foi mais votado" num estado temporário e espera os arquivos carregarem
+async function bairrosProntos(det, c, aba, grupo) {
+  const tmp = { aba: det.aba, abr: det.abr, sqcand: det.sqcand, bai: { mun: null, modo: 'v', todos: false, painel: false, busca: '', grupo } }
+  for (let i = 0; i < 6; i++) {
+    secaoBairros(tmp, c, aba)
+    const pend = [...ARQ_ANO.values(), ...H22.mun.values()].filter((p) => !p.valor && !p.erro)
+    if (!pend.length) break
+    await Promise.allSettled(pend)
+  }
+  return tmp.bai.export ? tmp.bai : null
+}
+
+async function gerarRelatorio(botao) {
+  const det = estado.detalhe
+  const d = dadosDetalhe()
+  const c = d?.candidatos.find((x) => x.sqcand === det.sqcand)
+  const aba = ABAS.find((a) => a.id === det.aba)
+  if (!c) return
+  const cards = [CARDS.get('ficha-resumo')].filter(Boolean)
+  if (det.abr === UF && aba?.cargo && !DEMO) {
+    if (botao) (botao.disabled = true), (botao.innerHTML = '⏳ Juntando os dados…')
+    for (const [grupo, max] of [['mun', 3], ['assoc', 5], ['bairro', 3]]) {
+      const B = await bairrosProntos(det, c, aba, grupo).catch(() => null)
+      if (B) cards.push(...B.carrossel().slice(0, max))
+    }
+    if (botao) botao.disabled = false
+    // o estado temporário regravou os cards do cartão de bairros; redesenha a ficha para restaurar
+    renderDetalhe()
+    botao = detalheEl.querySelector('[data-relatorio]') || botao
+  }
+  return gerarPDF(cards, c.nome, botao)
+}
+
 function baixarArquivo(nome, blob) {
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
@@ -4656,7 +4746,9 @@ function secaoBairros(det, c, aba) {
         const rz = dadosBairrosFicha({ ...B, zonasTodas: true }, elId, aba, nr, p22, () => {})
         grupos = (rz.linhas || []).filter(naComp).sort((a, b) => b.v - a.v).map((z) => ({ titulo: z.nome, sub: z.sub, z, itens: (z.filhos || []).filter((f) => f.v > 0 || (tem22 && f.v22 > 0)) }))
       } else grupos = [{ titulo: tit, itens: visComp }]
-      const total26 = ls.reduce((a, l) => a + l.v, 0), total22 = ls.reduce((a, l) => a + l.v22, 0)
+      // em SC por bairro a lista é só um recorte: vale o total do candidato no estado
+      const total26 = !B.mun && tv != null ? tv : ls.reduce((a, l) => a + l.v, 0)
+      const total22 = !B.mun && tv22 != null ? tv22 : ls.reduce((a, l) => a + l.v22, 0)
       const vaT = tem22 ? variacao(total26, total22) : null
       const capa = { ...baseCar, total: totalFicha, titulo: `${B.grupo === 'zona' ? 'Zonas e bairros' : nomeNivel} · ${lugar}`, subtitulo: tem22 ? `2022 × 2026 · ${grupos.reduce((a, g) => a + g.itens.length, 0)} ${B.grupo === 'zona' ? 'bairros' : nomeNivel.toLowerCase()}` : rotOrdem,
         tiles: [{ rot: `Votos em ${lugar}`, valor: fmt.format(total26), sub: tem22 ? `2022: ${fmt.format(total22)} · ${vaT?.txt || ''}` : '', corSub: vaT ? COR_VAR[vaT.cls] : null },
