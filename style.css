@@ -951,3 +951,18 @@ td .leg-ponto { margin-right: 4px; vertical-align: middle; }
 .hist-ano { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--mudo); min-width: 2.6em; padding-top: 2px; }
 .hist-lista li.agora .hist-ano { color: var(--primaria); }
 .hist-info { flex: 1; min-width: 0; display: grid; gap: 4px; }
+
+/* ---------- Meu território ---------- */
+.b26-modo { margin: 6px 0 10px; }
+#terr-nome, #terr-mun, #terr-ref-busca { width: 100%; font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--linha); background: var(--fundo); color: var(--texto); margin: 6px 0; }
+.terr-lista summary { cursor: pointer; font-weight: 700; color: var(--primaria); margin: 6px 0; }
+.terr-bairro { margin: 10px 0; display: grid; gap: 6px; }
+.terr-local { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.terr-marca { flex: 1; min-width: 0; text-align: left; font: inherit; font-weight: 600; color: var(--texto); background: var(--fundo); border: 1px solid var(--linha); border-radius: 10px; padding: 8px 10px; cursor: pointer; display: grid; }
+.terr-marca small { color: var(--mudo); font-weight: 500; }
+.terr-local.marcado .terr-marca { border-color: var(--primaria); background: var(--primaria-clara); }
+.terr-secoes { width: 100%; }
+.terr-ref { margin-top: 10px; }
+.terr-lista-topo { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 8px 0; }
+.terr-lista-topo .botao, .terr-lista > .botao { width: auto; padding: 6px 14px; margin: 0; }
+.terr-lista > .botao { margin-top: 8px; }
