@@ -1,7 +1,7 @@
 // Service worker do app: rede primeiro, cache só como reserva (para abrir sem internet).
 // Dados ao vivo do TSE (outro domínio) nunca passam por aqui.
-const CACHE = 'apuracao-sc-v1'
-const BASE = ['./', 'index.html', 'manifest.webmanifest', 'img/icones/icone-192.png']
+const CACHE = 'apuracao-sc-v2'
+const BASE = ['./', 'index.html', 'manifest.webmanifest', 'img/icones/icone-192.png', 'img/icones/favicon-32.png']
 self.addEventListener('install', (ev) => {
   ev.waitUntil(caches.open(CACHE).then((c) => c.addAll(BASE)).then(() => self.skipWaiting()))
 })

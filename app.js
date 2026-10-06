@@ -4,11 +4,11 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { calcularVagas } from './vagas.js?v=202610071000'
-import { chanceDe, NIVEIS } from './chances.js?v=202610071000'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610071000'
-import { FLORIPA } from './floripa.js?v=202610071000'
-import { corPartido, corTexto } from './cores.js?v=202610071000'
+import { calcularVagas } from './vagas.js?v=202610071100'
+import { chanceDe, NIVEIS } from './chances.js?v=202610071100'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610071100'
+import { FLORIPA } from './floripa.js?v=202610071100'
+import { corPartido, corTexto } from './cores.js?v=202610071100'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
