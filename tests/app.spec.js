@@ -700,3 +700,23 @@ test('eleições municipais 2024: ficha da cidade', async ({ page }) => {
   await fc.locator('[data-h22-mv="camaras"]').click()
   await expect(page.locator('.cartao.cam')).toContainText('Câmara de Florianópolis')
 })
+
+test('eleições municipais 2024: perfil dos candidatos', async ({ page }) => {
+  await page.goto('/#h2022?ano=2024&mv=perfil')
+  const pf = page.locator('.cartao.perfil').first()
+  await expect(pf).toContainText('Perfil dos eleitos · Vereador · SC · 2024')
+  const n = (t) => Number(String(t).replace(/\D/g, ''))
+  expect(n(await pf.locator('.calc-num > div').first().locator('strong').textContent())).toBe(2912)
+  await expect(pf).toContainText('Mulheres:')
+  await expect(pf.locator('.pc-b').first()).toBeVisible()
+  await pf.locator('[data-perf-cargo="11"]').click()
+  expect(n(await page.locator('.cartao.perfil').first().locator('.calc-num > div').first().locator('strong').textContent())).toBe(295)
+  const csv = await baixar(page, page.locator('[data-perf-csv]'))
+  expect(csv.nome).toMatch(/perfil-prefeito-sc-2024/)
+  const img = await baixar(page, page.locator('[data-card="perf-2024"]'))
+  expect(img.bytes).toBeGreaterThan(30_000)
+  // linha de perfil nos candidatos da cidade
+  await page.goto('about:blank')
+  await page.goto('/#h2022?ano=2024&e=t1-c11&m=81051')
+  await expect(page.locator('.h22-cand .perfil-linha').first()).toContainText('anos')
+})

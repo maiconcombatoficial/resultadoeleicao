@@ -81,7 +81,15 @@ for r in linhas(zip_tse('consulta_cand', f'consulta_cand_{ANO}')):
         continue
     sq = r['SQ_CANDIDATO']
     idade = r.get('NR_IDADE_DATA_POSSE', '')
-    info[sq] = [int(idade) if idade.isdigit() and int(idade) < 120 else None,
+    idade = int(idade) if idade.isdigit() and int(idade) < 120 else None
+    if idade is None:  # arquivos recentes só trazem a data de nascimento: idade no dia da eleição
+        try:
+            dn, de = [list(map(int, x.split('/'))) for x in (r['DT_NASCIMENTO'], r['DT_ELEICAO'])]
+            idade = de[2] - dn[2] - ((de[1], de[0]) < (dn[1], dn[0]))
+            idade = idade if 16 <= idade < 120 else None
+        except (KeyError, ValueError):
+            idade = None
+    info[sq] = [idade,
                 idx('g', limpo(r.get('DS_GENERO'))), idx('r', limpo(r.get('DS_COR_RACA'))),
                 idx('i', limpo(r.get('DS_GRAU_INSTRUCAO'))), idx('o', limpo(r.get('DS_OCUPACAO'))),
                 idx('e', limpo(r.get('DS_ESTADO_CIVIL'))), 0, 1 if r.get('ST_REELEICAO') == 'S' else 0]
