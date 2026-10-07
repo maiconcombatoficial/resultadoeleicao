@@ -4,12 +4,12 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { icone } from './icones.js?v=202610081900'
-import { calcularVagas } from './vagas.js?v=202610081900'
-import { chanceDe, NIVEIS } from './chances.js?v=202610081900'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610081900'
-import { FLORIPA } from './floripa.js?v=202610081900'
-import { corPartido, corTexto } from './cores.js?v=202610081900'
+import { icone } from './icones.js?v=202610082000'
+import { calcularVagas } from './vagas.js?v=202610082000'
+import { chanceDe, NIVEIS } from './chances.js?v=202610082000'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610082000'
+import { FLORIPA } from './floripa.js?v=202610082000'
+import { corPartido, corTexto } from './cores.js?v=202610082000'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -739,6 +739,7 @@ function paramsAba() {
     if (L) Object.assign(p, { m: L.cd, z: L.zona, b: L.bairro, lv: L.localVot, s: L.secao })
     if (X.foco != null) p.f = X.foco
     if (X.vis === 'abst') p.v = 'abst'
+    if (a.tipo === 'h22' && H22.mv && H22.mv !== 'votos') p.mv = H22.mv
   }
   return p
 }
@@ -796,6 +797,7 @@ function aplicarLink(hash = location.hash) {
     X.local = m && NOME_MUN.get(m) ? { cd: m, nm: NOME_MUN.get(m), zona: p.get('z') || null, bairro: p.get('b') || null, localVot: p.get('lv') || null, secao: p.get('s') || null } : null
     X.foco = p.get('f') != null && p.get('f') !== '' ? Number(p.get('f')) : null
     X.vis = p.get('v') === 'abst' ? 'abst' : 'votos'
+    if (aba.tipo === 'h22') H22.mv = p.get('mv') || 'votos'
     X.grupo = X.local?.secao ? 'secao' : X.local?.localVot ? 'secao' : X.local?.bairro || X.local?.zona ? 'local' : X.local && X.foco != null ? 'bairro' : 'zona'
   }
   if (hashDe(estado.aba.id, paramsAba()) !== antesAba || !estado.dados) {
@@ -1946,6 +1948,8 @@ conteudo.addEventListener('click', (ev) => {
   }
   const h = (sel) => ev.target.closest(sel)
   const X = estadoLocal()
+  if (h('[data-h22-mv]')) return ((H22.mv = h('[data-h22-mv]').dataset.h22Mv), (H22.pfTodos = false), renderizar())
+  if (tratarPrefeitos(h)) return
   if (h('[data-h22-vis]')) return ((X.vis = h('[data-h22-vis]').dataset.h22Vis), (X.verGrupos = false), renderizar())
   if (h('[data-h22-ord]')) return ((X.ordAbst = h('[data-h22-ord]').dataset.h22Ord), renderizar())
   if (h('[data-abst-grupo]')) return ((X.abstGrupo = h('[data-abst-grupo]').dataset.abstGrupo), (X.abstTodos = false), renderizar())
@@ -2109,6 +2113,7 @@ conteudo.addEventListener('click', async (ev) => {
 })
 conteudo.addEventListener('change', (ev) => {
   if (ev.target.dataset?.pref === '2022') definirMostrar2022(ev.target.checked)
+  if (ev.target.id === 'pf-assoc') ((H22.pfAssoc = ev.target.value), (H22.pfTodos = false), renderizar())
 })
 
 conteudo.addEventListener('input', (ev) => {
@@ -3031,6 +3036,7 @@ function renderizar() {
     const foco = idf ? document.activeElement.selectionStart : null
     conteudo.innerHTML = estado.aba.tipo === 'pro' ? renderPro() : estado.aba.tipo === 'bai' ? renderBairros26() : render2022()
     if (estado.aba.tipo === 'pro' && PRO.chave && PRO.aba === 'mapa') montarMapaPro()
+    for (const div of conteudo.querySelectorAll('[data-mapa]')) montarMapaAberto(div)
     if (foco != null) {
       const el = document.getElementById(idf)
       el?.focus()
@@ -4853,6 +4859,121 @@ function renderLocal(X, el) {
     </section>`}`
 }
 
+/* ---------------- eleições municipais: prefeitos, câmaras, perfil ---------------- */
+
+// dados<ano>/municipal.json (scripts/gerar_municipais.py): por município, prefeito eleito e adversários,
+// câmara (vagas, eleitos, suplentes, quociente) e o prefeito da eleição anterior
+const seletorMunicipal = () =>
+  `<div class="segmentado h22-mv" role="group" aria-label="Ver">${[['votos', 'Votos'], ['prefeitos', '🏛️ Prefeitos'], ['camaras', '🪑 Câmaras'], ['perfil', '👤 Perfil']]
+    .filter(([k]) => k === 'votos' || k === 'prefeitos' || MV_PRONTAS.has(k))
+    .map(([k, rot]) => `<button type="button" data-h22-mv="${k}" aria-pressed="${(H22.mv || 'votos') === k}">${rot}</button>`)
+    .join('')}</div>`
+const MV_PRONTAS = new Set()
+
+function dadosPrefeitos(ano) {
+  const M = arquivoAno(`dados${ano}/municipal.json`)
+  if (!M.valor) return M
+  if (!M.valor._pf) {
+    M.valor._pf = Object.entries(M.valor)
+      .filter(([cd, o]) => cd !== '_pf' && o.pf)
+      .map(([cd, o]) => {
+        const seg = o.pf.t2 ? (o.t2 || []).find((x) => x[0] !== o.pf.sq) : o.adv[0]
+        return { cd, nm: NOME_MUN.get(cd) || cd, ...o.pf, seg, margem: seg ? o.pf.pct - seg[4] : o.pf.pct, unico: !o.adv.length && !o.t2, ant: o.ant, trocou: !!(o.ant && o.ant.p !== o.pf.p), assoc: ASSOCIACAO_MUN[cd] || '' }
+      })
+  }
+  return M
+}
+
+function renderPrefeitos(ano) {
+  const M = dadosPrefeitos(ano)
+  if (!M.valor) return M.erro ? `<section class="cartao vazio">O resultado por município de ${ano} ainda não está no app.</section>` : esqueleto(`Carregando os prefeitos de ${ano}…`)
+  const todos = M.valor._pf
+  const porPartido = new Map()
+  for (const x of todos) porPartido.set(x.p, (porPartido.get(x.p) || 0) + 1)
+  const partidos = [...porPartido.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+  const filtroP = H22.pfPartido || ''
+  const filtroA = H22.pfAssoc || ''
+  let ls = todos.filter((x) => (!filtroP || x.p === filtroP) && (!filtroA || x.assoc === filtroA))
+  const ord = H22.pfOrd || 'pct'
+  const fns = { pct: (a, b) => b.pct - a.pct, apertada: (a, b) => (a.unico - b.unico) || a.margem - b.margem, votos: (a, b) => b.v - a.v, mudou: (a, b) => b.trocou - a.trocou || b.pct - a.pct }
+  ls = [...ls].sort(fns[ord] || fns.pct)
+  if (ord === 'mudou') ls = ls.filter((x) => x.trocou)
+  const reeleitos = todos.filter((x) => x.ree).length
+  const trocaram = todos.filter((x) => x.trocou).length
+  const anterior = todos.some((x) => x.ant)
+  const max = H22.pfTodos ? ls.length : 40
+  // mapa: um círculo por município, na cor do partido do prefeito
+  const C = coordsLocais(() => renderizar())
+  let mapa = '<p class="nota">Carregando o mapa…</p>'
+  if (C.valor) {
+    const id = `pf-${ano}-${filtroP}-${filtroA}`
+    const pts = ls
+      .map((x) => {
+        const c = C.valor._mun[x.cd]
+        if (!c) return null
+        const ap = M.valor[x.cd]?.ap?.[0] || 1
+        return { lat: c[0], lon: c[1], tam: ap, cor: corPartido(x.p), html: `<strong>${esc(x.nm)}</strong><br>${esc(x.n)} (${esc(x.p)})<br>${fmtPct.format(x.pct)}% · ${fmt.format(x.v)} votos${x.ree ? '<br>Reeleito' : ''}${x.trocou ? `<br>Antes: ${esc(x.ant.p)}` : ''}` }
+      })
+      .filter(Boolean)
+    MAPAS.set(id, pts)
+    mapa = `<div class="pro-mapa" data-mapa="${esc(id)}" role="region" aria-label="Mapa dos prefeitos"></div><p class="nota">Cada círculo é um município, na cor do partido do prefeito eleito (tamanho = eleitores aptos).</p>`
+  } else if (C.erro) mapa = ''
+  const chips = partidos
+    .map(([p, n]) => `<button type="button" class="filtro ${filtroP === p ? 'ativo' : ''}" data-pf-partido="${esc(p)}" style="${estiloCor(corPartido(p))}"><i></i>${esc(p)} <strong>${n}</strong></button>`)
+    .join('')
+  const assocs = Object.keys(ASSOCIACOES).sort()
+  const titOrd = { pct: 'maior %', apertada: 'disputas mais apertadas', votos: 'mais votos', mudou: `trocaram de partido desde ${ano - 4}` }[ord]
+  const onde = [filtroP, filtroA].filter(Boolean).join(' · ')
+  H22.csvPf = {
+    nome: `prefeitos-sc-${ano}${filtroP ? '-' + nomeArquivo(filtroP) : ''}${filtroA ? '-' + nomeArquivo(filtroA) : ''}.csv`,
+    cab: ['Município', 'Associação', 'Prefeito eleito', 'Partido', 'Votos', '% válidos', '2º colocado', 'Partido do 2º', '% do 2º', 'Diferença (p.p.)', 'Reeleito', ...(anterior ? [`Prefeito ${ano - 4}`, `Partido ${ano - 4}`] : []), 'Coligação'],
+    linhas: ls.map((x) => [x.nm, x.assoc, x.n, x.p, x.v, x.pct, x.seg?.[1] || '', x.seg?.[2] || '', x.seg?.[4] ?? '', x.unico ? '' : Math.round(x.margem * 100) / 100, x.ree ? 'sim' : '', ...(anterior ? [x.ant?.n || '', x.ant?.p || ''] : []), x.col || '']),
+  }
+  const top = partidos.slice(0, 8)
+  const card = {
+    chapeu: `ELEIÇÕES ${ano} · SANTA CATARINA`, nome: `Prefeitos eleitos em ${ano}`, cor: corPartido(top[0]?.[0]), sub: `${todos.length} municípios · ${reeleitos} reeleitos${anterior ? ` · ${trocaram} trocaram de partido` : ''}`,
+    titulo: 'Prefeituras por partido', subtitulo: 'Santa Catarina', fonte: `Fonte: TSE · resultado ${ano}`,
+    total: { rot: 'Municípios de SC', valor: `${todos.length} prefeituras`, sub: `${reeleitos} reeleitos` },
+    linhas: top.map(([p, n]) => ({ ponto: corPartido(p), nome: p, extra: `${fmtPct.format(pctDe(n, todos.length))}% das prefeituras`, valor: `${n}`, frac: n / top[0][1], corBarra: corPartido(p) })),
+  }
+  return `<section class="cartao pf"><h3>🏛️ Prefeitos eleitos em ${ano} · SC</h3>
+      <div class="calc-num">
+        <div><span>Prefeituras</span><strong>${todos.length}</strong></div>
+        <div><span>Reeleitos</span><strong>${reeleitos}</strong><small>${fmtPct.format(pctDe(reeleitos, todos.length))}%</small></div>
+        ${anterior ? `<div><span>Partido diferente de ${ano - 4}</span><strong>${trocaram}</strong><small>prefeituras (inclui prefeito que trocou de partido)</small></div>` : ''}
+      </div>
+      <div class="filtros pf-chips"><button type="button" class="filtro ${filtroP ? '' : 'ativo'}" data-pf-partido="">Todos</button>${chips}</div>
+      ${mapa}
+    </section>
+    <section class="cartao pf"><h3>Prefeito de cada município${onde ? ` · ${esc(onde)}` : ''}</h3>
+      <div class="segmentado" role="group" aria-label="Ordenar">${[['pct', 'Maior %'], ['apertada', 'Mais apertadas'], ['votos', 'Mais votos'], ...(anterior ? [['mudou', 'Trocou de partido']] : [])].map(([k, r]) => `<button type="button" data-pf-ord="${k}" aria-pressed="${ord === k}">${r}</button>`).join('')}</div>
+      <select id="pf-assoc" class="pf-assoc" aria-label="Associação de municípios"><option value="">Todas as associações (FECAM)</option>${assocs.map((sg) => `<option value="${esc(sg)}" ${filtroA === sg ? 'selected' : ''}>${esc(sg)} · ${esc(ASSOCIACOES[sg])}</option>`).join('')}</select>
+      <p class="nota"><strong>${fmt.format(ls.length)}</strong> municípios · ${esc(titOrd)}${ls.length > max ? ` · mostrando ${max}` : ''}.</p>
+      <table class="tabela pf-tab"><tbody>${ls
+        .slice(0, max)
+        .map((x) => `<tr class="clicavel" data-h22-mun="${x.cd}" data-h22-nm="${esc(x.nm)}" data-pf-cidade style="${estiloCor(corPartido(x.p))}"><td><strong>${esc(x.nm)}</strong> ${pill(x.p)}${x.ree ? ' <span class="pp-sit">reeleito</span>' : ''}
+            <div class="cand-meta">${esc(x.n)}${x.t2 ? ' · 2º turno' : ''}${x.trocou ? ` · antes: ${esc(x.ant.n)} (${esc(x.ant.p)})` : ''}</div>
+            <div class="cand-meta">${x.unico ? 'Candidato único' : x.seg ? `2º: ${esc(x.seg[1])} (${esc(x.seg[2])}) ${fmtPct.format(x.seg[4])}% · diferença de ${fmtPct.format(x.margem)} p.p.` : ''}</div></td>
+          <td class="dir"><strong>${fmtPct.format(x.pct)}%</strong><div class="cand-meta">${fmt.format(x.v)} votos</div></td></tr>`)
+        .join('')}</tbody></table>
+      ${ls.length > max ? `<button type="button" class="botao secundario" data-pf-todos>Mostrar todos (${ls.length})</button>` : ''}
+      <div class="exportar">${botaoCard(`pf-${ano}`, card)}<button type="button" class="botao secundario" data-pf-csv>${icone('baixar')} Planilha (CSV)</button><button type="button" class="botao secundario" data-pf-xlsx>${icone('baixar')} Excel</button>${botaoLink()}</div>
+      <p class="nota">Toque num município para ver o resultado por zona, bairro, local e seção. Fonte: TSE (resultado ${ano}; reeleição pelo nome do prefeito de ${ano - 4} e pelo cadastro de candidatos).</p>
+    </section>`
+}
+function tratarPrefeitos(h) {
+  const p = h('[data-pf-partido]')
+  if (p) return ((H22.pfPartido = p.dataset.pfPartido || ''), (H22.pfTodos = false), renderizar(), true)
+  const o = h('[data-pf-ord]')
+  if (o) return ((H22.pfOrd = o.dataset.pfOrd), (H22.pfTodos = false), renderizar(), true)
+  if (h('[data-pf-todos]')) return ((H22.pfTodos = true), renderizar(), true)
+  if (h('[data-pf-csv]') && H22.csvPf) return (baixarCSV(H22.csvPf), true)
+  if (h('[data-pf-xlsx]') && H22.csvPf) return (baixarExcel(H22.csvPf.nome.replace(/\.csv$/, '.xlsx'), [{ aba: 'Prefeitos', ...H22.csvPf }], h('[data-pf-xlsx]')), true)
+  // tocar no município: abre a cidade (votos por zona, bairro, local e seção)
+  if (h('[data-pf-cidade]')) H22.mv = 'votos'
+  return false
+}
+
 /* ---------------- abstenção, brancos e nulos (explorador) ---------------- */
 
 // % de brancos e nulos sobre os votos do cargo (válidos + brancos + nulos), que é o comparecimento do cargo
@@ -5112,11 +5233,12 @@ function render2022() {
   const lista = el.candidatos.filter((c) => !termo || semAcento(`${c.nome} ${c.nomeCompleto} ${c.partido} ${c.numero}`).includes(termo))
   return `<section class="cartao resumo">
       <div class="resumo-titulo"><h2>Eleições ${ano} · ${esc(el.nome)}${el.turno === 2 ? ' (2º turno)' : ''} · ${municipal && H22.local ? esc(H22.local.nm) : 'SC'}</h2><span class="selo final">Resultado oficial</span></div>
-      ${pills}
+      ${municipal ? seletorMunicipal() : ''}
+      ${!municipal || !H22.mv || H22.mv === 'votos' ? pills : ''}
       ${seletorLocal(H22)}
       <p class="nota">${fmt.format(el.validos)} votos nominais válidos · ${el.candidatos.length} candidatos${prop && el.vagas ? ` · ${el.vagas} vagas` : ''}.${prop && el.qe ? ` <strong>📐 Quociente eleitoral de ${ano}: ${fmt.format(el.qe)}</strong> (${fmt.format(el.validosTotais)} válidos com legenda ÷ ${el.vagas}).` : ''} Toque num candidato que concorre em 2026 para abrir a ficha atual.</p>
     </section>
-    ${H22.local ? renderLocal(H22, el) : `${abstSC(H22, elEstado, ano)}<section class="cartao"><h3>${municipal && !H22.local ? `Mais votados de SC em ${ano} (${esc(el.nome)}) e onde estão em 2026` : prop ? `Eleitos em ${ano} (${eleitos.length}) e onde estão em 2026` : `Principais candidatos de ${ano} e onde estão em 2026`}</h3>
+    ${municipal && H22.mv === 'prefeitos' ? renderPrefeitos(ano) : H22.local ? renderLocal(H22, el) : `${abstSC(H22, elEstado, ano)}<section class="cartao"><h3>${municipal && !H22.local ? `Mais votados de SC em ${ano} (${esc(el.nome)}) e onde estão em 2026` : prop ? `Eleitos em ${ano} (${eleitos.length}) e onde estão em 2026` : `Principais candidatos de ${ano} e onde estão em 2026`}</h3>
       ${municipal && !H22.local ? '<p class="nota">Escolha um município acima para ver os candidatos dele e os votos por zona, bairro, local e seção.</p>' : ''}
       <ul class="h22-lista">${destaque.map(cartaoCand).join('')}</ul></section>
     ${partidos}

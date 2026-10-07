@@ -629,3 +629,31 @@ test('urnas da zona por bairro: PDF quando passa de 20 imagens', async ({ page }
   const pdf2 = await baixar(page, page.locator('[data-urnas-pdf="81051|13|Campeche"]'))
   expect(pdf2.nome).toMatch(/campeche.*\.pdf$/)
 })
+
+test('eleições municipais 2024: prefeitos eleitos', async ({ page }) => {
+  await page.goto('/#h2022?ano=2024&mv=prefeitos')
+  const pf = page.locator('.cartao.pf').first()
+  await expect(pf).toContainText('Prefeitos eleitos em 2024')
+  // a soma das prefeituras por partido = 295
+  const n = (t) => Number(String(t).replace(/\D/g, ''))
+  const chips = await page.locator('.pf-chips [data-pf-partido] strong').allTextContents()
+  expect(chips.reduce((a, t) => a + n(t), 0)).toBe(295)
+  await expect(page.locator('.pro-mapa[data-mapa^="pf-2024"]')).toBeVisible()
+  await page.locator('[data-pf-todos]').click()
+  await expect(page.locator('.pf-tab tbody tr')).toHaveCount(295)
+  // Florianópolis: Topázio (PSD)
+  await expect(page.locator('.pf-tab tr[data-h22-mun="81051"]')).toContainText('TOPÁZIO')
+  // filtro por partido, apertadas, planilha e card
+  await page.locator('.pf-chips [data-pf-partido="PL"]').click()
+  const nPL = n(await page.locator('.pf-chips [data-pf-partido="PL"] strong').textContent())
+  await expect(page.locator('.pf-tab tbody tr')).toHaveCount(Math.min(nPL, 40))
+  await page.locator('[data-pf-ord="apertada"]').click()
+  const csv = await baixar(page, page.locator('[data-pf-csv]'))
+  expect(csv.nome).toMatch(/prefeitos-sc-2024-pl\.csv/)
+  const img = await baixar(page, page.locator('[data-card="pf-2024"]'))
+  expect(img.bytes).toBeGreaterThan(30_000)
+  // tocar na cidade abre o explorador da cidade
+  await page.locator('.pf-tab tbody tr').first().click()
+  await expect(page.locator('.resumo h2').first()).toContainText('Eleições 2024')
+  await expect(page).not.toHaveURL(/mv=prefeitos/)
+})

@@ -1167,3 +1167,11 @@ html.com-telao { overflow: hidden; }
 .zona-urnas { margin: 6px 0 4px; padding-left: 10px; border-left: 3px solid var(--cor, var(--linha)); }
 .zona-urnas .segmentado { margin: 4px 0; }
 .bairro-urnas-bt { font-size: 0.8rem; margin-top: 4px; }
+
+/* ---------- eleições municipais: prefeitos ---------- */
+.h22-mv { margin: 8px 0; flex-wrap: wrap; }
+.pf-chips .filtro strong { margin-left: 4px; }
+.pf-assoc { width: 100%; margin: 8px 0; border: 1px solid var(--linha); background: var(--cartao); color: var(--texto); border-radius: 10px; padding: 8px 10px; font: inherit; }
+.pf-tab tr { border-left: 4px solid var(--cor); }
+.pf-tab td:first-child { width: 100%; padding-left: 10px; }
+.pf-tab td.dir { white-space: nowrap; }
