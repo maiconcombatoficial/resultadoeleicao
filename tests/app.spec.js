@@ -295,6 +295,8 @@ test('busca única: candidatos de 2026 e anteriores, municípios, associações 
   await ant.locator('a').first().click()
   await expect(page.locator('[data-aba="h2022"][aria-selected="true"]')).toBeVisible()
   await expect(page.locator('.resumo h2').first()).toContainText('Florianópolis')
+  // e já abre a ficha dele naquela eleição
+  await expect(page.locator('.detalhe .det-cabeca h2')).toHaveText('TOPÁZIO')
 })
 
 test('imagens no formato Stories 9:16', async ({ page }) => {
@@ -745,4 +747,49 @@ test('Início: escolher o ano (2026, gerais e municipais)', async ({ page }) => 
   await page.goto('about:blank')
   await page.goto('/#inicio?ano=2018')
   await expect(page.getByRole('heading', { name: 'Eleições gerais 2018 · SC' })).toBeVisible()
+})
+
+test('ficha completa de eleições anteriores: vereador 2024, deputado 2022 e prefeito', async ({ page }) => {
+  const n = (t) => Number(String(t).replace(/\D/g, ''))
+  // vereador mais votado de Florianópolis em 2024, aberto pelo explorador do Histórico
+  await page.goto('/#h2022?ano=2024&m=81051&e=t1-c13')
+  await page.locator('.h22-cand [data-cand]').first().click()
+  const det = page.locator('.detalhe')
+  await expect(det.locator('.det-cabeca h2')).toHaveText('GEMADA')
+  await expect(det.locator('.det-onde')).toContainText('Vereador 2024 · Florianópolis')
+  await expect(det).toContainText(/eleito por qp/i)
+  await expect(det).toContainText('Quociente eleitoral da câmara')
+  const votos = n(await det.locator('.fav-nums strong').first().textContent())
+  // onde foi mais votado: a soma das zonas é o total dele
+  const bai = det.locator('.cartao.bai')
+  await expect(bai).toContainText(`Total em Florianópolis: ${votos.toLocaleString('pt-BR')} votos`)
+  await expect(bai).toContainText('Desde 2020')
+  // bairros de uma zona e as urnas de um bairro
+  await bai.locator('[data-bai-zona]').first().click()
+  await bai.locator('[data-bai-bairro-urnas]').first().click()
+  await expect(bai.locator('.urnas-tab tr').first()).toContainText('Seção')
+  // urna por urna e histórico (2020 → 2024)
+  await expect(det.locator('.cartao.urnas')).toContainText('Urnas com voto')
+  await expect(det.locator('.cartao.historico')).toContainText('2020')
+  await expect(page).toHaveURL(/ca=h2024-t1-c13&cr=81051/)
+  // link direto reabre a ficha
+  const url = page.url()
+  await page.goto('about:blank')
+  await page.goto(url)
+  await expect(page.locator('.detalhe .det-cabeca h2')).toHaveText('GEMADA')
+  // pular para a ficha de 2020 pelo histórico
+  await page.locator('.cartao.historico li.clicavel').first().click()
+  await expect(page.locator('.detalhe .det-onde')).toContainText('Vereador 2020')
+  // deputado 2022: por município em SC
+  await page.goto('about:blank')
+  await page.goto('/#h2022?ano=2022&e=t1-c7&c=240001614348&ca=h2022-t1-c7')
+  await expect(page.locator('.detalhe .det-cabeca h2')).toHaveText('ANA CAMPAGNOLO')
+  await expect(page.locator('.detalhe .cartao.bai')).toContainText('Joinville')
+  await expect(page.locator('.detalhe [data-mapa]')).toBeVisible()
+  // prefeito: pela ficha da cidade
+  await page.goto('about:blank')
+  await page.goto('/#h2022?ano=2024&m=81051')
+  await page.locator('.cartao.fc .fc-cand').first().click()
+  await expect(page.locator('.detalhe .det-cabeca h2')).toHaveText('TOPÁZIO')
+  await expect(page.locator('.detalhe .fav-nums')).toContainText('58,49%')
 })

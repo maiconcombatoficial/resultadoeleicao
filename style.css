@@ -1218,3 +1218,8 @@ html.com-telao { overflow: hidden; }
 .hero-busca { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; border-radius: 999px; padding: 10px 14px; background: #fff; color: #5f6b65; font: inherit; cursor: pointer; text-align: left; }
 .hero-busca .ico { width: 18px; height: 18px; }
 .painel-cidade { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; color: inherit; text-decoration: none; width: 100%; }
+
+/* ficha de eleições anteriores: entradas clicáveis */
+.hist-lista li.clicavel, .fc-cand.clicavel, .h22-cand.clicavel { cursor: pointer; }
+.hist-lista li.clicavel:hover .hist-info strong, .fc-cand.clicavel:hover .fc-nome strong, .h22-cand.clicavel:hover .cand-nome { text-decoration: underline; }
+.link-ficha { color: var(--primaria); font-weight: 600; }
