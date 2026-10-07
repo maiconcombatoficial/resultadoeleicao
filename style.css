@@ -1178,3 +1178,14 @@ html.com-telao { overflow: hidden; }
 .cam-tab tr { border-left: 4px solid var(--cor); }
 .cam-tab td:first-child { width: 100%; padding-left: 10px; }
 .cam-sup { margin: 8px 0; }
+
+/* ---------- ficha da cidade (eleições municipais) ---------- */
+.fc { border-top: 6px solid var(--cor); display: grid; gap: 10px; }
+.fc h4 { margin: 4px 0 6px; font-size: 0.95rem; }
+.fc-cand { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; padding: 6px 0 6px 10px; border-left: 4px solid var(--cor); margin-bottom: 6px; }
+.fc-nome { overflow-wrap: anywhere; }
+.fc-barra { grid-column: 1; height: 8px; background: var(--fundo); border-radius: 4px; overflow: hidden; }
+.fc-barra span { display: block; height: 100%; background: var(--cor); border-radius: 4px; }
+.fc-num { grid-column: 2; grid-row: 1 / span 2; text-align: right; white-space: nowrap; }
+.fc-num small { display: block; color: var(--mudo); }
+.fc-ant { margin: 0; padding: 8px 10px; background: var(--fundo); border-radius: 10px; font-size: 0.9rem; }

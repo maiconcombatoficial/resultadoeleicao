@@ -681,3 +681,22 @@ test('eleições municipais 2024: câmaras de vereadores', async ({ page }) => {
   const img = await baixar(page, c2.locator('[data-card^="cam-2024-81051"]'))
   expect(img.bytes).toBeGreaterThan(30_000)
 })
+
+test('eleições municipais 2024: ficha da cidade', async ({ page }) => {
+  await page.goto('/#h2022?ano=2024&m=81051')
+  const fc = page.locator('.cartao.fc')
+  await expect(fc).toContainText('Florianópolis · 2024')
+  // o eleito é o mais votado
+  const primeiro = fc.locator('.fc-cand').first()
+  await expect(primeiro).toContainText('TOPÁZIO')
+  await expect(primeiro).toContainText('eleito')
+  await expect(fc).toContainText('Câmara · 23 vereadores')
+  await expect(fc).toContainText('Em 2020')
+  await expect(fc).toContainText('GEAN')
+  const img = await baixar(page, fc.locator('[data-card="fc-2024-81051"]'))
+  expect(img.bytes).toBeGreaterThan(30_000)
+  // o explorador de seções continua abaixo; o atalho leva à câmara
+  await expect(page.locator('.h22-tot')).toBeVisible()
+  await fc.locator('[data-h22-mv="camaras"]').click()
+  await expect(page.locator('.cartao.cam')).toContainText('Câmara de Florianópolis')
+})
