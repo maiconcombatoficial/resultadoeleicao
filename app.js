@@ -4,12 +4,12 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { icone } from './icones.js?v=202610082200'
-import { calcularVagas } from './vagas.js?v=202610082200'
-import { chanceDe, NIVEIS } from './chances.js?v=202610082200'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610082200'
-import { FLORIPA } from './floripa.js?v=202610082200'
-import { corPartido, corTexto } from './cores.js?v=202610082200'
+import { icone } from './icones.js?v=202610082300'
+import { calcularVagas } from './vagas.js?v=202610082300'
+import { chanceDe, NIVEIS } from './chances.js?v=202610082300'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610082300'
+import { FLORIPA } from './floripa.js?v=202610082300'
+import { corPartido, corTexto } from './cores.js?v=202610082300'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -731,6 +731,7 @@ function paramsAba() {
     if (m) Object.assign(p, { m: m.regiao || m.cd, z: m.zona })
     if (estado.partido) p.p = estado.partido
   }
+  if (a.tipo === 'painel' && estado.anoInicio && estado.anoInicio !== 2026) p.ano = estado.anoInicio
   if (a.tipo === 'bai' || a.tipo === 'h22') {
     const X = estadoLocal()
     if (a.tipo === 'h22' && (H22.ano || 2022) !== 2022) p.ano = H22.ano
@@ -789,6 +790,7 @@ function aplicarLink(hash = location.hash) {
       if (estado.partido) estado.visao = 'candidatos'
     }
   }
+  if (aba.tipo === 'painel') estado.anoInicio = ANOS_INICIO().includes(Number(p.get('ano'))) ? Number(p.get('ano')) : 2026
   if ((aba.tipo === 'bai' || aba.tipo === 'h22') && temParams) {
     const X = aba.tipo === 'bai' ? B26 : H22
     if (aba.tipo === 'h22') H22.ano = ANOS_HIST.includes(Number(p.get('ano'))) ? Number(p.get('ano')) : 2022
@@ -1257,6 +1259,13 @@ document.addEventListener('keydown', (ev) => {
 })
 $('#buscar-tudo').innerHTML = icone('busca')
 $('#buscar-tudo').addEventListener('click', () => abrirBusca())
+document.addEventListener('click', (ev) => {
+  if (ev.target.closest('[data-abrir-busca]')) return abrirBusca()
+  const b = ev.target.closest('[data-inicio-ano]')
+  if (!b) return
+  estado.anoInicio = Number(b.dataset.inicioAno)
+  renderizar()
+})
 
 function trocarAba(id) {
   const aba = ABAS.find((a) => a.id === id)
@@ -1408,7 +1417,136 @@ function cadeirasPorPartido(d) {
   return { eleitos, partidos: [...g.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0])) }
 }
 
+// Início: escolha do ano (2026 ao vivo; anos anteriores com o resumo de cada eleição)
+const ANOS_INICIO = () => [2026, ...ANOS_HIST]
+const tipoAno = (a) => (a % 4 === 0 ? 'Municipais' : 'Gerais')
+function heroInicio(ano) {
+  return `<section class="cartao hero">
+    <p class="hero-chapeu">Santa Catarina · resultados oficiais do TSE</p>
+    <h2>Eleições em SC · ${ANOS_HIST[ANOS_HIST.length - 1]} a 2026</h2>
+    <p class="hero-sub">Escolha a eleição: as gerais (presidente, governador, senado e deputados) e as municipais (prefeito e vereador).</p>
+    <div class="hero-anos" role="tablist" aria-label="Ano da eleição">${ANOS_INICIO()
+      .map((a) => `<button type="button" role="tab" data-inicio-ano="${a}" aria-selected="${a === ano}" class="${tipoAno(a) === 'Municipais' ? 'mun' : 'ger'}"><strong>${a}</strong><small>${a === 2026 ? 'Gerais · ao vivo' : tipoAno(a)}</small></button>`)
+      .join('')}</div>
+    <button type="button" class="hero-busca" data-abrir-busca>${icone('busca')} Buscar candidato, cidade, bairro…</button>
+  </section>`
+}
 function renderPainel() {
+  const ano = estado.anoInicio || 2026
+  if (ano !== 2026) return heroInicio(ano) + renderPainelAno(ano)
+  return heroInicio(ano) + renderPainel2026()
+}
+
+// resumo de um ano anterior (geral ou municipal), com atalhos para o Histórico
+function renderPainelAno(ano) {
+  const R = histDe(ano).resumo
+  if (!R) {
+    resumoAno(ano).then(() => estado.aba.tipo === 'painel' && renderizar()).catch(() => {})
+    return esqueleto(`Carregando as eleições de ${ano}…`)
+  }
+  return R.municipal ? painelMunicipal(ano, R) : painelGeral(ano, R)
+}
+const linkH = (ano, q = {}) => hashDe('h2022', { ano, ...q })
+function painelGeral(ano, R) {
+  const el = (t, c) => R.eleicoes.find((e) => e.turno === t && e.cargo === c)
+  const blocoMaj = (e, titulo, n) => {
+    if (!e) return ''
+    const lista = e.candidatos.slice(0, n)
+    const max = Math.max(1, ...lista.map((c) => c.votos))
+    return `<section class="cartao painel-maj"><h3><a href="${linkH(ano, { e: e.id })}" class="link-aba">${esc(titulo)}</a></h3>
+      <ol class="painel-lista">${lista
+        .map((c, i) => `<li style="${estiloCor(corPartido(c.partido))}"><span class="pos">${i + 1}º</span><div class="painel-info"><div><strong>${esc(c.nome)}</strong> ${pill(c.partido)} ${/^ELEITO/.test(c.sit) ? '<span class="pp-sit">✔ eleito</span>' : c.sit === '2º TURNO' ? '<span class="pp-sit">2º turno</span>' : ''}</div>
+          <div class="barra fina"><span style="width:${(100 * c.votos) / max}%"></span></div></div><div class="painel-num"><strong>${fmtPct.format(pctDe(c.votos, e.validos))}%</strong><small>${fmt.format(c.votos)}</small></div></li>`)
+        .join('')}</ol></section>`
+  }
+  const blocoProp = (e, titulo) => {
+    if (!e) return ''
+    const eleitos = e.candidatos.filter((c) => /^ELEITO/.test(c.sit))
+    const porP = new Map()
+    for (const c of eleitos) porP.set(c.partido, (porP.get(c.partido) || 0) + 1)
+    const partidos = [...porP.entries()].sort((a, b) => b[1] - a[1])
+    const vagas = eleitos.length || 1
+    return `<section class="cartao painel-cadeiras"><h3><a href="${linkH(ano, { e: e.id })}" class="link-aba">${esc(titulo)}</a> <span class="mudo">· ${eleitos.length} vagas</span></h3>
+      <div class="cadeiras">${partidos.map(([p, n]) => `<span style="width:${(100 * n) / vagas}%;background:${corPartido(p)}" title="${esc(p)}: ${n}"></span>`).join('')}</div>
+      <div class="cadeiras-leg">${partidos.map(([p, n]) => `<span class="tag" style="${estiloCor(corPartido(p))}">${pill(p)} <strong>${n}</strong></span>`).join('')}</div>
+      <details class="painel-eleitos"><summary>Ver os ${eleitos.length} eleitos</summary><ul>${eleitos.map((c) => `<li><strong>${esc(c.nome)}</strong> ${pill(c.partido)} <span class="mudo">${fmt.format(c.votos)}</span></li>`).join('')}</ul></details>
+    </section>`
+  }
+  const gov = el(2, 3) || el(1, 3)
+  const govEleito = gov?.candidatos.find((c) => /^ELEITO/.test(c.sit))
+  const senEleitos = el(1, 5)?.candidatos.filter((c) => /^ELEITO/.test(c.sit)) || []
+  const topo = `<section class="cartao painel-topo"><div class="resumo-titulo"><h2>Eleições gerais ${ano} · SC</h2><span class="selo final">Resultado oficial</span></div>
+      <div class="calc-num">
+        ${govEleito ? `<div><span>Governador eleito</span><strong>${esc(govEleito.nome)}</strong><small>${esc(govEleito.partido)}${el(2, 3) ? ' · 2º turno' : ''}</small></div>` : ''}
+        ${senEleitos.length ? `<div><span>Senado</span><strong>${senEleitos.map((c) => esc(c.nome)).join(', ')}</strong><small>${senEleitos.map((c) => esc(c.partido)).join(', ')}</small></div>` : ''}
+      </div></section>`
+  return topo + (el(2, 3) ? blocoMaj(el(2, 3), 'Governador · 2º turno', 2) : '') + blocoMaj(el(1, 3), 'Governador · 1º turno', 4) + blocoMaj(el(1, 5), 'Senado', 4) +
+    blocoProp(el(1, 6), 'Dep. Federal') + blocoProp(el(1, 7), 'Dep. Estadual') +
+    `<section class="cartao"><h3>Explorar ${ano}</h3><div class="painel-atalhos">
+      <a href="${linkH(ano)}">${icone('h2022')}<strong>Votos por cidade</strong><small>zona, bairro, local e seção</small></a>
+      <a href="${linkH(ano, { e: 't1-c7' })}">${icone('bairros')}<strong>Dep. Estadual</strong><small>todos os candidatos</small></a>
+      <a href="${linkH(ano, { e: 't1-c6' })}">${icone('bairros')}<strong>Dep. Federal</strong><small>todos os candidatos</small></a>
+      <a href="${linkH(ano, { e: 't1-c3' })}">${icone('municipios')}<strong>Abstenção</strong><small>brancos e nulos por município</small></a>
+    </div></section>`
+}
+function painelMunicipal(ano, R) {
+  const M = dadosPrefeitos(ano)
+  if (!M.valor) return M.erro ? '<section class="cartao vazio">O resultado por município ainda não está no app.</section>' : esqueleto(`Carregando as eleições de ${ano}…`)
+  const pfs = M.valor._pf
+  const porP = new Map()
+  for (const x of pfs) porP.set(x.p, (porP.get(x.p) || 0) + 1)
+  const partidos = [...porP.entries()].sort((a, b) => b[1] - a[1])
+  const cad = new Map()
+  let nVer = 0
+  for (const [cd, o] of Object.entries(M.valor)) if (cd !== '_pf' && o.cam) for (const e of o.cam.el) ((nVer += 1), cad.set(e[2], (cad.get(e[2]) || 0) + 1))
+  const cadP = [...cad.entries()].sort((a, b) => b[1] - a[1])
+  const reeleitos = pfs.filter((x) => x.ree).length
+  // perfil (mulheres eleitas)
+  const P = arquivoAno(`dados${ano}/perfil.json`)
+  let mulheres = ''
+  if (P.valor) {
+    const fem = P.valor.dic.g.indexOf('FEMININO')
+    const ver = R.eleicoes.find((e) => e.cargo === 13)?.candidatos.filter((c) => /^ELEITO/.test(c.sit)) || []
+    const fv = ver.filter((c) => P.valor.c[c.sq]?.[1] === fem).length
+    const fp = pfs.filter((x) => P.valor.c[x.sq]?.[1] === fem).length
+    mulheres = `<div><span>Mulheres eleitas</span><strong>${fmtPct.format(pctDe(fv + fp, ver.length + pfs.length))}%</strong><small>${fp} prefeitas · ${fv} vereadoras</small></div>`
+  }
+  const barraP = (lista, total) => `<div class="cadeiras">${lista.map(([p, n]) => `<span style="width:${(100 * n) / total}%;background:${corPartido(p)}" title="${esc(p)}: ${n}"></span>`).join('')}</div>
+      <div class="cadeiras-leg">${lista.slice(0, 12).map(([p, n]) => `<span class="tag" style="${estiloCor(corPartido(p))}">${pill(p)} <strong>${fmt.format(n)}</strong></span>`).join('')}</div>`
+  const maiores = [...pfs].sort((a, b) => (M.valor[b.cd]?.ap?.[0] || 0) - (M.valor[a.cd]?.ap?.[0] || 0)).slice(0, 12)
+  const top = partidos.slice(0, 8)
+  const card = {
+    chapeu: `ELEIÇÕES ${ano} · SANTA CATARINA`, nome: `Eleições municipais ${ano}`, cor: corPartido(top[0]?.[0]), sub: `${pfs.length} prefeitos · ${fmt.format(nVer)} vereadores · ${reeleitos} prefeitos reeleitos`,
+    titulo: 'Prefeituras por partido', subtitulo: 'Santa Catarina', fonte: `Fonte: TSE · resultado ${ano}`,
+    total: { rot: 'Municípios de SC', valor: `${pfs.length} prefeituras`, sub: `${reeleitos} reeleitos` },
+    linhas: top.map(([p, n]) => ({ ponto: corPartido(p), nome: p, extra: `${fmtPct.format(pctDe(n, pfs.length))}% das prefeituras · ${fmt.format(cad.get(p) || 0)} vereadores`, valor: `${n}`, frac: n / top[0][1], corBarra: corPartido(p) })),
+  }
+  return `<section class="cartao painel-topo"><div class="resumo-titulo"><h2>Eleições municipais ${ano} · SC</h2><span class="selo final">Resultado oficial</span></div>
+      <div class="calc-num">
+        <div><span>Prefeitos eleitos</span><strong>${pfs.length}</strong><small>${reeleitos} reeleitos</small></div>
+        <div><span>Vereadores eleitos</span><strong>${fmt.format(nVer)}</strong><small>${cad.size} partidos</small></div>
+        <div><span>Partido com mais prefeituras</span><strong>${esc(partidos[0]?.[0] || '—')}</strong><small>${partidos[0]?.[1] || 0} prefeituras</small></div>
+        ${mulheres}
+      </div>
+      <div class="exportar">${botaoCard(`inicio-${ano}`, card, `${icone('compartilhar')} Compartilhar resumo de ${ano}`, 'botao secundario')}</div></section>
+    <section class="cartao painel-cadeiras"><h3><a href="${linkH(ano, { mv: 'prefeitos' })}" class="link-aba">🏛️ Prefeituras por partido</a> <span class="mudo">· ${pfs.length}</span></h3>${barraP(partidos, pfs.length)}
+      <a class="botao secundario" href="${linkH(ano, { mv: 'prefeitos' })}">Ver o mapa e todos os prefeitos ›</a></section>
+    <section class="cartao painel-maj"><h3>Prefeitos das maiores cidades</h3>
+      <ol class="painel-lista">${maiores
+        .map((x) => `<li style="${estiloCor(corPartido(x.p))}"><a class="painel-cidade" href="${linkH(ano, { m: x.cd })}"><div class="painel-info"><div><strong>${esc(x.nm)}</strong> · ${esc(x.n)} ${pill(x.p)}${x.ree ? ' <span class="pp-sit">reeleito</span>' : ''}</div>
+          <div class="barra fina"><span style="width:${x.pct}%"></span></div></div><div class="painel-num"><strong>${fmtPct.format(x.pct)}%</strong><small>${fmt.format(x.v)}</small></div></a></li>`)
+        .join('')}</ol></section>
+    <section class="cartao painel-cadeiras"><h3><a href="${linkH(ano, { mv: 'camaras' })}" class="link-aba">🪑 Vereadores por partido</a> <span class="mudo">· ${fmt.format(nVer)} cadeiras</span></h3>${barraP(cadP, nVer)}
+      <a class="botao secundario" href="${linkH(ano, { mv: 'camaras' })}">Ver as câmaras e os mais votados ›</a></section>
+    <section class="cartao"><h3>Explorar ${ano}</h3><div class="painel-atalhos">
+      <a href="${linkH(ano, { mv: 'prefeitos' })}">${icone('municipios')}<strong>Prefeitos</strong><small>mapa e os 295 municípios</small></a>
+      <a href="${linkH(ano, { mv: 'camaras' })}">${icone('analises')}<strong>Câmaras</strong><small>vereadores eleitos e quociente</small></a>
+      <a href="${linkH(ano, { mv: 'perfil' })}">${icone('perfil')}<strong>Perfil</strong><small>mulheres, idade, escolaridade, bens</small></a>
+      <a href="${linkH(ano)}">${icone('bairros')}<strong>Votos por cidade</strong><small>zona, bairro, local e seção</small></a>
+    </div></section>`
+}
+
+function renderPainel2026() {
   const D = (id) => estado.favDados?.get(`${id}|${UF}`)
   const ref = D('governador') || D('depfed') || D('depest')
   const topo = `<section class="cartao painel-topo">

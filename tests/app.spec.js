@@ -720,3 +720,29 @@ test('eleições municipais 2024: perfil dos candidatos', async ({ page }) => {
   await page.goto('/#h2022?ano=2024&e=t1-c11&m=81051')
   await expect(page.locator('.h22-cand .perfil-linha').first()).toContainText('anos')
 })
+
+test('Início: escolher o ano (2026, gerais e municipais)', async ({ page }) => {
+  await page.goto('/#inicio')
+  await expect(page.locator('[data-inicio-ano="2026"][aria-selected="true"]')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Eleições 2026 · Santa Catarina' })).toBeVisible()
+  // municipal
+  await page.locator('[data-inicio-ano="2024"]').click()
+  await expect(page.getByRole('heading', { name: 'Eleições municipais 2024 · SC' })).toBeVisible()
+  await expect(page).toHaveURL(/#inicio\?ano=2024/)
+  await expect(page.locator('.painel-lista li').first()).toContainText('Joinville')
+  const img = await baixar(page, page.locator('[data-card="inicio-2024"]'))
+  expect(img.bytes).toBeGreaterThan(30_000)
+  // geral
+  await page.locator('[data-inicio-ano="2022"]').click()
+  await expect(page.getByRole('heading', { name: 'Eleições gerais 2022 · SC' })).toBeVisible()
+  await expect(page.locator('.painel-topo')).toContainText('Governador eleito')
+  await expect(page.locator('.painel-cadeiras')).toHaveCount(2)
+  // atalho leva ao Histórico do ano
+  await page.locator('[data-inicio-ano="2024"]').click()
+  await page.locator('a[href*="mv=prefeitos"]').first().click()
+  await expect(page.locator('.cartao.pf').first()).toContainText('Prefeitos eleitos em 2024')
+  // link direto
+  await page.goto('about:blank')
+  await page.goto('/#inicio?ano=2018')
+  await expect(page.getByRole('heading', { name: 'Eleições gerais 2018 · SC' })).toBeVisible()
+})
