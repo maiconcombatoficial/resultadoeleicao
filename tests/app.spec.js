@@ -569,3 +569,25 @@ test('onde foi mais votado: urnas dentro do bairro da zona (13ª · Campeche)', 
   const csv = await baixar(page, page.locator('.cartao.bai [data-bai-csv]'))
   expect(csv.nome).toMatch(/\.csv$/)
 })
+
+test('compartilhar as urnas da zona e do bairro', async ({ page }) => {
+  await page.goto('/#depest')
+  await page.locator('[data-cand]').first().click()
+  const card = page.locator('.cartao.bai')
+  await card.locator('[data-bai-painel]').click()
+  await card.locator('.bai-atalhos [data-bai-lugar="81051"]').first().click()
+  await card.locator('[data-bai-grupo="zona"]').click()
+  // zona 13: imagem com as urnas
+  await card.locator('[data-bai-zona-urnas^="81051|13"]').click()
+  const img = await baixar(page, page.locator('[data-card^="urnas-81051|13"]').first())
+  expect(img.nome).toMatch(/urnas.*13.*zona.*\.png$/)
+  expect(img.bytes).toBeGreaterThan(30_000)
+  await expect(page.locator('[data-urnas-car^="81051|13"]').first()).toContainText('Carrossel')
+  // bairro Campeche na 13ª zona: imagem e carrossel
+  await card.locator('[data-bai-zona^="81051|13"]').click()
+  await page.locator('[data-bai-bairro-urnas="81051|13|Campeche"]').click()
+  const img2 = await baixar(page, page.locator('[data-card="urnas-81051|13|Campeche"]'))
+  expect(img2.nome).toMatch(/campeche.*\.png$/)
+  const [d] = await Promise.all([page.waitForEvent('download', { timeout: 60_000 }), page.locator('[data-urnas-car="81051|13|Campeche"]').click()])
+  expect(d.suggestedFilename()).toMatch(/^01-.*campeche.*\.png$/)
+})
