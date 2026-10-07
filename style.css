@@ -1161,3 +1161,6 @@ html.com-telao { overflow: hidden; }
 .urnas #urnas-busca { width: 100%; margin: 6px 0 8px; }
 .urnas-tab td:first-child { width: 100%; }
 .urnas-tab td.dir { white-space: nowrap; }
+.urnas-vis { align-items: center; flex-wrap: wrap; }
+.urnas-vis select { margin-left: auto; border: 1px solid var(--linha); background: var(--cartao); color: var(--texto); border-radius: 999px; padding: 6px 10px; font: inherit; font-size: 0.85rem; }
+.urnas-zona-res { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; font-size: 0.9rem; }

@@ -4,12 +4,12 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { icone } from './icones.js?v=202610081200'
-import { calcularVagas } from './vagas.js?v=202610081200'
-import { chanceDe, NIVEIS } from './chances.js?v=202610081200'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610081200'
-import { FLORIPA } from './floripa.js?v=202610081200'
-import { corPartido, corTexto } from './cores.js?v=202610081200'
+import { icone } from './icones.js?v=202610081300'
+import { calcularVagas } from './vagas.js?v=202610081300'
+import { chanceDe, NIVEIS } from './chances.js?v=202610081300'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610081300'
+import { FLORIPA } from './floripa.js?v=202610081300'
+import { corPartido, corTexto } from './cores.js?v=202610081300'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -710,7 +710,7 @@ window.addEventListener('hashchange', (ev) => aplicarLink(new URL(ev.newURL).has
 // O endereço guarda o que está na tela: #<aba>?<parâmetros>. Aba: r = abrangência, m = município ou região,
 // z = zona; explorador de seções (Bairros/Histórico): ano, e = eleição, m/z/b/lv/s = lugar, f = candidato;
 // ficha: c = candidato, ca = cargo (aba), cr = abrangência, l = lugar dos bairros; comparação: vs/va, v3/v3a, dl.
-const CHAVES_FICHA = ['c', 'ca', 'cr', 'l', 'vs', 'va', 'v3', 'v3a', 'dl']
+const CHAVES_FICHA = ['c', 'ca', 'cr', 'l', 'vs', 'va', 'v3', 'v3a', 'dl', 'uz']
 function lerHash(h = location.hash) {
   const t = h.replace(/^#/, '')
   const i = t.indexOf('?')
@@ -743,7 +743,7 @@ function paramsAba() {
   return p
 }
 function paramsFicha(det) {
-  const p = { c: det.sqcand, ca: det.aba, cr: det.abr !== ABAS.find((a) => a.id === det.aba)?.abrangencias[0] ? det.abr : null, l: det.bai?.mun?.id }
+  const p = { c: det.sqcand, ca: det.aba, cr: det.abr !== ABAS.find((a) => a.id === det.aba)?.abrangencias[0] ? det.abr : null, l: det.bai?.mun?.id, uz: det.urnas?.zona ?? null }
   if (det.comp) Object.assign(p, { vs: det.comp.sqcand, va: det.comp.aba, v3: det.comp.extra?.sq, v3a: det.comp.extra?.aba, dl: det.comp.dif?.mun?.id })
   return p
 }
@@ -819,6 +819,8 @@ function aplicarLink(hash = location.hash) {
   const d2 = estado.detalhe
   const l = p.get('l')
   if (l) d2.bai = { mun: lugarBairros(l), modo: 'v', todos: false, painel: false, busca: '', grupo: 'bairro' }
+  const uz = p.get('uz')
+  if (uz) d2.urnas = { ord: 'v', busca: '', todos: false, vis: 'urnas', zona: Number(uz), ordZ: 'v' }
   const vs = p.get('vs')
   if (vs) {
     const va = ABAS.find((a) => a.id === p.get('va') && a.cargo)?.id || null
@@ -4242,6 +4244,10 @@ function irParaBairro(det, cd, bairro, tipo, chave) {
   else ir()
 }
 detalheEl.addEventListener('input', (ev) => {
+  if (ev.target.id === 'urnas-zona' && estado.detalhe?.urnas) {
+    Object.assign(estado.detalhe.urnas, { zona: ev.target.value ? Number(ev.target.value) : null, vis: 'urnas', todos: false, busca: '' })
+    return renderDetalhe()
+  }
   if (ev.target.id === 'urnas-busca' && estado.detalhe?.urnas) {
     estado.detalhe.urnas.busca = ev.target.value
     estado.detalhe.urnas.todos = false
@@ -6035,10 +6041,10 @@ function secaoUrnas(det, c, aba) {
   if (!cds.length) return ''
   const k = `${elId}|${nr}`
   const U = URNAS.get(k)
-  const E = (det.urnas ??= { ord: 'v', busca: '', todos: false })
+  const E = (det.urnas ??= { ord: 'v', busca: '', todos: false, vis: 'urnas', zona: null, ordZ: 'v' })
   const cor = corPartido(c.partido)
   if (!U) {
-    if (cds.length <= 20) carregarUrnas(k, elId, nr, cds, re)
+    if (cds.length <= 20 || E.zona != null) carregarUrnas(k, elId, nr, cds, re)
     else
       return `<section class="cartao urnas" style="${estiloCor(cor)}"><h3>🗳️ Urna por urna</h3>
         <p>Todas as seções eleitorais (urnas) onde <strong>${esc(c.nome)}</strong> teve voto em SC, com o local de votação, o bairro, os votos, o % na urna e a posição.</p>
@@ -6046,26 +6052,54 @@ function secaoUrnas(det, c, aba) {
         <p class="nota">Lê os boletins de urna dos ${fmt.format(cds.length)} municípios onde teve voto (pode levar alguns segundos).</p></section>`
   }
   const V = URNAS.get(k)
-  const termo = semAcento(E.busca.trim())
+  // zonas: uma zona eleitoral pode abranger várias cidades
+  const zonas = new Map()
+  for (const u of V.linhas) {
+    const z = zonas.get(u.z) || { z: u.z, v: 0, val: 0, n: 0, primeiro: 0, cds: new Set(), melhor: null }
+    z.v += u.v
+    z.val += u.val
+    z.n++
+    z.primeiro += u.pos === 1 ? 1 : 0
+    z.cds.add(u.cd)
+    if (!z.melhor || u.v > z.melhor.v) z.melhor = u
+    zonas.set(u.z, z)
+  }
+  if (E.zona != null && !zonas.has(E.zona) && !V.carregando) E.zona = null
+  const termoBruto = E.busca.trim()
+  // "12", "12ª" ou "12ª zona": filtro exato pela zona
+  const mz = termoBruto.match(/^(\d+)\s*(ª|a)?\s*(zona)?$/i)
+  const zonaFiltro = E.zona ?? (mz ? Number(mz[1]) : null)
+  const termo = mz ? '' : semAcento(termoBruto)
   let ls = V.linhas
+  if (zonaFiltro != null) ls = ls.filter((u) => u.z === zonaFiltro)
   if (termo) ls = ls.filter((u) => semAcento(`${NOME_MUN.get(u.cd) || ''} ${u.bairro} ${u.local} ${u.z}ª zona seção ${u.s}`).includes(termo))
-  const ord = { v: (a, b) => b.v - a.v, p: (a, b) => b.v / b.val - a.v / a.val || b.v - a.v, s: (a, b) => (NOME_MUN.get(a.cd) || '').localeCompare(NOME_MUN.get(b.cd) || '', 'pt-BR') || a.z - b.z || a.s - b.s }
+  const ord = { v: (a, b) => b.v - a.v, p: (a, b) => b.v / b.val - a.v / a.val || b.v - a.v, s: (a, b) => (zonaFiltro != null ? 0 : (NOME_MUN.get(a.cd) || '').localeCompare(NOME_MUN.get(b.cd) || '', 'pt-BR')) || a.z - b.z || a.s - b.s }
   ls = [...ls].sort(ord[E.ord] || ord.v)
   const soma = ls.reduce((a, u) => a + u.v, 0)
   const primeiro = V.linhas.filter((u) => u.pos === 1).length
   const max = E.todos ? ls.length : 50
   const prog = V.carregando ? `<div class="progresso mini"><div class="progresso-barra" style="width:${(100 * V.feitos) / V.total}%"></div></div><p class="nota">Lendo os boletins: ${V.feitos} de ${V.total} municípios…</p>` : ''
-  const nomeArq = `${nomeArquivo(c.nome)}-urna-por-urna-${nomeArquivo(ROTULO_26[elId] || elId)}`
+  const nomeArq = `${nomeArquivo(c.nome)}-urna-por-urna-${nomeArquivo(ROTULO_26[elId] || elId)}${zonaFiltro != null ? `-zona-${zonaFiltro}` : ''}`
+  const ordZ = { v: (a, b) => b.v - a.v, p: (a, b) => b.v / b.val - a.v / a.val || b.v - a.v, z: (a, b) => a.z - b.z }
+  const lz = [...zonas.values()].sort(ordZ[E.ordZ] || ordZ.v)
+  const cidadesZ = (z) => [...z.cds].map((cd) => NOME_MUN.get(cd) || cd).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  det.urnasZonas = { cab: ['Zona', 'Municípios', 'Votos', 'Urnas com voto', '% nas urnas da zona', '1º lugar em', 'Melhor seção', 'Votos na melhor seção'], linhas: lz.map((z) => [z.z, cidadesZ(z).join(', '), z.v, z.n, pctDe(z.v, z.val), z.primeiro, `Seção ${z.melhor.s} · ${NOME_MUN.get(z.melhor.cd) || ''}`, z.melhor.v]) }
   det.urnasExport = {
     nome: `${nomeArq}.csv`,
     cab: ['Município', 'Zona', 'Seção', 'Local de votação', 'Endereço', 'Bairro', 'Votos', 'Votos válidos na urna', '% na urna', 'Posição na urna', 'Candidatos com voto', 'Aptos', 'Comparecimento'],
     linhas: ls.map((u) => [NOME_MUN.get(u.cd) || u.cd, u.z, u.s, u.local, u.end, u.bairro, u.v, u.val, pctDe(u.v, u.val), u.pos, u.n, u.ap ? u.ap[0] : '', u.ap ? u.ap[1] : '']),
   }
-  const top = [...V.linhas].sort(ord.v).slice(0, 8)
+  const top = [...(zonaFiltro != null ? ls : V.linhas)].sort(ord.v).slice(0, 8)
+  const cardZonas = {
+    chapeu: 'APURAÇÃO 2026 · VOTOS POR ZONA', foto: c.foto, nome: c.nome, cor, sub: `${c.partido} · nº ${c.numero} · ${ROTULO_26[elId] || ''}`,
+    titulo: 'Zonas eleitorais com mais votos', subtitulo: `${fmt.format(zonas.size)} zonas com voto`,
+    total: { rot: 'Votos nas urnas de SC', valor: `${fmt.format(V.linhas.reduce((a, u) => a + u.v, 0))} votos`, sub: `em ${fmt.format(zonas.size)} zonas` },
+    linhas: [...zonas.values()].sort(ordZ.v).slice(0, 8).map((z) => ({ nome: `${z.z}ª zona`, extra: cidadesZ(z).slice(0, 3).join(', ') + (z.cds.size > 3 ? ` +${z.cds.size - 3}` : ''), valor: fmt.format(z.v), dir2: `${fmtPct.format(pctDe(z.v, z.val))}% · ${z.n} urnas`, frac: z.v / (Math.max(...[...zonas.values()].map((x) => x.v)) || 1), corBarra: cor })),
+  }
   const card = {
     chapeu: 'APURAÇÃO 2026 · URNA POR URNA', foto: c.foto, nome: c.nome, cor, sub: `${c.partido} · nº ${c.numero} · ${ROTULO_26[elId] || ''}`,
-    titulo: 'Urnas com mais votos', subtitulo: `${fmt.format(V.linhas.length)} urnas com voto · 1º lugar em ${fmt.format(primeiro)}`,
-    total: { rot: 'Votos nas urnas de SC', valor: `${fmt.format(V.linhas.reduce((a, u) => a + u.v, 0))} votos`, sub: `em ${fmt.format(V.linhas.length)} seções` },
+    titulo: zonaFiltro != null ? `Urnas com mais votos · ${zonaFiltro}ª zona` : 'Urnas com mais votos', subtitulo: zonaFiltro != null ? `${fmt.format(ls.length)} urnas com voto na zona · ${cidadesZ(zonas.get(zonaFiltro) || { cds: new Set() }).join(', ')}` : `${fmt.format(V.linhas.length)} urnas com voto · 1º lugar em ${fmt.format(primeiro)}`,
+    total: zonaFiltro != null ? { rot: `Votos na ${zonaFiltro}ª zona`, valor: `${fmt.format(soma)} votos`, sub: `em ${fmt.format(ls.length)} seções` } : { rot: 'Votos nas urnas de SC', valor: `${fmt.format(V.linhas.reduce((a, u) => a + u.v, 0))} votos`, sub: `em ${fmt.format(V.linhas.length)} seções` },
     linhas: top.map((u) => ({ nome: `Seção ${u.s} · ${u.z}ª zona`, extra: `${u.local} · ${u.bairro} · ${NOME_MUN.get(u.cd) || ''}`, valor: fmt.format(u.v), dir2: `${fmtPct.format(pctDe(u.v, u.val))}% · ${u.pos}º`, frac: u.v / (top[0]?.v || 1), corBarra: cor })),
   }
   return `<section class="cartao urnas" style="${estiloCor(cor)}"><h3>🗳️ Urna por urna</h3>
@@ -6075,6 +6109,19 @@ function secaoUrnas(det, c, aba) {
       <div><span>1º lugar na urna</span><strong>${fmt.format(primeiro)}</strong><small>urnas</small></div>
       <div><span>Maior votação</span><strong>${fmt.format(top[0]?.v || 0)}</strong><small>${top[0] ? `seção ${top[0].s} · ${esc(NOME_MUN.get(top[0].cd) || '')}` : ''}</small></div>
     </div>
+    <div class="segmentado urnas-vis" role="group" aria-label="Ver"><button type="button" data-urnas-vis="urnas" aria-pressed="${E.vis !== 'zonas'}">Todas as urnas</button><button type="button" data-urnas-vis="zonas" aria-pressed="${E.vis === 'zonas'}">Por zona (${fmt.format(zonas.size)})</button>
+      <select id="urnas-zona" aria-label="Ir para a zona"><option value="">Zona…</option>${[...zonas.keys()].sort((a, b) => a - b).map((zz) => `<option value="${zz}" ${zz === zonaFiltro ? 'selected' : ''}>${zz}ª zona</option>`).join('')}</select></div>
+    ${E.vis === 'zonas'
+      ? `<div class="segmentado" role="group" aria-label="Ordenar zonas"><button type="button" data-urnas-ordz="v" aria-pressed="${E.ordZ === 'v'}">Mais votos</button><button type="button" data-urnas-ordz="p" aria-pressed="${E.ordZ === 'p'}">Maior %</button><button type="button" data-urnas-ordz="z" aria-pressed="${E.ordZ === 'z'}">Nº da zona</button></div>
+    <p class="nota"><strong>${fmt.format(lz.length)}</strong> zonas eleitorais com voto. Toque numa zona para ver os votos em cada seção dela.</p>
+    <table class="tabela urnas-tab zonas-tab"><thead><tr><th>Zona</th><th class="dir">Votos</th></tr></thead><tbody>${lz
+      .map((zz) => `<tr class="clicavel" data-urnas-zona="${zz.z}"><td><strong>${zz.z}ª zona</strong> <span class="mudo">· ${zz.n} urnas com voto${zz.primeiro ? ` · 1º em ${zz.primeiro}` : ''}</span>
+          <div class="cand-meta">${esc(cidadesZ(zz).join(', '))}</div>
+          <div class="cand-meta">Melhor: seção ${zz.melhor.s} (${esc(NOME_MUN.get(zz.melhor.cd) || '')}) · ${fmt.format(zz.melhor.v)} votos</div></td>
+        <td class="dir"><strong>${fmt.format(zz.v)}</strong><div class="cand-meta">${fmtPct.format(pctDe(zz.v, zz.val))}%</div></td></tr>`)
+      .join('')}</tbody></table>`
+      : `${zonaFiltro != null && zonas.get(zonaFiltro) ? (() => { const zz = zonas.get(zonaFiltro); return `<div class="urnas-zona-res"><button type="button" class="atalho ativo" data-urnas-zona="">📍 ${zonaFiltro}ª zona ✕</button>
+      <span><strong>${fmt.format(zz.v)}</strong> votos · ${fmt.format(zz.n)} urnas · ${fmtPct.format(pctDe(zz.v, zz.val))}% · ${esc(cidadesZ(zz).join(', '))}</span></div>` })() : ''}
     <input id="urnas-busca" type="search" autocomplete="off" placeholder="🔎 Filtrar por município, bairro, escola, zona ou seção…" value="${esc(E.busca)}">
     <div class="segmentado" role="group" aria-label="Ordenar"><button type="button" data-urnas-ord="v" aria-pressed="${E.ord === 'v'}">Mais votos</button><button type="button" data-urnas-ord="p" aria-pressed="${E.ord === 'p'}">Maior % na urna</button><button type="button" data-urnas-ord="s" aria-pressed="${E.ord === 's'}">Município, zona e seção</button></div>
     <p class="nota"><strong>${fmt.format(ls.length)}</strong> urnas${termo ? ' no filtro' : ''} · <strong>${fmt.format(soma)}</strong> votos${ls.length > max ? ` · mostrando ${max}` : ''}.</p>
@@ -6084,8 +6131,8 @@ function secaoUrnas(det, c, aba) {
           <div class="cand-meta">${esc(u.local)} · ${esc(u.bairro)}</div></td>
         <td class="dir"><strong>${fmt.format(u.v)}</strong><div class="cand-meta">${fmtPct.format(pctDe(u.v, u.val))}% · ${u.pos}º de ${u.n}</div></td></tr>`)
       .join('')}</tbody></table>
-    ${ls.length > max ? `<button type="button" class="botao secundario" data-urnas-todos>Mostrar todas as ${fmt.format(ls.length)} urnas</button>` : ''}
-    <div class="exportar">${V.carregando ? '' : botaoCard('urnas', card)}<button type="button" class="botao secundario" data-urnas-csv ${V.carregando ? 'disabled' : ''}>${icone('baixar')} Baixar planilha (CSV)</button><button type="button" class="botao secundario" data-urnas-xlsx ${V.carregando ? 'disabled' : ''}>${icone('baixar')} Excel</button></div>
+    ${ls.length > max ? `<button type="button" class="botao secundario" data-urnas-todos>Mostrar todas as ${fmt.format(ls.length)} urnas</button>` : ''}`}
+    <div class="exportar">${V.carregando ? '' : botaoCard(E.vis === 'zonas' ? 'urnas-zonas' : 'urnas', E.vis === 'zonas' ? cardZonas : card)}<button type="button" class="botao secundario" data-urnas-csv ${V.carregando ? 'disabled' : ''}>${icone('baixar')} Baixar planilha (CSV)</button><button type="button" class="botao secundario" data-urnas-xlsx ${V.carregando ? 'disabled' : ''}>${icone('baixar')} Excel</button></div>
     <p class="nota">Votos de ${esc(c.nome)} em cada seção eleitoral (boletins de urna do TSE, ${turnoDe(elId)}º turno). "% na urna" = votos ÷ votos válidos da seção; posição entre os candidatos que tiveram voto ali. Toque numa urna para abri-la no explorador da aba Bairros.</p>
   </section>`
 }
@@ -6105,11 +6152,25 @@ function tratarUrnas(ev, det) {
   }
   const E = det.urnas
   if (!E) return false
+  const vz = h('[data-urnas-vis]')
+  if (vz) return ((E.vis = vz.dataset.urnasVis), renderDetalhe(), true)
+  const oz = h('[data-urnas-ordz]')
+  if (oz) return ((E.ordZ = oz.dataset.urnasOrdz), renderDetalhe(), true)
+  const zb = h('[data-urnas-zona]')
+  if (zb) {
+    E.zona = zb.dataset.urnasZona === '' ? null : Number(zb.dataset.urnasZona)
+    E.vis = 'urnas'
+    E.todos = false
+    E.busca = ''
+    renderDetalhe()
+    detalheEl.querySelector('.cartao.urnas')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    return true
+  }
   const o = h('[data-urnas-ord]')
   if (o) return ((E.ord = o.dataset.urnasOrd), renderDetalhe(), true)
   if (h('[data-urnas-todos]')) return ((E.todos = true), renderDetalhe(), true)
   if (h('[data-urnas-csv]') && det.urnasExport) return (baixarCSV(det.urnasExport), true)
-  if (h('[data-urnas-xlsx]') && det.urnasExport) return (baixarExcel(det.urnasExport.nome.replace(/\.csv$/, '.xlsx'), [{ aba: 'Urnas', ...det.urnasExport }], h('[data-urnas-xlsx]')), true)
+  if (h('[data-urnas-xlsx]') && det.urnasExport) return (baixarExcel(det.urnasExport.nome.replace(/\.csv$/, '.xlsx'), [{ aba: 'Urnas', ...det.urnasExport }, ...(det.urnasZonas ? [{ aba: 'Zonas', ...det.urnasZonas }] : [])], h('[data-urnas-xlsx]')), true)
   const ir = h('[data-urnas-ir]')
   if (ir) {
     const [cd, zs, loc] = ir.dataset.urnasIr.split('|')
