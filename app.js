@@ -4,12 +4,12 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { icone } from './icones.js?v=202610081600'
-import { calcularVagas } from './vagas.js?v=202610081600'
-import { chanceDe, NIVEIS } from './chances.js?v=202610081600'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610081600'
-import { FLORIPA } from './floripa.js?v=202610081600'
-import { corPartido, corTexto } from './cores.js?v=202610081600'
+import { icone } from './icones.js?v=202610081700'
+import { calcularVagas } from './vagas.js?v=202610081700'
+import { chanceDe, NIVEIS } from './chances.js?v=202610081700'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610081700'
+import { FLORIPA } from './floripa.js?v=202610081700'
+import { corPartido, corTexto } from './cores.js?v=202610081700'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -7097,7 +7097,33 @@ function secaoBairros(det, c, aba) {
       const aberta = !!l.filhos
       const urnasAbertas = !!l.urnas
       const blocoUrnas = urnasAbertas ? listaUrnasRecorte(l.urnas, l.urnasTotal, 'na zona', true, l.nome.replace(/ · .*/, ''), l.zonaKey) : ''
-      const btU = `<button type="button" class="link-zonas zona-bairros-bt" data-bai-zona-urnas="${esc(l.zonaKey)}" aria-expanded="${urnasAbertas}">🗳️ ${urnasAbertas ? 'Esconder as urnas desta zona' : 'Ver as urnas desta zona'} <span class="seta" aria-hidden="true">${urnasAbertas ? '▴' : '▾'}</span></button>`
+      // carrossel: capa com os bairros da zona e, depois, cada bairro com as suas seções
+      const zonaRot = l.nome.replace(/ · .*/, '')
+      URNAS_CAR.set(`zb|${l.zonaKey}`, () => {
+        const bs = l.urnasPorBairro()
+        const ordU = B.ordUrnas || 'v'
+        const ordena = (a, b) => (ordU === 's' ? a.s - b.s : ordU === 'p' ? b.v / b.val - a.v / a.val || b.v - a.v : b.v - a.v)
+        const base = { turno: turnoDe(elId), foto: c.foto, nome: c.nome, cor, sub: `${c.partido} · nº ${c.numero} · ${aba.rotulo.replace(/ SC$/, '')}`, chapeu: `URNA POR URNA · ${lugar.toUpperCase()}` }
+        const somaZ = bs.reduce((a, b) => a + b.v, 0)
+        const nUrnas = bs.reduce((a, b) => a + b.urnas.length, 0)
+        const maxB = Math.max(1, ...bs.map((b) => b.v))
+        const POR = 8
+        // capa: todos os bairros da zona (8 por imagem), depois as seções de cada bairro
+        const paginas = []
+        for (let i = 0; i < bs.length; i += POR)
+          paginas.push({ ...base, titulo: `Urnas por bairro · ${zonaRot}`, subtitulo: `${fmt.format(bs.length)} bairros · ${fmt.format(nUrnas)} urnas com voto${bs.length > POR ? ` · bairros ${i + 1} a ${Math.min(bs.length, i + POR)}` : ''}`, total: { rot: `Votos · ${zonaRot}`, quem: c.nome, valor: `${fmt.format(somaZ)} votos`, sub: `em ${fmt.format(nUrnas)} urnas` },
+            linhas: bs.slice(i, i + POR).map((b) => ({ nome: b.bairro, extra: `${b.urnas.length} de ${b.total} urnas com voto`, valor: fmt.format(b.v), dir2: `${fmtPct.format(pctDe(b.v, somaZ || 1))}% da zona`, frac: b.v / maxB, corBarra: cor })) })
+        for (const b of bs) {
+          const us = [...b.urnas].sort(ordena)
+          const maxU = Math.max(1, ...us.map((u) => u.v))
+          for (let i = 0; i < us.length; i += POR)
+            paginas.push({ ...base, titulo: `${zonaRot} › ${b.bairro}`, subtitulo: `${us.length} urnas com voto de ${b.total} no bairro${us.length > POR ? ` · parte ${i / POR + 1} de ${Math.ceil(us.length / POR)}` : ''}`,
+              total: { rot: `Votos · ${b.bairro}`, quem: c.nome, valor: `${fmt.format(b.v)} votos`, sub: `em ${fmt.format(us.length)} urnas` },
+              linhas: us.slice(i, i + POR).map((u) => ({ nome: u.nome, extra: u.local, valor: fmt.format(u.v), dir2: `${fmtPct.format(pctDe(u.v, u.val))}% · ${u.pos ? `${u.pos.p}º de ${u.pos.n}` : ''}`, frac: u.v / maxU, corBarra: cor })) })
+        }
+        return paginas
+      })
+      const btU = `<button type="button" class="link-zonas zona-bairros-bt" data-bai-zona-urnas="${esc(l.zonaKey)}" aria-expanded="${urnasAbertas}">🗳️ ${urnasAbertas ? 'Esconder as urnas desta zona' : 'Ver as urnas desta zona'} <span class="seta" aria-hidden="true">${urnasAbertas ? '▴' : '▾'}</span></button><button type="button" class="link-zonas zona-bairros-bt" data-urnas-car="zb|${esc(l.zonaKey)}">${icone('carrossel')} Carrossel: urnas da zona por bairro</button>`
       const bt = `<button type="button" class="link-zonas zona-bairros-bt" data-bai-zona="${esc(l.zonaKey)}" aria-expanded="${aberta}">🏘️ ${aberta ? 'Esconder os bairros desta zona' : 'Ver os bairros desta zona'} <span class="seta" aria-hidden="true">${aberta ? '▴' : '▾'}</span></button>${btU}${blocoUrnas}`
       if (!aberta) return bt
       const fs = l.filhos.filter((f) => f.v > 0 || (tem22 && f.v22 > 0))
@@ -7320,6 +7346,15 @@ function dadosBairrosFicha(B, elId, aba, nr, p22, re) {
         linha.zonaKey = `${cd}|${k}`
         // urnas (seções) da zona onde o candidato teve voto
         if (B.zonasUrnas?.has(linha.zonaKey)) Object.assign(linha, urnasDe(arq, cd, { zona: k }))
+        // para o carrossel "zona por bairro": urnas da zona agrupadas pelo bairro (calculado só ao tocar)
+        linha.urnasPorBairro = () => {
+          const { urnas } = urnasDe(arq, cd, { zona: k })
+          const total = new Map()
+          for (const zs of Object.keys(arq.votos[elId] || {})) if (zs.split('-')[0] === k) { const b = bairroDoLocal(arq, arq.secoes[zs]); total.set(b, (total.get(b) || 0) + 1) }
+          const porB = new Map()
+          for (const u of urnas) porB.set(u.bairro, [...(porB.get(u.bairro) || []), u])
+          return [...porB.entries()].map(([bairro, us]) => ({ bairro, urnas: us, total: total.get(bairro) || us.length, v: us.reduce((a, u) => a + u.v, 0) })).sort((a, b) => b.v - a.v)
+        }
         if (B.zonas?.has(linha.zonaKey) || B.zonasTodas) {
           const gb = agregarSecoes(arq, { id: elId, cargo, anul: new Set() }, { zona: k }, 'bairro', nr)
           let b22 = null

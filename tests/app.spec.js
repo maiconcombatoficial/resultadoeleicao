@@ -591,3 +591,19 @@ test('compartilhar as urnas da zona e do bairro', async ({ page }) => {
   const [d] = await Promise.all([page.waitForEvent('download', { timeout: 60_000 }), page.locator('[data-urnas-car="81051|13|Campeche"]').click()])
   expect(d.suggestedFilename()).toMatch(/^01-.*campeche.*\.png$/)
 })
+
+test('carrossel das urnas da zona por bairro', async ({ page }) => {
+  await page.goto('/#depfed')
+  await page.locator('[data-cand]').first().click()
+  const card = page.locator('.cartao.bai')
+  await card.locator('[data-bai-painel]').click()
+  await card.locator('.bai-atalhos [data-bai-lugar="81051"]').first().click()
+  await card.locator('[data-bai-grupo="zona"]').click()
+  const nomes = []
+  page.on('download', (d) => nomes.push(d.suggestedFilename()))
+  await card.locator('[data-urnas-car="zb|81051|13"]').click()
+  await expect.poll(() => nomes.length, { timeout: 60_000 }).toBeGreaterThan(2)
+  await page.waitForTimeout(1500)
+  expect(nomes[0]).toMatch(/^01-.*urnas-por-bairro-13.*zona/)
+  expect(nomes[1]).toMatch(/^02-.*13.*zona/)
+})
