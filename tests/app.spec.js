@@ -582,7 +582,8 @@ test('compartilhar as urnas da zona e do bairro', async ({ page }) => {
   const img = await baixar(page, page.locator('[data-card^="urnas-81051|13"]').first())
   expect(img.nome).toMatch(/urnas.*13.*zona.*\.png$/)
   expect(img.bytes).toBeGreaterThan(30_000)
-  await expect(page.locator('[data-urnas-car^="81051|13"]').first()).toContainText('Carrossel')
+  // a zona tem mais de 160 urnas (mais de 20 imagens): só PDF
+  await expect(page.locator('.zona-urnas [data-urnas-pdf^="81051|13"]').first()).toContainText('PDF com todas')
   // bairro Campeche na 13ª zona: imagem e carrossel
   await card.locator('[data-bai-zona^="81051|13"]').click()
   await page.locator('[data-bai-bairro-urnas="81051|13|Campeche"]').click()
@@ -592,18 +593,23 @@ test('compartilhar as urnas da zona e do bairro', async ({ page }) => {
   expect(d.suggestedFilename()).toMatch(/^01-.*campeche.*\.png$/)
 })
 
-test('carrossel das urnas da zona por bairro', async ({ page }) => {
+test('urnas da zona por bairro: PDF quando passa de 20 imagens', async ({ page }) => {
   await page.goto('/#depfed')
   await page.locator('[data-cand]').first().click()
   const card = page.locator('.cartao.bai')
   await card.locator('[data-bai-painel]').click()
   await card.locator('.bai-atalhos [data-bai-lugar="81051"]').first().click()
   await card.locator('[data-bai-grupo="zona"]').click()
-  const nomes = []
-  page.on('download', (d) => nomes.push(d.suggestedFilename()))
-  await card.locator('[data-urnas-car="zb|81051|13"]').click()
-  await expect.poll(() => nomes.length, { timeout: 60_000 }).toBeGreaterThan(2)
-  await page.waitForTimeout(1500)
-  expect(nomes[0]).toMatch(/^01-.*urnas-por-bairro-13.*zona/)
-  expect(nomes[1]).toMatch(/^02-.*13.*zona/)
+  // 13ª zona: muitas urnas → só PDF
+  await expect(card.locator('[data-urnas-car="zb|81051|13"]')).toHaveCount(0)
+  await expect(card.locator('[data-urnas-pdf="zb|81051|13"]')).toContainText('páginas')
+  const pdf = await baixar(page, card.locator('[data-urnas-pdf="zb|81051|13"]'))
+  expect(pdf.nome).toMatch(/\.pdf$/)
+  expect(pdf.bytes).toBeGreaterThan(200_000)
+  // bairro: carrossel (até 20) e PDF
+  await card.locator('[data-bai-zona^="81051|13"]').click()
+  await page.locator('[data-bai-bairro-urnas="81051|13|Campeche"]').click()
+  await expect(page.locator('[data-urnas-car="81051|13|Campeche"]')).toBeVisible()
+  const pdf2 = await baixar(page, page.locator('[data-urnas-pdf="81051|13|Campeche"]'))
+  expect(pdf2.nome).toMatch(/campeche.*\.pdf$/)
 })
