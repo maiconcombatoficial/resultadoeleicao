@@ -4,12 +4,12 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { icone } from './icones.js?v=202610081000'
-import { calcularVagas } from './vagas.js?v=202610081000'
-import { chanceDe, NIVEIS } from './chances.js?v=202610081000'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610081000'
-import { FLORIPA } from './floripa.js?v=202610081000'
-import { corPartido, corTexto } from './cores.js?v=202610081000'
+import { icone } from './icones.js?v=202610081100'
+import { calcularVagas } from './vagas.js?v=202610081100'
+import { chanceDe, NIVEIS } from './chances.js?v=202610081100'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610081100'
+import { FLORIPA } from './floripa.js?v=202610081100'
+import { corPartido, corTexto } from './cores.js?v=202610081100'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -738,6 +738,7 @@ function paramsAba() {
     const L = X.local
     if (L) Object.assign(p, { m: L.cd, z: L.zona, b: L.bairro, lv: L.localVot, s: L.secao })
     if (X.foco != null) p.f = X.foco
+    if (X.vis === 'abst') p.v = 'abst'
   }
   return p
 }
@@ -794,6 +795,7 @@ function aplicarLink(hash = location.hash) {
     const m = p.get('m')
     X.local = m && NOME_MUN.get(m) ? { cd: m, nm: NOME_MUN.get(m), zona: p.get('z') || null, bairro: p.get('b') || null, localVot: p.get('lv') || null, secao: p.get('s') || null } : null
     X.foco = p.get('f') != null && p.get('f') !== '' ? Number(p.get('f')) : null
+    X.vis = p.get('v') === 'abst' ? 'abst' : 'votos'
     X.grupo = X.local?.secao ? 'secao' : X.local?.localVot ? 'secao' : X.local?.bairro || X.local?.zona ? 'local' : X.local && X.foco != null ? 'bairro' : 'zona'
   }
   if (hashDe(estado.aba.id, paramsAba()) !== antesAba || !estado.dados) {
@@ -1942,6 +1944,13 @@ conteudo.addEventListener('click', (ev) => {
   }
   const h = (sel) => ev.target.closest(sel)
   const X = estadoLocal()
+  if (h('[data-h22-vis]')) return ((X.vis = h('[data-h22-vis]').dataset.h22Vis), (X.verGrupos = false), renderizar())
+  if (h('[data-h22-ord]')) return ((X.ordAbst = h('[data-h22-ord]').dataset.h22Ord), renderizar())
+  if (h('[data-abst-grupo]')) return ((X.abstGrupo = h('[data-abst-grupo]').dataset.abstGrupo), (X.abstTodos = false), renderizar())
+  if (h('[data-abst-todos]')) return ((X.abstTodos = true), renderizar())
+  if (h('[data-csv-abst-sc]') && X.csvAbstSC) return baixarCSV(X.csvAbstSC)
+  if (h('[data-xlsx-abst-sc]') && X.csvAbstSC) return baixarExcel(X.csvAbstSC.nome.replace(/\.csv$/, '.xlsx'), [{ aba: 'Abstenção', ...X.csvAbstSC }], h('[data-xlsx-abst-sc]'))
+  if (h('[data-h22-vis-abst]')) X.vis = 'abst'
   if (h('[data-h22-mun]')) {
     const b = h('[data-h22-mun]')
     X.local = b.dataset.h22Mun ? { cd: b.dataset.h22Mun, nm: b.dataset.h22Nm } : null
@@ -2003,7 +2012,7 @@ conteudo.addEventListener('click', (ev) => {
     }
   }
   if (h('[data-csv-local]') && X.csv) return baixarCSV(X.csv)
-  if (h('[data-xlsx-local]') && X.csv) return baixarExcel(X.csv.nome.replace(/\.csv$/, '.xlsx'), [{ aba: 'Votos', ...X.csv }], h('[data-xlsx-local]'))
+  if (h('[data-xlsx-local]') && X.csv) return baixarExcel(X.csv.nome.replace(/\.csv$/, '.xlsx'), [{ aba: X.vis === 'abst' ? 'Abstenção' : 'Votos', ...X.csv }], h('[data-xlsx-local]'))
   const anoBtn = ev.target.closest('[data-h22-ano]')
   if (anoBtn) {
     Object.assign(H22, { ano: Number(anoBtn.dataset.h22Ano), busca: '', foco: null })
@@ -4311,6 +4320,8 @@ function renderSobre() {
         <p>Estima os votos que faltam (votos válidos apurados × seções que faltam ÷ seções apuradas). Nos cargos majoritários a conta é exata: se a diferença é maior que tudo o que falta, a situação está definida. Nos proporcionais, usa o cálculo de vagas para achar quantos votos a mais elegeriam o candidato (ou o tirariam). Nos casos em aberto, compara o desempenho que ele precisaria ter nas urnas restantes com o atual: até 1,1× "pode reverter", até 1,5× "reversão difícil", acima disso "improvável".</p></details>
       <details><summary>Bairros, zonas, locais e seções</summary>
         <p>Vêm dos <strong>boletins de urna</strong> de cada uma das ~17,5 mil seções de SC (1º turno), decodificados com a especificação oficial do TSE. Cada seção é somada pelo bairro do seu local de votação (cadastro de locais do TSE; em Florianópolis, a lista do TRE-SC). O bairro é o do local de votação, não o endereço do eleitor.</p></details>
+      <details><summary>Abstenção, brancos e nulos</summary>
+        <p>Por município, zona, bairro, local e seção, em 2026 e nas eleições de 2012 a 2024 (explorador das abas Bairros e Histórico, opção "📉 Abstenção, brancos e nulos"). <strong>Abstenção</strong> = eleitores aptos que não votaram ÷ aptos; aptos e comparecimento de cada seção vêm do arquivo do TSE "detalhe da votação por seção" (e, no 2º turno de 2026, dos boletins de urna). <strong>Brancos e nulos</strong> são em % dos votos do cargo escolhido; os nulos incluem os votos anulados (candidatos sem registro válido). Os totais de SC conferem com os do TSE.</p></details>
       <details><summary>Comparação com 2022 e entre candidatos</summary>
         <p>O candidato é ligado a 2022 pelo nome completo (vale o mesmo cargo de 2022, quando houver). A variação é a diferença de votos em cada lugar: verde/azul para alta, laranja/vermelho para queda (forte a partir de 20%). Na comparação entre dois candidatos — inclusive de cargos diferentes, já que cada eleitor vota em todos os cargos — o app mostra a diferença de votos lugar a lugar; "mais parecidos" ordena pela menor diferença proporcional.</p></details>
       <details><summary>🔒 Análises (mapa, perfil, abstenção, transferência)</summary>
@@ -4632,7 +4643,9 @@ function agregarSecoes(arq, el, filtro, grupo, foco) {
   const prop = ehProp(el.cargo)
   const total = new Map()
   const grupos = new Map()
-  let validos = 0, brancos = 0, nulos = 0, secoes = 0
+  // aptos e comparecimento de cada seção (TSE: detalhe da votação por seção / boletins de urna)
+  const apT = arq.ap?.[`t${turnoDe(el.id)}`]
+  let validos = 0, brancos = 0, nulos = 0, secoes = 0, aptos = 0, comp = 0
   for (const [zs, arr] of Object.entries(votos)) {
     const [z] = zs.split('-')
     const loc = arq.secoes[zs]
@@ -4643,11 +4656,18 @@ function agregarSecoes(arq, el, filtro, grupo, foco) {
     if (filtro.secao && zs !== filtro.secao) continue
     secoes++
     const chave = grupo === 'zona' ? z : grupo === 'local' ? loc : grupo === 'bairro' ? bairro : zs
-    const g = grupos.get(chave) || { chave, validos: 0, foco: 0, top: new Map() }
+    const g = grupos.get(chave) || { chave, validos: 0, foco: 0, top: new Map(), aptos: 0, comp: 0, br: 0, nu: 0 }
+    const a = apT?.[zs]
+    if (a) {
+      aptos += a[0]
+      comp += a[1]
+      g.aptos += a[0]
+      g.comp += a[1]
+    }
     for (let i = 0; i < arr.length; i += 2) {
       const nr = arr[i], v = arr[i + 1]
-      if (nr === 95) { brancos += v; continue }
-      if (nr === 96 || nr === 97 || anul.has(nr)) { nulos += v; continue }
+      if (nr === 95) { brancos += v; g.br += v; continue }
+      if (nr === 96 || nr === 97 || anul.has(nr)) { nulos += v; g.nu += v; continue }
       validos += v
       g.validos += v
       total.set(nr, (total.get(nr) || 0) + v)
@@ -4656,7 +4676,7 @@ function agregarSecoes(arq, el, filtro, grupo, foco) {
     }
     grupos.set(chave, g)
   }
-  return { total, grupos: [...grupos.values()], validos, brancos, nulos, secoes }
+  return { total, grupos: [...grupos.values()], validos, brancos, nulos, secoes, aptos, comp, temAp: !!apT }
 }
 
 function nomeVotavel(el, nr) {
@@ -4748,19 +4768,16 @@ function renderLocal(X, el) {
       <h3>📍 ${esc(L.nm)} · ${el.ano}</h3>
       <div class="atalhos-chips migalhas">${migalhas}</div>
       ${!L.zona && zonas.length > 1 ? `<div class="zonas"><span class="zonas-rot">Zona:</span>${zonas.map((z) => `<button type="button" class="filtro" data-h22-zona="${z}">${Number(z)}ª${floripa && ROTULO_ZONA[z4(z)] ? ` · ${ROTULO_ZONA[z4(z)]}` : ''}</button>`).join('')}</div>` : ''}
-      <div class="calc-num h22-tot">
-        <div><span>Votos válidos</span><strong>${fmt.format(ag.validos)}</strong>${prop ? '<small>nominais + legenda</small>' : ''}</div>
-        <div><span>Brancos</span><strong>${fmt.format(ag.brancos)}</strong></div>
-        <div><span>Nulos</span><strong>${fmt.format(ag.nulos)}</strong><small>inclui anulados</small></div>
-        <div><span>Seções</span><strong>${fmt.format(ag.secoes)}</strong></div>
-      </div>
+      ${quadroComparecimento(ag, prop)}
     </section>
+    ${X.vis === 'abst' ? listaAbstLocal(X, el, L, arq, grupo, grupos, ag) : ''}
     <section class="cartao"><h3>Mais votados aqui · ${esc(ROTULO_ELEICAO[el.id] || el.nome)}</h3>
       <p class="nota">Toque num candidato para ver quantos votos teve em cada ${grupo === 'secao' ? 'seção' : grupo}.</p>
       <ul class="h22-lista">${linhasRank}</ul>
       ${ranking.length > 25 && !X.verTodos ? `<button type="button" class="botao secundario" data-h22-todos>Mostrar todos (${ranking.length})</button>` : ''}
     </section>
-    <section class="cartao"><h3>Por ${grupo === 'secao' ? 'seção' : grupo === 'local' ? 'local de votação' : grupo}${focoInfo ? ` · ${esc(focoInfo.nome)}` : ''}</h3>
+    ${X.vis === 'abst' ? '' : `<section class="cartao"><h3>Por ${grupo === 'secao' ? 'seção' : grupo === 'local' ? 'local de votação' : grupo}${focoInfo ? ` · ${esc(focoInfo.nome)}` : ''}</h3>
+      ${seletorVisao(X)}
       <div class="segmentado" role="group">${grupos
         .map((k) => `<button type="button" data-h22-grupo="${k}" aria-pressed="${grupo === k}">${{ zona: 'Zonas', local: 'Locais', bairro: 'Bairros', secao: 'Seções' }[k]}</button>`)
         .join('')}</div>
@@ -4781,8 +4798,156 @@ function renderLocal(X, el) {
         .join('')}</tbody></table>
       ${linhasGrupo.length > maxLinhas ? `<button type="button" class="botao secundario" data-h22-vergrupos>Mostrar todas as ${fmt.format(linhasGrupo.length)} ${grupo === 'secao' ? 'seções' : 'linhas'}</button>` : ''}
       <div class="exportar">${botaoCard(`local-${el.ano}`, cardLocal(X, el, L, arq, grupo, linhasGrupo, ranking, ag, focoInfo, rotuloSimples))}<button type="button" class="botao secundario" data-csv-local>${icone('baixar')} Baixar planilha (CSV)</button><button type="button" class="botao secundario" data-xlsx-local>${icone('baixar')} Excel</button>${botaoLink()}</div>
-      <p class="nota">Toque numa linha para entrar nela. Fonte: TSE, ${el.ano === 2026 ? 'boletins de urna de cada seção (2026)' : 'votação por seção eleitoral (2022)'}. Bairros pelo cadastro de locais de votação ${floripa ? 'do TRE-SC' : `do TSE (${el.ano})`}.</p>
+      <p class="nota">Toque numa linha para entrar nela. Fonte: TSE, ${el.ano === 2026 ? 'boletins de urna de cada seção (2026)' : `votação por seção eleitoral (${el.ano})`}. Bairros pelo cadastro de locais de votação ${floripa ? 'do TRE-SC' : `do TSE (${el.ano})`}.</p>
+    </section>`}`
+}
+
+/* ---------------- abstenção, brancos e nulos (explorador) ---------------- */
+
+// % de brancos e nulos sobre os votos do cargo (válidos + brancos + nulos), que é o comparecimento do cargo
+const votosCargo = (x) => x.validos + (x.brancos ?? x.br) + (x.nulos ?? x.nu)
+function quadroComparecimento(ag, prop) {
+  const vc = votosCargo(ag)
+  const abst = ag.aptos - ag.comp
+  return `<div class="calc-num h22-tot">
+        ${ag.temAp && ag.aptos
+          ? `<div><span>Eleitores aptos</span><strong>${fmt.format(ag.aptos)}</strong></div>
+        <div><span>Comparecimento</span><strong>${fmt.format(ag.comp)}</strong><small>${fmtPct.format(pctDe(ag.comp, ag.aptos))}% dos aptos</small></div>
+        <div class="abst"><span>Abstenção</span><strong>${fmt.format(abst)}</strong><small>${fmtPct.format(pctDe(abst, ag.aptos))}% não votaram</small></div>`
+          : ''}
+        <div><span>Votos válidos</span><strong>${fmt.format(ag.validos)}</strong><small>${prop ? 'nominais + legenda · ' : ''}${fmtPct.format(pctDe(ag.validos, vc))}%</small></div>
+        <div><span>Brancos</span><strong>${fmt.format(ag.brancos)}</strong><small>${fmtPct.format(pctDe(ag.brancos, vc))}% dos votos</small></div>
+        <div><span>Nulos</span><strong>${fmt.format(ag.nulos)}</strong><small>${fmtPct.format(pctDe(ag.nulos, vc))}% · inclui anulados</small></div>
+        <div><span>Seções</span><strong>${fmt.format(ag.secoes)}</strong></div>
+      </div>`
+}
+const seletorVisao = (X) => `<div class="segmentado h22-vis" role="group" aria-label="O que mostrar"><button type="button" data-h22-vis="votos" aria-pressed="${X.vis !== 'abst'}">Votos dos candidatos</button><button type="button" data-h22-vis="abst" aria-pressed="${X.vis === 'abst'}">📉 Abstenção, brancos e nulos</button></div>`
+const ORD_ABST = [['abst', 'Maior abstenção'], ['aus', 'Mais ausentes'], ['br', 'Mais brancos'], ['nu', 'Mais nulos'], ['menor', 'Menor abstenção']]
+// linhas com aptos, ausentes, abstenção, brancos e nulos (zona, bairro, local, seção ou município)
+function linhasAbst(lista, ordem, temAp) {
+  const ls = lista.map((g) => {
+    const vc = g.validos + g.br + g.nu
+    return { ...g, aus: g.aptos - g.comp, pab: pctDe(g.aptos - g.comp, g.aptos), pbr: pctDe(g.br, vc), pnu: pctDe(g.nu, vc), vc }
+  })
+  const o = !temAp && ['abst', 'aus', 'menor'].includes(ordem) ? 'br' : ordem
+  const ord = { abst: (a, b) => b.pab - a.pab, aus: (a, b) => b.aus - a.aus, br: (a, b) => b.pbr - a.pbr, nu: (a, b) => b.pnu - a.pnu, menor: (a, b) => a.pab - b.pab }
+  return ls.sort(ord[o] || ord.abst)
+}
+function tabelaAbst(ls, temAp, rotulo, alvo, max) {
+  const maxAb = Math.max(1, ...ls.map((g) => g.pab))
+  return `<table class="tabela bai-tabela abst-tab"><thead><tr><th></th><th class="dir">${temAp ? 'Abstenção' : 'Votos'}</th><th class="dir">Brancos · Nulos</th></tr></thead><tbody>${ls
+    .slice(0, max)
+    .map(
+      (g) => `<tr class="clicavel" ${alvo(g)}><td>${rotulo(g)}
+        <div class="cand-meta">${temAp ? `${fmt.format(g.aptos)} aptos · <strong>${fmt.format(g.aus)}</strong> ausentes` : `${fmt.format(g.vc)} votos no cargo`}</div>
+        ${temAp ? `<div class="abst-barra"><span style="width:${(100 * g.pab) / maxAb}%"></span></div>` : ''}</td>
+        <td class="dir">${temAp ? `<strong>${fmtPct.format(g.pab)}%</strong>` : fmt.format(g.vc)}</td>
+        <td class="dir">${fmtPct.format(g.pbr)}% · ${fmtPct.format(g.pnu)}%<div class="cand-meta">${fmt.format(g.br)} · ${fmt.format(g.nu)}</div></td></tr>`,
+    )
+    .join('')}</tbody></table>`
+}
+const ordensAbst = (atual, temAp) => `<div class="segmentado abst-ord" role="group" aria-label="Ordenar">${ORD_ABST.filter(([k]) => temAp || !['abst', 'aus', 'menor'].includes(k))
+  .map(([k, rot]) => `<button type="button" data-h22-ord="${k}" aria-pressed="${atual === k}">${rot}</button>`)
+  .join('')}</div>`
+const notaAbst = (temAp, ano) => `<p class="nota">${temAp ? 'Abstenção = eleitores aptos que não votaram ÷ aptos. ' : `Sem aptos/comparecimento por seção para ${ano} no app: só brancos e nulos. `}Brancos e nulos em % dos votos do cargo escolhido (nulos incluem votos anulados). Fonte: TSE, ${ano === 2026 ? 'boletins de urna' : 'detalhe da votação por seção'}.</p>`
+
+function listaAbstLocal(X, el, L, arq, grupo, grupos, ag) {
+  const ordem = X.ordAbst || (ag.temAp ? 'abst' : 'br')
+  const ls = linhasAbst(ag.grupos, ordem, ag.temAp)
+  const max = X.verGrupos ? ls.length : 60
+  const nomeG = { zona: 'zona', local: 'local de votação', bairro: 'bairro', secao: 'seção' }[grupo]
+  const rotuloSimples = (k) => (grupo === 'zona' ? `${Number(k)}ª zona` : grupo === 'bairro' ? k : grupo === 'local' ? tituloLocal((arq.locais[k] || [k])[0]) : `Seção ${k.split('-')[1]} (${Number(k.split('-')[0])}ª zona)`)
+  const alvo = (g) => (grupo === 'zona' ? `data-h22-zona="${g.chave}"` : grupo === 'local' ? `data-h22-local="${esc(g.chave)}"` : grupo === 'bairro' ? `data-h22-bairro="${esc(g.chave)}"` : `data-h22-secao="${esc(g.chave)}"`)
+  const onde = [L.nm, L.zona ? `${Number(L.zona)}ª zona` : '', L.bairro || '', L.localVot ? tituloLocal((arq.locais[L.localVot] || [''])[0]) : ''].filter(Boolean).join(' › ')
+  const cargo = ROTULO_ELEICAO[el.id] || ROTULO_26[el.id] || el.nome
+  const vc = votosCargo(ag)
+  X.csv = {
+    nome: `${nomeArquivo(L.nm)}-${el.ano}-abstencao-brancos-nulos-${nomeArquivo(cargo)}-${grupo}.csv`,
+    cab: [{ zona: 'Zona', local: 'Local de votação', bairro: 'Bairro', secao: 'Seção' }[grupo], ...(grupo === 'local' || grupo === 'secao' ? ['Bairro', 'Zona'] : []), 'Aptos', 'Comparecimento', 'Abstenção', '% abstenção', 'Votos válidos', 'Brancos', '% brancos', 'Nulos', '% nulos'],
+    linhas: ls.map((g) => {
+      const loc = grupo === 'secao' ? arq.secoes[g.chave] : g.chave
+      return [rotuloSimples(g.chave), ...(grupo === 'local' || grupo === 'secao' ? [bairroDoLocal(arq, loc), `${Number(String(g.chave).split('-')[0])}ª`] : []), ag.temAp ? g.aptos : '', ag.temAp ? g.comp : '', ag.temAp ? g.aus : '', ag.temAp ? g.pab : '', g.validos, g.br, g.pbr, g.nu, g.pnu]
+    }),
+  }
+  const titulo = Object.fromEntries(ORD_ABST)[ordem] || 'Abstenção'
+  const card = {
+    chapeu: `ELEIÇÕES ${el.ano} · ${L.nm.toUpperCase()}`, nome: onde, cor: '#1c5cab', turno: el.ano === 2026 ? turnoDe(el.id) : null,
+    sub: ag.temAp ? `Abstenção ${fmtPct.format(pctDe(ag.aptos - ag.comp, ag.aptos))}% · brancos ${fmtPct.format(pctDe(ag.brancos, vc))}% · nulos ${fmtPct.format(pctDe(ag.nulos, vc))}%` : `Brancos ${fmtPct.format(pctDe(ag.brancos, vc))}% · nulos ${fmtPct.format(pctDe(ag.nulos, vc))}%`,
+    titulo: `${titulo} · ${{ zona: 'zonas', local: 'locais', bairro: 'bairros', secao: 'seções' }[grupo]}`, subtitulo: cargo,
+    total: ag.temAp ? { rot: `Ausentes · ${onde}`, valor: fmt.format(ag.aptos - ag.comp), sub: `${fmtPct.format(pctDe(ag.aptos - ag.comp, ag.aptos))}% de ${fmt.format(ag.aptos)} aptos` } : { rot: `Brancos e nulos · ${onde}`, valor: fmt.format(ag.brancos + ag.nulos), sub: `${fmtPct.format(pctDe(ag.brancos + ag.nulos, vc))}% dos votos` },
+    linhas: ls.slice(0, 8).map((g) => ({ nome: rotuloSimples(g.chave), extra: ag.temAp ? `${fmt.format(g.aptos)} aptos · ${fmt.format(g.aus)} ausentes` : `${fmt.format(g.vc)} votos`, valor: ordem === 'br' ? `${fmtPct.format(g.pbr)}%` : ordem === 'nu' ? `${fmtPct.format(g.pnu)}%` : ordem === 'aus' ? fmt.format(g.aus) : `${fmtPct.format(g.pab)}%`, dir2: ordem === 'br' || ordem === 'nu' ? (ag.temAp ? `abstenção ${fmtPct.format(g.pab)}%` : '') : `brancos ${fmtPct.format(g.pbr)}% · nulos ${fmtPct.format(g.pnu)}%`, frac: ordem === 'br' ? g.pbr / 100 : ordem === 'nu' ? g.pnu / 100 : g.pab / 100, corBarra: '#2a78d6' })),
+  }
+  return `<section class="cartao"><h3>📉 Abstenção, brancos e nulos por ${nomeG}</h3>
+      ${seletorVisao(X)}
+      <div class="segmentado" role="group">${grupos
+        .map((k) => `<button type="button" data-h22-grupo="${k}" aria-pressed="${grupo === k}">${{ zona: 'Zonas', local: 'Locais', bairro: 'Bairros', secao: 'Seções' }[k]}</button>`)
+        .join('')}</div>
+      ${ordensAbst(ordem, ag.temAp)}
+      <p class="nota"><strong>${fmt.format(ls.length)}</strong> ${{ zona: 'zonas', local: 'locais de votação', bairro: 'bairros', secao: 'seções' }[grupo]} · ${esc(cargo)}${ls.length > max ? ` · mostrando ${max}` : ''}.</p>
+      ${tabelaAbst(ls, ag.temAp, (g) => rotuloGrupo(arq, grupo, g.chave), alvo, max)}
+      ${ls.length > max ? `<button type="button" class="botao secundario" data-h22-vergrupos>Mostrar todas as ${fmt.format(ls.length)} linhas</button>` : ''}
+      <div class="exportar">${botaoCard(`abst-${el.ano}`, card)}<button type="button" class="botao secundario" data-csv-local>${icone('baixar')} Baixar planilha (CSV)</button><button type="button" class="botao secundario" data-xlsx-local>${icone('baixar')} Excel</button>${botaoLink()}</div>
+      ${notaAbst(ag.temAp, el.ano)}
     </section>`
+}
+
+// SC inteira: abstenção, brancos e nulos por município ou associação (dados<ano>/comparecimento.json)
+function abstSC(X, el, ano) {
+  const C = arquivoAno(`dados${ano}/comparecimento.json`)
+  if (!C.valor) return C.erro ? '' : `<section class="cartao">${esqueleto('Carregando a abstenção por município…', '', 3)}</section>`
+  const ap = C.valor[`t${turnoDe(el.id)}`] || {}
+  const bn = C.valor.brnu?.[el.id] || {}
+  const temAp = Object.keys(ap).length > 0
+  const porAssoc = X.abstGrupo === 'assoc'
+  const G = new Map()
+  for (const cd of new Set([...Object.keys(ap), ...Object.keys(bn)])) {
+    const k = porAssoc ? ASSOCIACAO_MUN[cd] : cd
+    if (!k) continue
+    const g = G.get(k) || { chave: k, aptos: 0, comp: 0, br: 0, nu: 0, validos: 0 }
+    const [a, c] = ap[cd] || [0, 0]
+    const [b, n] = bn[cd] || [0, 0]
+    g.aptos += a
+    g.comp += c
+    g.br += b
+    g.nu += n
+    // votos válidos do cargo ≈ comparecimento − brancos − nulos (o arquivo não traz os válidos)
+    g.validos += Math.max(0, c - b - n)
+    G.set(k, g)
+  }
+  const ordem = X.ordAbst || (temAp ? 'abst' : 'br')
+  const ls = linhasAbst([...G.values()], ordem, temAp)
+  const tot = ls.reduce((s, g) => ({ aptos: s.aptos + g.aptos, comp: s.comp + g.comp, br: s.br + g.br, nu: s.nu + g.nu }), { aptos: 0, comp: 0, br: 0, nu: 0 })
+  const max = X.abstTodos ? ls.length : 15
+  const cargo = ROTULO_ELEICAO[el.id] || ROTULO_26[el.id] || el.nome
+  const rotulo = (g) => (porAssoc ? `<strong>${esc(g.chave)}</strong> <span class="mudo">· ${esc(ASSOCIACOES[g.chave] || '')}</span>` : `<strong>${esc(NOME_MUN.get(g.chave) || g.chave)}</strong>`)
+  const alvo = (g) => (porAssoc ? '' : `data-h22-mun="${g.chave}" data-h22-nm="${esc(NOME_MUN.get(g.chave) || g.chave)}" data-h22-vis-abst`)
+  X.csvAbstSC = {
+    nome: `sc-${ano}-abstencao-brancos-nulos-${nomeArquivo(cargo)}-${porAssoc ? 'associacoes' : 'municipios'}.csv`,
+    cab: [porAssoc ? 'Associação' : 'Município', 'Aptos', 'Comparecimento', 'Abstenção', '% abstenção', 'Brancos', '% brancos', 'Nulos', '% nulos'],
+    linhas: ls.map((g) => [porAssoc ? `${g.chave} · ${ASSOCIACOES[g.chave] || ''}` : NOME_MUN.get(g.chave) || g.chave, g.aptos, g.comp, g.aus, g.pab, g.br, g.pbr, g.nu, g.pnu]),
+  }
+  const vc = tot.comp || tot.br + tot.nu
+  const card = {
+    chapeu: `ELEIÇÕES ${ano} · SANTA CATARINA`, nome: `Abstenção · ${cargo}`, cor: '#1c5cab', turno: ano === 2026 ? turnoDe(el.id) : null,
+    sub: temAp ? `SC: ${fmtPct.format(pctDe(tot.aptos - tot.comp, tot.aptos))}% de abstenção · brancos ${fmtPct.format(pctDe(tot.br, vc))}% · nulos ${fmtPct.format(pctDe(tot.nu, vc))}%` : '',
+    titulo: `${Object.fromEntries(ORD_ABST)[ordem]} · ${porAssoc ? 'associações' : 'municípios'}`, subtitulo: porAssoc ? 'Associações de municípios (FECAM)' : 'Municípios de SC',
+    total: { rot: 'Ausentes · Santa Catarina', valor: fmt.format(tot.aptos - tot.comp), sub: `${fmtPct.format(pctDe(tot.aptos - tot.comp, tot.aptos))}% de ${fmt.format(tot.aptos)} aptos` },
+    linhas: ls.slice(0, 8).map((g) => ({ nome: porAssoc ? `${g.chave}` : NOME_MUN.get(g.chave) || g.chave, extra: `${fmt.format(g.aptos)} aptos · ${fmt.format(g.aus)} ausentes`, valor: ordem === 'br' ? `${fmtPct.format(g.pbr)}%` : ordem === 'nu' ? `${fmtPct.format(g.pnu)}%` : ordem === 'aus' ? fmt.format(g.aus) : `${fmtPct.format(g.pab)}%`, dir2: ordem === 'br' || ordem === 'nu' ? `abstenção ${fmtPct.format(g.pab)}%` : `brancos ${fmtPct.format(g.pbr)}% · nulos ${fmtPct.format(g.pnu)}%`, frac: ordem === 'br' ? g.pbr / 100 : ordem === 'nu' ? g.pnu / 100 : g.pab / 100, corBarra: '#2a78d6' })),
+  }
+  return `<section class="cartao abst-sc"><h3>📉 Abstenção, brancos e nulos · ${esc(cargo)} · ${ano}</h3>
+    <div class="calc-num h22-tot">
+      ${temAp ? `<div><span>Eleitores aptos</span><strong>${fmt.format(tot.aptos)}</strong></div>
+      <div class="abst"><span>Abstenção</span><strong>${fmt.format(tot.aptos - tot.comp)}</strong><small>${fmtPct.format(pctDe(tot.aptos - tot.comp, tot.aptos))}% não votaram</small></div>` : ''}
+      <div><span>Brancos</span><strong>${fmt.format(tot.br)}</strong><small>${fmtPct.format(pctDe(tot.br, vc))}% dos votos</small></div>
+      <div><span>Nulos</span><strong>${fmt.format(tot.nu)}</strong><small>${fmtPct.format(pctDe(tot.nu, vc))}%</small></div>
+    </div>
+    <div class="segmentado" role="group"><button type="button" data-abst-grupo="mun" aria-pressed="${!porAssoc}">Municípios</button><button type="button" data-abst-grupo="assoc" aria-pressed="${porAssoc}">Associações</button></div>
+    ${ordensAbst(ordem, temAp)}
+    ${tabelaAbst(ls, temAp, rotulo, alvo, max)}
+    ${ls.length > max ? `<button type="button" class="botao secundario" data-abst-todos>Mostrar todos (${ls.length})</button>` : ''}
+    <div class="exportar">${botaoCard(`abst-sc-${ano}`, card)}<button type="button" class="botao secundario" data-csv-abst-sc>${icone('baixar')} Baixar planilha (CSV)</button><button type="button" class="botao secundario" data-xlsx-abst-sc>${icone('baixar')} Excel</button></div>
+    ${notaAbst(temAp, ano)}${porAssoc ? '' : '<p class="nota">Toque num município para ver por zona, bairro, local e seção.</p>'}
+  </section>`
 }
 
 // card do explorador: com candidato em foco, os grupos (zonas, bairros…) onde ele foi melhor; sem foco, os mais votados
@@ -4900,7 +5065,7 @@ function render2022() {
       ${seletorLocal(H22)}
       <p class="nota">${fmt.format(el.validos)} votos nominais válidos · ${el.candidatos.length} candidatos${prop && el.vagas ? ` · ${el.vagas} vagas` : ''}.${prop && el.qe ? ` <strong>📐 Quociente eleitoral de ${ano}: ${fmt.format(el.qe)}</strong> (${fmt.format(el.validosTotais)} válidos com legenda ÷ ${el.vagas}).` : ''} Toque num candidato que concorre em 2026 para abrir a ficha atual.</p>
     </section>
-    ${H22.local ? renderLocal(H22, el) : `<section class="cartao"><h3>${municipal && !H22.local ? `Mais votados de SC em ${ano} (${esc(el.nome)}) e onde estão em 2026` : prop ? `Eleitos em ${ano} (${eleitos.length}) e onde estão em 2026` : `Principais candidatos de ${ano} e onde estão em 2026`}</h3>
+    ${H22.local ? renderLocal(H22, el) : `${abstSC(H22, elEstado, ano)}<section class="cartao"><h3>${municipal && !H22.local ? `Mais votados de SC em ${ano} (${esc(el.nome)}) e onde estão em 2026` : prop ? `Eleitos em ${ano} (${eleitos.length}) e onde estão em 2026` : `Principais candidatos de ${ano} e onde estão em 2026`}</h3>
       ${municipal && !H22.local ? '<p class="nota">Escolha um município acima para ver os candidatos dele e os votos por zona, bairro, local e seção.</p>' : ''}
       <ul class="h22-lista">${destaque.map(cartaoCand).join('')}</ul></section>
     ${partidos}
@@ -5463,7 +5628,7 @@ function renderBairros26() {
       ${B26.modo === 'territorio' || B26.modo === 'qr' ? '' : seletorLocal(B26)}
       ${B26.modo === 'qr' ? '' : `<p class="nota">Votos de cada seção eleitoral do ${turnoDe(B26.sel)}º turno, lidos dos boletins de urna publicados pelo TSE e somados pelo bairro do local de votação. Escolha um município para ver por zona, bairro, local e seção.${TURNO === 2 && !INDICE26.has('t2-c1') && !INDICE26.has('t2-c3') ? ' <strong>Os boletins do 2º turno entram aqui assim que forem processados.</strong>' : ''}</p>`}
     </section>
-    ${B26.modo === 'qr' ? renderApuracaoQR() : !el ? (B26.erro ? '<div class="cartao vazio">Não consegui carregar os candidatos agora.</div>' : esqueleto('Carregando os candidatos…')) : B26.modo === 'territorio' ? renderTerritorio(el) : B26.local ? renderLocal(B26, el) : B26.foco != null ? bairrosDoCandidatoSC(el) : fortesPorBairro(el)}`
+    ${B26.modo === 'qr' ? renderApuracaoQR() : !el ? (B26.erro ? '<div class="cartao vazio">Não consegui carregar os candidatos agora.</div>' : esqueleto('Carregando os candidatos…')) : B26.modo === 'territorio' ? renderTerritorio(el) : B26.local ? renderLocal(B26, el) : (B26.foco != null ? bairrosDoCandidatoSC(el) : fortesPorBairro(el)) + abstSC(B26, el, 2026)}`
 }
 
 // candidato em foco na aba Bairros: os ❤️ acompanhados (de qualquer cargo) e uma busca

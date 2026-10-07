@@ -1147,3 +1147,11 @@ html.com-telao { overflow: hidden; }
   .tv-rodape > span:first-child, .tv-rodape > span:last-child { display: none; }
   .tv-rodape { justify-content: center; }
 }
+
+/* ---------- abstenção, brancos e nulos no explorador ---------- */
+.calc-num > div.abst { border-left-color: #2a78d6; }
+.h22-vis { margin-bottom: 8px; }
+.abst-ord { flex-wrap: wrap; margin: 8px 0; }
+.abst-ord button { font-size: 0.8rem; }
+.abst-tab td:first-child { width: 100%; }
+.abst-tab td.dir { white-space: nowrap; }
