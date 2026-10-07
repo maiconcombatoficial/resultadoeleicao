@@ -4,12 +4,12 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { icone } from './icones.js?v=202610081800'
-import { calcularVagas } from './vagas.js?v=202610081800'
-import { chanceDe, NIVEIS } from './chances.js?v=202610081800'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610081800'
-import { FLORIPA } from './floripa.js?v=202610081800'
-import { corPartido, corTexto } from './cores.js?v=202610081800'
+import { icone } from './icones.js?v=202610081900'
+import { calcularVagas } from './vagas.js?v=202610081900'
+import { chanceDe, NIVEIS } from './chances.js?v=202610081900'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610081900'
+import { FLORIPA } from './floripa.js?v=202610081900'
+import { corPartido, corTexto } from './cores.js?v=202610081900'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -4171,6 +4171,15 @@ detalheEl.addEventListener('click', (ev) => {
     ucar.disabled = true
     return compartilharCarrossel(cards, `${cards[0].nome} · ${cards[0].titulo}`, ucar).finally(() => (ucar.disabled = false))
   }
+  const upar = ev.target.closest('[data-urnas-parte]')
+  if (upar && URNAS_CAR.has(upar.dataset.urnasParte)) {
+    const todas = URNAS_CAR.get(upar.dataset.urnasParte)()
+    const i = Number(upar.dataset.parte)
+    const partes = Math.ceil(todas.length / POR_POST)
+    const cards = todas.slice(i * POR_POST, (i + 1) * POR_POST).map((cd) => ({ ...cd, chapeu: `${cd.chapeu} · PARTE ${i + 1}/${partes}` }))
+    upar.disabled = true
+    return compartilharCarrossel(cards, `${cards[0].nome} · ${cards[0].titulo} · parte ${i + 1} de ${partes}`, upar).finally(() => (upar.disabled = false))
+  }
   const updf = ev.target.closest('[data-urnas-pdf]')
   if (updf && URNAS_CAR.has(updf.dataset.urnasPdf)) {
     const cards = URNAS_CAR.get(updf.dataset.urnasPdf)()
@@ -6022,7 +6031,14 @@ function coordsLocais(re) {
 // Todas as seções (urnas) de SC onde o candidato teve voto: lê os arquivos de seções dos municípios em que
 // ele aparece (dados2026/municipios-<eleição>.json) e lista seção a seção, com local, bairro, % e posição.
 const URNAS = new Map()
-const URNAS_CAR = new Map() // carrosséis das urnas de uma zona ou de um bairro (cartão Onde foi mais votado) // `${eleição}|${número}` → { total, feitos, linhas, secoes, carregando }
+const URNAS_CAR = new Map() // carrosséis das urnas de uma zona ou de um bairro (cartão Onde foi mais votado)
+// o Instagram aceita até 20 imagens por publicação: acima disso, um botão por parte (cada uma um post)
+const POR_POST = 20
+function botoesPartes(chave, n, classe = 'link-zonas zona-bairros-bt') {
+  if (n <= POR_POST) return `<button type="button" class="${classe}" data-urnas-car="${esc(chave)}">${icone('carrossel')} Carrossel com todas (${n} imagens)</button>`
+  const partes = Math.ceil(n / POR_POST)
+  return Array.from({ length: partes }, (_, i) => `<button type="button" class="${classe}" data-urnas-parte="${esc(chave)}" data-parte="${i}">${icone('carrossel')} Carrossel parte ${i + 1} de ${partes} (imagens ${i * POR_POST + 1}–${Math.min(n, (i + 1) * POR_POST)})</button>`).join('')
+} // `${eleição}|${número}` → { total, feitos, linhas, secoes, carregando }
 function carregarUrnas(k, elId, nr, cds, re) {
   const U = { total: cds.length, feitos: 0, linhas: [], secoes: 0, carregando: true, ctrl: new AbortController() }
   URNAS.set(k, U)
@@ -7086,7 +7102,7 @@ function secaoBairros(det, c, aba) {
       const paginas = Math.ceil(us.length / POR)
       URNAS_CAR.set(chave, () => Array.from({ length: paginas }, (_, k) => ({ ...baseU, linhas: us.slice(k * POR, (k + 1) * POR).map(linhaU) })))
       const compartilhar = us.length
-        ? `<div class="exportar">${botaoCard(`urnas-${chave}`, { ...baseU, linhas: us.slice(0, POR).map(linhaU) }, `${icone('compartilhar')} Compartilhar estas urnas`, 'botao secundario')}${paginas > 1 && paginas <= 20 ? `<button type="button" class="botao secundario" data-urnas-car="${esc(chave)}">${icone('carrossel')} Carrossel com todas (${paginas} imagens)</button>` : ''}${paginas > 1 ? `<button type="button" class="botao secundario" data-urnas-pdf="${esc(chave)}">${icone('pdf')} PDF com todas (${paginas} páginas)</button>` : ''}</div>`
+        ? `<div class="exportar">${botaoCard(`urnas-${chave}`, { ...baseU, linhas: us.slice(0, POR).map(linhaU) }, `${icone('compartilhar')} Compartilhar estas urnas`, 'botao secundario')}${paginas > 1 ? botoesPartes(chave, paginas, 'botao secundario') : ''}${paginas > 1 ? `<button type="button" class="botao secundario" data-urnas-pdf="${esc(chave)}">${icone('pdf')} PDF com todas (${paginas} páginas)</button>` : ''}</div>`
         : ''
       return `<div class="zona-urnas"><p class="nota"><strong>${fmt.format(us.length)}</strong> urnas com voto de ${fmt.format(total)} ${onde} · <strong>${fmt.format(us.reduce((a, u) => a + u.v, 0))}</strong> votos</p>
           <div class="segmentado" role="group" aria-label="Ordenar urnas"><button type="button" data-bai-urnas-ord="v" aria-pressed="${ordU === 'v'}">Mais votos</button><button type="button" data-bai-urnas-ord="p" aria-pressed="${ordU === 'p'}">Maior %</button><button type="button" data-bai-urnas-ord="s" aria-pressed="${ordU === 's'}">Nº da seção</button></div>
@@ -7106,7 +7122,8 @@ function secaoBairros(det, c, aba) {
       const blocoUrnas = urnasAbertas ? listaUrnasRecorte(l.urnas, l.urnasTotal, 'na zona', true, l.nome.replace(/ · .*/, ''), l.zonaKey) : ''
       // carrossel: capa com os bairros da zona e, depois, cada bairro com as suas seções
       const zonaRot = l.nome.replace(/ · .*/, '')
-      URNAS_CAR.set(`zb|${l.zonaKey}`, () => {
+      // resumo: capa + 1 imagem por bairro (as 8 urnas mais votadas), cabendo num post de até 20 imagens
+      const montarZB = (resumo) => {
         const bs = l.urnasPorBairro()
         const ordU = B.ordUrnas || 'v'
         const ordena = (a, b) => (ordU === 's' ? a.s - b.s : ordU === 'p' ? b.v / b.val - a.v / a.val || b.v - a.v : b.v - a.v)
@@ -7117,27 +7134,30 @@ function secaoBairros(det, c, aba) {
         const POR = 8
         // capa: todos os bairros da zona (8 por imagem), depois as seções de cada bairro
         const paginas = []
-        for (let i = 0; i < bs.length; i += POR)
-          paginas.push({ ...base, titulo: `Urnas por bairro · ${zonaRot}`, subtitulo: `${fmt.format(bs.length)} bairros · ${fmt.format(nUrnas)} urnas com voto${bs.length > POR ? ` · bairros ${i + 1} a ${Math.min(bs.length, i + POR)}` : ''}`, total: { rot: `Votos · ${zonaRot}`, quem: c.nome, valor: `${fmt.format(somaZ)} votos`, sub: `em ${fmt.format(nUrnas)} urnas` },
-            linhas: bs.slice(i, i + POR).map((b) => ({ nome: b.bairro, extra: `${b.urnas.length} de ${b.total} urnas com voto`, valor: fmt.format(b.v), dir2: `${fmtPct.format(pctDe(b.v, somaZ || 1))}% da zona`, frac: b.v / maxB, corBarra: cor })) })
+        // no resumo, uma capa só (os 8 bairros com mais votos); no completo, todos os bairros
+        for (let i = 0; i < (resumo ? Math.min(POR, bs.length) : bs.length); i += POR)
+          paginas.push({ ...base, numerar: false, titulo: `Urnas por bairro · ${zonaRot}`, subtitulo: `${fmt.format(bs.length)} bairros · ${fmt.format(nUrnas)} urnas com voto${resumo && bs.length > POR ? ` · os ${POR} com mais votos` : bs.length > POR ? ` · bairros ${i + 1} a ${Math.min(bs.length, i + POR)}` : ''}`, total: { rot: `Votos · ${zonaRot}`, quem: c.nome, valor: `${fmt.format(somaZ)} votos`, sub: `em ${fmt.format(nUrnas)} urnas` },
+            linhas: bs.slice(i, i + POR).map((b, j) => ({ nome: `${i + j + 1}º ${b.bairro}`, extra: `${b.urnas.length} de ${b.total} urnas com voto`, valor: fmt.format(b.v), dir2: `${fmtPct.format(pctDe(b.v, somaZ || 1))}% da zona`, frac: b.v / maxB, corBarra: cor })) })
         for (const b of bs) {
-          const us = [...b.urnas].sort(ordena)
+          if (resumo && paginas.length >= 20) break
+          const us = [...b.urnas].sort(resumo ? (x, y) => y.v - x.v : ordena)
           const maxU = Math.max(1, ...us.map((u) => u.v))
-          for (let i = 0; i < us.length; i += POR)
-            paginas.push({ ...base, titulo: `${zonaRot} › ${b.bairro}`, subtitulo: `${us.length} urnas com voto de ${b.total} no bairro${us.length > POR ? ` · parte ${i / POR + 1} de ${Math.ceil(us.length / POR)}` : ''}`,
+          for (let i = 0; i < (resumo ? Math.min(us.length, POR) : us.length); i += POR)
+            paginas.push({ ...base, titulo: `${zonaRot} › ${b.bairro}`, subtitulo: resumo ? `${us.length > POR ? `as ${POR} mais votadas de ` : ''}${us.length} urnas com voto no bairro` : `${us.length} urnas com voto de ${b.total} no bairro${us.length > POR ? ` · parte ${i / POR + 1} de ${Math.ceil(us.length / POR)}` : ''}`,
               total: { rot: `Votos · ${b.bairro}`, quem: c.nome, valor: `${fmt.format(b.v)} votos`, sub: `em ${fmt.format(us.length)} urnas` },
               linhas: us.slice(i, i + POR).map((u) => ({ nome: u.nome, extra: u.local, valor: fmt.format(u.v), dir2: `${fmtPct.format(pctDe(u.v, u.val))}% · ${u.pos ? `${u.pos.p}º de ${u.pos.n}` : ''}`, frac: u.v / maxU, corBarra: cor })) })
         }
         return paginas
-      })
+      }
+      URNAS_CAR.set(`zb|${l.zonaKey}`, () => montarZB(false))
+      URNAS_CAR.set(`zbr|${l.zonaKey}`, () => montarZB(true))
       const btU = `<button type="button" class="link-zonas zona-bairros-bt" data-bai-zona-urnas="${esc(l.zonaKey)}" aria-expanded="${urnasAbertas}">🗳️ ${urnasAbertas ? 'Esconder as urnas desta zona' : 'Ver as urnas desta zona'} <span class="seta" aria-hidden="true">${urnasAbertas ? '▴' : '▾'}</span></button>${(() => {
         // quantas imagens: capa (8 bairros por imagem) + seções de cada bairro (8 por imagem)
         const bs = l.urnasPorBairro()
         const n = Math.ceil(bs.length / 8) + bs.reduce((a, b) => a + Math.ceil(b.urnas.length / 8), 0)
         if (!bs.length) return ''
-        return n <= 20
-          ? `<button type="button" class="link-zonas zona-bairros-bt" data-urnas-car="zb|${esc(l.zonaKey)}">${icone('carrossel')} Carrossel: urnas da zona por bairro (${n} imagens)</button><button type="button" class="link-zonas zona-bairros-bt" data-urnas-pdf="zb|${esc(l.zonaKey)}">${icone('pdf')} PDF: urnas da zona por bairro</button>`
-          : `<button type="button" class="link-zonas zona-bairros-bt" data-urnas-pdf="zb|${esc(l.zonaKey)}">${icone('pdf')} PDF: urnas da zona por bairro (${n} páginas)</button>`
+        const nRes = Math.min(20, 1 + bs.length)
+        return `<div class="urnas-comp"><span class="atalhos-rot">📤 Urnas da zona por bairro</span>${botoesPartes(`zb|${l.zonaKey}`, n)}${n > 20 ? `<button type="button" class="link-zonas zona-bairros-bt" data-urnas-car="zbr|${esc(l.zonaKey)}">${icone('carrossel')} Carrossel resumido (${nRes} imagens: as urnas mais votadas de cada bairro)</button>` : ''}<button type="button" class="link-zonas zona-bairros-bt" data-urnas-pdf="zb|${esc(l.zonaKey)}">${icone('pdf')} PDF completo (${n} páginas)</button></div>`
       })()}`
       const bt = `<button type="button" class="link-zonas zona-bairros-bt" data-bai-zona="${esc(l.zonaKey)}" aria-expanded="${aberta}">🏘️ ${aberta ? 'Esconder os bairros desta zona' : 'Ver os bairros desta zona'} <span class="seta" aria-hidden="true">${aberta ? '▴' : '▾'}</span></button>${btU}${blocoUrnas}`
       if (!aberta) return bt

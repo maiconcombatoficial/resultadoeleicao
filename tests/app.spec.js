@@ -603,6 +603,22 @@ test('urnas da zona por bairro: PDF quando passa de 20 imagens', async ({ page }
   // 13ª zona: muitas urnas → só PDF
   await expect(card.locator('[data-urnas-car="zb|81051|13"]')).toHaveCount(0)
   await expect(card.locator('[data-urnas-pdf="zb|81051|13"]')).toContainText('páginas')
+  // partes de 20 imagens e carrossel resumido
+  const partes = card.locator('[data-urnas-parte="zb|81051|13"]')
+  expect(await partes.count()).toBeGreaterThan(1)
+  await expect(partes.first()).toContainText('parte 1 de')
+  const nomes = []
+  page.on('download', (d) => nomes.push(d.suggestedFilename()))
+  await partes.nth(1).click()
+  await expect.poll(() => nomes.length, { timeout: 60_000 }).toBe(20)
+  nomes.length = 0
+  const res = card.locator('[data-urnas-car="zbr|81051|13"]')
+  await expect(res).toContainText('resumido')
+  const nRes = Number((await res.textContent()).match(/\((\d+) imagens/)[1])
+  expect(nRes).toBeLessThanOrEqual(20)
+  await res.click()
+  await expect.poll(() => nomes.length, { timeout: 60_000 }).toBe(nRes)
+  page.removeAllListeners('download')
   const pdf = await baixar(page, card.locator('[data-urnas-pdf="zb|81051|13"]'))
   expect(pdf.nome).toMatch(/\.pdf$/)
   expect(pdf.bytes).toBeGreaterThan(200_000)
