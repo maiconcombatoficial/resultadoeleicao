@@ -1166,3 +1166,4 @@ html.com-telao { overflow: hidden; }
 .urnas-zona-res { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; font-size: 0.9rem; }
 .zona-urnas { margin: 6px 0 4px; padding-left: 10px; border-left: 3px solid var(--cor, var(--linha)); }
 .zona-urnas .segmentado { margin: 4px 0; }
+.bairro-urnas-bt { font-size: 0.8rem; margin-top: 4px; }
