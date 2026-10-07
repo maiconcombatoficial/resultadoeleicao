@@ -4,12 +4,12 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { icone } from './icones.js?v=202610081700'
-import { calcularVagas } from './vagas.js?v=202610081700'
-import { chanceDe, NIVEIS } from './chances.js?v=202610081700'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610081700'
-import { FLORIPA } from './floripa.js?v=202610081700'
-import { corPartido, corTexto } from './cores.js?v=202610081700'
+import { icone } from './icones.js?v=202610081800'
+import { calcularVagas } from './vagas.js?v=202610081800'
+import { chanceDe, NIVEIS } from './chances.js?v=202610081800'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610081800'
+import { FLORIPA } from './floripa.js?v=202610081800'
+import { corPartido, corTexto } from './cores.js?v=202610081800'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -4166,8 +4166,15 @@ detalheEl.addEventListener('click', (ev) => {
   const ucar = ev.target.closest('[data-urnas-car]')
   if (ucar && URNAS_CAR.has(ucar.dataset.urnasCar)) {
     const cards = URNAS_CAR.get(ucar.dataset.urnasCar)()
+    // o Instagram aceita até 20 imagens por publicação: acima disso, vira PDF
+    if (cards.length > 20) return gerarPDF(cards, `${cards[0].nome} · ${cards[0].titulo}`, ucar)
     ucar.disabled = true
     return compartilharCarrossel(cards, `${cards[0].nome} · ${cards[0].titulo}`, ucar).finally(() => (ucar.disabled = false))
+  }
+  const updf = ev.target.closest('[data-urnas-pdf]')
+  if (updf && URNAS_CAR.has(updf.dataset.urnasPdf)) {
+    const cards = URNAS_CAR.get(updf.dataset.urnasPdf)()
+    return gerarPDF(cards, `${cards[0].nome} · ${cards[0].titulo}`, updf)
   }
   const btCar = ev.target.closest('[data-bai-carrossel]')
   if (btCar && det?.bai?.carrossel) {
@@ -7076,10 +7083,10 @@ function secaoBairros(det, c, aba) {
         titulo: `Urnas · ${rotulo}`, subtitulo: `${fmt.format(us.length)} urnas com voto${primeiros ? ` · 1º lugar em ${fmt.format(primeiros)}` : ''}`,
         total: { rot: `Votos · ${rotulo}`, quem: c.nome, valor: `${fmt.format(somaU)} votos`, sub: `em ${fmt.format(us.length)} de ${fmt.format(total)} urnas` } }
       const POR = 8
-      const paginas = Math.min(20, Math.ceil(us.length / POR))
+      const paginas = Math.ceil(us.length / POR)
       URNAS_CAR.set(chave, () => Array.from({ length: paginas }, (_, k) => ({ ...baseU, linhas: us.slice(k * POR, (k + 1) * POR).map(linhaU) })))
       const compartilhar = us.length
-        ? `<div class="exportar">${botaoCard(`urnas-${chave}`, { ...baseU, linhas: us.slice(0, POR).map(linhaU) }, `${icone('compartilhar')} Compartilhar estas urnas`, 'botao secundario')}${paginas > 1 ? `<button type="button" class="botao secundario" data-urnas-car="${esc(chave)}">${icone('carrossel')} Carrossel com todas (${paginas} imagens)</button>` : ''}</div>`
+        ? `<div class="exportar">${botaoCard(`urnas-${chave}`, { ...baseU, linhas: us.slice(0, POR).map(linhaU) }, `${icone('compartilhar')} Compartilhar estas urnas`, 'botao secundario')}${paginas > 1 && paginas <= 20 ? `<button type="button" class="botao secundario" data-urnas-car="${esc(chave)}">${icone('carrossel')} Carrossel com todas (${paginas} imagens)</button>` : ''}${paginas > 1 ? `<button type="button" class="botao secundario" data-urnas-pdf="${esc(chave)}">${icone('pdf')} PDF com todas (${paginas} páginas)</button>` : ''}</div>`
         : ''
       return `<div class="zona-urnas"><p class="nota"><strong>${fmt.format(us.length)}</strong> urnas com voto de ${fmt.format(total)} ${onde} · <strong>${fmt.format(us.reduce((a, u) => a + u.v, 0))}</strong> votos</p>
           <div class="segmentado" role="group" aria-label="Ordenar urnas"><button type="button" data-bai-urnas-ord="v" aria-pressed="${ordU === 'v'}">Mais votos</button><button type="button" data-bai-urnas-ord="p" aria-pressed="${ordU === 'p'}">Maior %</button><button type="button" data-bai-urnas-ord="s" aria-pressed="${ordU === 's'}">Nº da seção</button></div>
@@ -7123,7 +7130,15 @@ function secaoBairros(det, c, aba) {
         }
         return paginas
       })
-      const btU = `<button type="button" class="link-zonas zona-bairros-bt" data-bai-zona-urnas="${esc(l.zonaKey)}" aria-expanded="${urnasAbertas}">🗳️ ${urnasAbertas ? 'Esconder as urnas desta zona' : 'Ver as urnas desta zona'} <span class="seta" aria-hidden="true">${urnasAbertas ? '▴' : '▾'}</span></button><button type="button" class="link-zonas zona-bairros-bt" data-urnas-car="zb|${esc(l.zonaKey)}">${icone('carrossel')} Carrossel: urnas da zona por bairro</button>`
+      const btU = `<button type="button" class="link-zonas zona-bairros-bt" data-bai-zona-urnas="${esc(l.zonaKey)}" aria-expanded="${urnasAbertas}">🗳️ ${urnasAbertas ? 'Esconder as urnas desta zona' : 'Ver as urnas desta zona'} <span class="seta" aria-hidden="true">${urnasAbertas ? '▴' : '▾'}</span></button>${(() => {
+        // quantas imagens: capa (8 bairros por imagem) + seções de cada bairro (8 por imagem)
+        const bs = l.urnasPorBairro()
+        const n = Math.ceil(bs.length / 8) + bs.reduce((a, b) => a + Math.ceil(b.urnas.length / 8), 0)
+        if (!bs.length) return ''
+        return n <= 20
+          ? `<button type="button" class="link-zonas zona-bairros-bt" data-urnas-car="zb|${esc(l.zonaKey)}">${icone('carrossel')} Carrossel: urnas da zona por bairro (${n} imagens)</button><button type="button" class="link-zonas zona-bairros-bt" data-urnas-pdf="zb|${esc(l.zonaKey)}">${icone('pdf')} PDF: urnas da zona por bairro</button>`
+          : `<button type="button" class="link-zonas zona-bairros-bt" data-urnas-pdf="zb|${esc(l.zonaKey)}">${icone('pdf')} PDF: urnas da zona por bairro (${n} páginas)</button>`
+      })()}`
       const bt = `<button type="button" class="link-zonas zona-bairros-bt" data-bai-zona="${esc(l.zonaKey)}" aria-expanded="${aberta}">🏘️ ${aberta ? 'Esconder os bairros desta zona' : 'Ver os bairros desta zona'} <span class="seta" aria-hidden="true">${aberta ? '▴' : '▾'}</span></button>${btU}${blocoUrnas}`
       if (!aberta) return bt
       const fs = l.filhos.filter((f) => f.v > 0 || (tem22 && f.v22 > 0))
