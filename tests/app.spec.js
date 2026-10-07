@@ -793,3 +793,38 @@ test('ficha completa de eleições anteriores: vereador 2024, deputado 2022 e pr
   await expect(page.locator('.detalhe .det-cabeca h2')).toHaveText('TOPÁZIO')
   await expect(page.locator('.detalhe .fav-nums')).toContainText('58,49%')
 })
+
+test('ficha de eleição anterior: acompanhar, comparar, análise e exportar', async ({ page }) => {
+  await page.goto('/#h2022?ano=2024&m=81051&e=t1-c13&c=240002149675&ca=h2024-t1-c13&cr=81051')
+  const det = page.locator('.detalhe')
+  await expect(det.locator('.det-cabeca h2')).toHaveText('GEMADA')
+  // análise e metas
+  await expect(det.locator('.cartao.analise')).toContainText('Bairro mais forte')
+  await expect(det.locator('.cartao.analise')).toContainText('Em relação a 2020')
+  await expect(det.locator('.cartao.metas')).toContainText('2024:')
+  // card, relatório em PDF e Excel
+  expect((await baixar(page, det.locator('.det-cabeca [data-card]').first())).bytes).toBeGreaterThan(30_000)
+  expect((await baixar(page, det.locator('[data-relatorio]'))).nome).toMatch(/\.pdf$/)
+  expect((await baixar(page, det.locator('[data-bai-xlsx]'))).nome).toMatch(/\.xlsx$/)
+  // ❤️ acompanhar: aparece em Acompanhados com o resultado oficial
+  await det.locator('.det-cabeca [data-fav]').click()
+  await expect(det.locator('.det-cabeca [data-fav]')).toHaveAttribute('aria-pressed', 'true')
+  // ⚖️ comparar com ele mesmo em 2020 (evolução)
+  await det.locator('[data-comparar]').click()
+  await det.locator('[data-comp-cargo="hist"]').click()
+  await det.locator('[data-comp-sq][data-comp-aba="h2020-t1-c13"]').first().click()
+  await expect(det.locator('.comp-cabeca')).toContainText('Vereador 2020 · Florianópolis')
+  await expect(det.locator('.cartao.cdif')).toContainText('13ª zona')
+  await expect(page).toHaveURL(/va=h2020-t1-c13&vr=81051/)
+  // com outro vereador da mesma eleição
+  await det.locator('[data-trocar-comp]').click()
+  await det.locator('[data-comp-cargo=""]').click()
+  await det.locator('[data-comp-sq]').first().click()
+  await expect(det.locator('.comp-veredito')).toContainText('votos a mais')
+  await page.goto('about:blank')
+  await page.goto('/#favoritos')
+  await expect(page.locator('.cartao.acompanhando')).toContainText('Vereador 2024 · Florianópolis')
+  await expect(page.locator('.fav')).toContainText('GEMADA')
+  await page.locator('.fav[data-cand]').click()
+  await expect(page.locator('.detalhe .det-cabeca h2')).toHaveText('GEMADA')
+})
