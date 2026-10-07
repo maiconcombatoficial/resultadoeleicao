@@ -4,12 +4,12 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { icone } from './icones.js?v=202610082100'
-import { calcularVagas } from './vagas.js?v=202610082100'
-import { chanceDe, NIVEIS } from './chances.js?v=202610082100'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610082100'
-import { FLORIPA } from './floripa.js?v=202610082100'
-import { corPartido, corTexto } from './cores.js?v=202610082100'
+import { icone } from './icones.js?v=202610082200'
+import { calcularVagas } from './vagas.js?v=202610082200'
+import { chanceDe, NIVEIS } from './chances.js?v=202610082200'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610082200'
+import { FLORIPA } from './floripa.js?v=202610082200'
+import { corPartido, corTexto } from './cores.js?v=202610082200'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -1951,6 +1951,7 @@ conteudo.addEventListener('click', (ev) => {
   if (h('[data-h22-mv]')) return ((H22.mv = h('[data-h22-mv]').dataset.h22Mv), (H22.pfTodos = false), renderizar())
   if (tratarPrefeitos(h)) return
   if (tratarCamaras(h)) return
+  if (tratarPerfil(h)) return
   if (h('[data-h22-vis]')) return ((X.vis = h('[data-h22-vis]').dataset.h22Vis), (X.verGrupos = false), renderizar())
   if (h('[data-h22-ord]')) return ((X.ordAbst = h('[data-h22-ord]').dataset.h22Ord), renderizar())
   if (h('[data-abst-grupo]')) return ((X.abstGrupo = h('[data-abst-grupo]').dataset.abstGrupo), (X.abstTodos = false), renderizar())
@@ -2115,6 +2116,7 @@ conteudo.addEventListener('click', async (ev) => {
 conteudo.addEventListener('change', (ev) => {
   if (ev.target.dataset?.pref === '2022') definirMostrar2022(ev.target.checked)
   if (ev.target.id === 'pf-assoc') ((H22.pfAssoc = ev.target.value), (H22.pfTodos = false), renderizar())
+  if (ev.target.id === 'perf-partido') ((H22.perfPartido = ev.target.value), renderizar())
 })
 
 conteudo.addEventListener('input', (ev) => {
@@ -4796,7 +4798,7 @@ function renderLocal(X, el) {
     const cor = corPartido(n.partido)
     return `<li class="h22-cand ${X.foco === nr ? 'foco' : ''}" style="${estiloCor(cor)}" data-h22-foco="${nr}">
       <div class="cand-linha"><span class="pos">${i + 1}º</span><span class="cand-nome">${esc(n.nome)}</span> ${n.partido ? pill(n.partido) : ''} ${n.c && el.situ ? el.situ(n.c) : ''}</div>
-      <div class="cand-meta">${fmt.format(v)} votos · ${fmtPct.format(pctDe(v, ag.validos))}% dos válidos${n.c ? ` · em SC: ${fmt.format(n.c.votos)}` : ''}</div></li>`
+      <div class="cand-meta">${fmt.format(v)} votos · ${fmtPct.format(pctDe(v, ag.validos))}% dos válidos${n.c ? ` · em SC: ${fmt.format(n.c.votos)}` : ''}</div>${n.c?.sq && ehMunicipal(el.cargo) ? linhaPerfil(el.ano, n.c.sq) : ''}</li>`
   }).join('')
   const linhasGrupo = ag.grupos
     .map((g) => {
@@ -4869,7 +4871,7 @@ const seletorMunicipal = () =>
     .filter(([k]) => k === 'votos' || k === 'prefeitos' || MV_PRONTAS.has(k))
     .map(([k, rot]) => `<button type="button" data-h22-mv="${k}" aria-pressed="${(H22.mv || 'votos') === k}">${rot}</button>`)
     .join('')}</div>`
-const MV_PRONTAS = new Set(['camaras'])
+const MV_PRONTAS = new Set(['camaras', 'perfil'])
 
 function dadosPrefeitos(ano) {
   const M = arquivoAno(`dados${ano}/municipal.json`)
@@ -4962,6 +4964,120 @@ function renderPrefeitos(ano) {
       <p class="nota">Toque num município para ver o resultado por zona, bairro, local e seção. Fonte: TSE (resultado ${ano}; reeleição pelo nome do prefeito de ${ano - 4} e pelo cadastro de candidatos).</p>
     </section>`
 }
+// 👤 Perfil dos candidatos (consulta_cand e bem_candidato do TSE, em dados<ano>/perfil.json)
+const curto = (s) => String(s || '').toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase()).replace(/\b(De|Da|Do|Das|Dos|E)\b/g, (m) => m.toLowerCase())
+const fmtReais = (v) => (v >= 1e6 ? `R$ ${fmtDec(v / 1e6)} mi` : v >= 1e3 ? `R$ ${fmt.format(Math.round(v / 1e3))} mil` : `R$ ${fmt.format(Math.round(v))}`)
+function linhaPerfil(ano, sq) {
+  const P = arquivoAno(`dados${ano}/perfil.json`)
+  const x = P.valor?.c[sq]
+  if (!x) return ''
+  const d = P.valor.dic
+  return `<div class="cand-meta perfil-linha">👤 ${[x[0] ? `${x[0]} anos` : '', curto(d.g[x[1]]), curto(d.i[x[3]]), curto(d.o[x[4]]), x[6] ? `bens ${fmtReais(x[6])}` : 'sem bens declarados'].filter(Boolean).map(esc).join(' · ')}</div>`
+}
+const FAIXAS = [[16, 29, 'até 29'], [30, 39, '30 a 39'], [40, 49, '40 a 49'], [50, 59, '50 a 59'], [60, 200, '60 ou mais']]
+const mediana = (v) => { const a = [...v].sort((x, y) => x - y); return a.length ? (a.length % 2 ? a[(a.length - 1) / 2] : (a[a.length / 2 - 1] + a[a.length / 2]) / 2) : 0 }
+function renderPerfil(ano, j) {
+  const P = arquivoAno(`dados${ano}/perfil.json`)
+  if (!P.valor) return P.erro ? `<section class="cartao vazio">O perfil dos candidatos de ${ano} ainda não está no app.</section>` : esqueleto(`Carregando o perfil dos candidatos de ${ano}…`)
+  const d = P.valor.dic
+  const fem = d.g.indexOf('FEMININO')
+  const cargo = H22.pfCargo || 13
+  const grupo = H22.pfGrupo || 'eleitos'
+  const cd = H22.local?.cd || null
+  const partido = H22.perfPartido || ''
+  const el = j.eleicoes.find((e) => e.turno === 1 && e.cargo === cargo)
+  if (!el) return ''
+  const final = cargo === 11 ? j.eleicoes.find((e) => e.turno === 2 && e.cargo === 11) : null
+  const eleitoSq = new Set([...el.candidatos, ...(final?.candidatos || [])].filter((c) => /^ELEITO/.test(c.sit)).map((c) => c.sq))
+  const base = el.candidatos.filter((c) => (!cd || c.cd === cd) && P.valor.c[c.sq])
+  const cands = base.filter((c) => (grupo === 'todos' || eleitoSq.has(c.sq)) && (!partido || c.partido === partido))
+  const xs = cands.map((c) => P.valor.c[c.sq])
+  const n = xs.length || 1
+  const conta = (i) => { const m = new Map(); for (const x of xs) m.set(x[i], (m.get(x[i]) || 0) + 1); return [...m.entries()].sort((a, b) => b[1] - a[1]) }
+  const barras = (lista, rot) => `<div class="pc-barras">${lista
+    .map(([k, v]) => `<div class="pc-b"><span>${esc(rot(k))}</span><span class="pc-tr"><span style="width:${(100 * v) / n}%"></span></span><strong>${fmtPct.format((100 * v) / n)}%</strong><small>${fmt.format(v)}</small></div>`)
+    .join('')}</div>`
+  const idades = xs.map((x) => x[0]).filter(Boolean)
+  const faixas = FAIXAS.map(([a, b, r]) => [r, idades.filter((i) => i >= a && i <= b).length])
+  const bens = xs.map((x) => x[6])
+  const mulheres = xs.filter((x) => x[1] === fem).length
+  // mulheres: candidatas × eleitas (mesmo recorte)
+  const recorte = base.filter((c) => !partido || c.partido === partido)
+  const fCand = recorte.filter((c) => P.valor.c[c.sq][1] === fem).length
+  const fEl = recorte.filter((c) => eleitoSq.has(c.sq) && P.valor.c[c.sq][1] === fem).length
+  const nEl = recorte.filter((c) => eleitoSq.has(c.sq)).length
+  // por partido
+  const porP = new Map()
+  for (const c of base) {
+    const g = porP.get(c.partido) || { cand: 0, el: 0, fEl: 0, fCand: 0, idades: [], bens: [] }
+    const x = P.valor.c[c.sq]
+    g.cand++
+    if (x[1] === fem) g.fCand++
+    if (eleitoSq.has(c.sq)) {
+      g.el++
+      if (x[1] === fem) g.fEl++
+      if (x[0]) g.idades.push(x[0])
+      g.bens.push(x[6])
+    }
+    porP.set(c.partido, g)
+  }
+  const tab = [...porP.entries()].sort((a, b) => b[1].el - a[1].el || b[1].cand - a[1].cand)
+  const nomeCargo = cargo === 11 ? 'Prefeito' : 'Vereador'
+  const onde = cd ? NOME_MUN.get(cd) : 'SC'
+  const rotGrupo = grupo === 'todos' ? 'candidatos' : 'eleitos'
+  H22.csvPerf = {
+    nome: `perfil-${nomeArquivo(nomeCargo)}-${nomeArquivo(onde)}-${ano}.csv`,
+    cab: ['Partido', 'Candidatos', 'Eleitos', 'Candidatas mulheres', 'Eleitas mulheres', '% mulheres entre os eleitos', 'Idade média dos eleitos', 'Mediana de bens dos eleitos (R$)'],
+    linhas: tab.map(([p, g]) => [p, g.cand, g.el, g.fCand, g.fEl, g.el ? pctDe(g.fEl, g.el) : '', g.idades.length ? Math.round(g.idades.reduce((a, b) => a + b, 0) / g.idades.length) : '', g.el ? Math.round(mediana(g.bens)) : '']),
+  }
+  const card = {
+    chapeu: `ELEIÇÕES ${ano} · ${String(onde).toUpperCase()}`, nome: `Perfil dos ${rotGrupo}`, cor: '#7a3fb0', sub: `${nomeCargo}${partido ? ` · ${partido}` : ''} · ${fmt.format(xs.length)} ${rotGrupo}`,
+    titulo: 'Quem são', subtitulo: `${fmtPct.format(pctDe(mulheres, n))}% mulheres · idade média ${idades.length ? Math.round(idades.reduce((a, b) => a + b, 0) / idades.length) : '—'} anos`, fonte: `Fonte: TSE · candidaturas ${ano} (dados declarados)`,
+    tiles: [
+      { rot: 'Mulheres', valor: `${fmtPct.format(pctDe(mulheres, n))}%`, sub: `${fmt.format(mulheres)} de ${fmt.format(xs.length)}`, cor: '#c2185b' },
+      { rot: 'Idade média', valor: idades.length ? `${Math.round(idades.reduce((a, b) => a + b, 0) / idades.length)} anos` : '—', sub: `de ${Math.min(...idades)} a ${Math.max(...idades)} anos` },
+      { rot: 'Superior completo', valor: `${fmtPct.format(pctDe(xs.filter((x) => d.i[x[3]] === 'SUPERIOR COMPLETO').length, n))}%` },
+      { rot: 'Bens (mediana)', valor: fmtReais(mediana(bens)), sub: `${fmtPct.format(pctDe(bens.filter((b) => !b).length, n))}% sem bens declarados` },
+    ],
+    linhas: conta(4).slice(0, 4).map(([k, v]) => ({ nome: curto(d.o[k]), extra: 'ocupação', valor: `${fmtPct.format((100 * v) / n)}%`, frac: v / n })),
+  }
+  const partidosOpc = [...porP.keys()].sort()
+  return `<section class="cartao perfil"><h3>👤 Perfil dos ${rotGrupo} · ${nomeCargo} · ${esc(onde)} · ${ano}</h3>
+      <div class="segmentado" role="group" aria-label="Cargo"><button type="button" data-perf-cargo="13" aria-pressed="${cargo === 13}">Vereadores</button><button type="button" data-perf-cargo="11" aria-pressed="${cargo === 11}">Prefeitos</button></div>
+      <div class="segmentado" role="group" aria-label="Quem"><button type="button" data-perf-grupo="eleitos" aria-pressed="${grupo === 'eleitos'}">Eleitos</button><button type="button" data-perf-grupo="todos" aria-pressed="${grupo === 'todos'}">Todos os candidatos</button></div>
+      <select id="perf-partido" class="pf-assoc" aria-label="Partido"><option value="">Todos os partidos</option>${partidosOpc.map((p) => `<option value="${esc(p)}" ${p === partido ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select>
+      <div class="calc-num">
+        <div><span>${grupo === 'todos' ? 'Candidatos' : 'Eleitos'}</span><strong>${fmt.format(xs.length)}</strong></div>
+        <div><span>Mulheres</span><strong>${fmtPct.format(pctDe(mulheres, n))}%</strong><small>${fmt.format(mulheres)}</small></div>
+        <div><span>Idade média</span><strong>${idades.length ? Math.round(idades.reduce((a, b) => a + b, 0) / idades.length) : '—'}</strong><small>anos</small></div>
+        <div><span>Bens (mediana)</span><strong>${fmtReais(mediana(bens))}</strong><small>${fmtPct.format(pctDe(bens.filter((b) => !b).length, n))}% sem bens</small></div>
+      </div>
+      <p class="var-resumo">Mulheres: <strong>${fmtPct.format(pctDe(fCand, recorte.length))}%</strong> das candidaturas e <strong>${fmtPct.format(pctDe(fEl, nEl))}%</strong> dos eleitos (${fmt.format(fEl)} de ${fmt.format(nEl)}).</p>
+      <h4>Idade</h4>${barras(faixas, (k) => k)}
+      <h4>Cor/raça</h4>${barras(conta(2), (k) => curto(d.r[k]))}
+      <h4>Escolaridade</h4>${barras(conta(3), (k) => curto(d.i[k]))}
+      <h4>Ocupações mais comuns</h4>${barras(conta(4).slice(0, 10), (k) => curto(d.o[k]))}
+      <div class="exportar">${botaoCard(`perf-${ano}`, card)}${botaoLink()}</div>
+    </section>
+    <section class="cartao perfil"><h3>Por partido · ${nomeCargo} · ${esc(onde)}</h3>
+      <table class="tabela"><thead><tr><th>Partido</th><th class="dir">Eleitos</th><th class="dir">Mulheres eleitas</th><th class="dir">Idade média</th></tr></thead><tbody>${tab
+        .filter(([, g]) => g.el || grupo === 'todos')
+        .map(([p, g]) => `<tr style="${estiloCor(corPartido(p))}"><td>${pill(p)}<div class="cand-meta">${fmt.format(g.cand)} candidatos · bens (mediana) ${fmtReais(mediana(g.bens))}</div></td><td class="dir">${g.el}</td><td class="dir">${g.el ? `${fmtPct.format(pctDe(g.fEl, g.el))}%` : '—'}<div class="cand-meta">${g.fEl} de ${g.el}</div></td><td class="dir">${g.idades.length ? Math.round(g.idades.reduce((a, b) => a + b, 0) / g.idades.length) : '—'}</td></tr>`)
+        .join('')}</tbody></table>
+      <div class="exportar"><button type="button" class="botao secundario" data-perf-csv>${icone('baixar')} Planilha (CSV)</button><button type="button" class="botao secundario" data-perf-xlsx>${icone('baixar')} Excel</button></div>
+      <p class="nota">Dados declarados pelos candidatos ao TSE no registro da candidatura (idade no dia da eleição, gênero, cor/raça, escolaridade, ocupação e bens). Escolha um município acima para ver o perfil só dele.</p>
+    </section>`
+}
+function tratarPerfil(h) {
+  const c = h('[data-perf-cargo]')
+  if (c) return ((H22.pfCargo = Number(c.dataset.perfCargo)), (H22.perfPartido = ''), renderizar(), true)
+  const g = h('[data-perf-grupo]')
+  if (g) return ((H22.pfGrupo = g.dataset.perfGrupo), renderizar(), true)
+  if (h('[data-perf-csv]') && H22.csvPerf) return (baixarCSV(H22.csvPerf), true)
+  if (h('[data-perf-xlsx]') && H22.csvPerf) return (baixarExcel(H22.csvPerf.nome.replace(/\.csv$/, '.xlsx'), [{ aba: 'Perfil por partido', ...H22.csvPerf }], h('[data-perf-xlsx]')), true)
+  return false
+}
+
 // Ficha da cidade num ano municipal: prefeito eleito e adversários, câmara, comparecimento e a eleição anterior
 function fichaCidadeMunicipal(ano, cd) {
   const M = dadosPrefeitos(ano)
@@ -5320,6 +5436,7 @@ function render2022() {
     return `<li class="h22-cand" style="${estiloCor(cor)}" ${a ? attrCand(a.c, a.aba.id, UF) : ''}>
       <div class="cand-linha"><span class="pos">${municipal && !H22.local ? el.candidatos.indexOf(c) + 1 : c.pos}º</span><span class="cand-nome">${esc(c.nome)}</span> ${pill(c.partido)} ${situ2022(c.sit)}</div>
       <div class="cand-meta">${fmt.format(c.votos)} votos${municipal && !H22.local ? ` · ${esc(NOME_MUN.get(c.cd) || '')}` : ` · ${fmtPct.format(pctDe(c.votos, el.validos))}%`}${c.fed ? ` · ${esc(c.fed)}` : ''}</div>
+      ${municipal ? linhaPerfil(ano, c.sq) : ''}
       <div class="cand-meta">${st26(c)}</div>
     </li>`
   }
@@ -5368,7 +5485,7 @@ function render2022() {
       ${seletorLocal(H22)}
       <p class="nota">${fmt.format(el.validos)} votos nominais válidos · ${el.candidatos.length} candidatos${prop && el.vagas ? ` · ${el.vagas} vagas` : ''}.${prop && el.qe ? ` <strong>📐 Quociente eleitoral de ${ano}: ${fmt.format(el.qe)}</strong> (${fmt.format(el.validosTotais)} válidos com legenda ÷ ${el.vagas}).` : ''} Toque num candidato que concorre em 2026 para abrir a ficha atual.</p>
     </section>
-    ${municipal && H22.mv === 'prefeitos' ? renderPrefeitos(ano) : municipal && H22.mv === 'camaras' ? renderCamaras(ano) : H22.local ? (municipal ? fichaCidadeMunicipal(ano, H22.local.cd) : '') + renderLocal(H22, el) : `${abstSC(H22, elEstado, ano)}<section class="cartao"><h3>${municipal && !H22.local ? `Mais votados de SC em ${ano} (${esc(el.nome)}) e onde estão em 2026` : prop ? `Eleitos em ${ano} (${eleitos.length}) e onde estão em 2026` : `Principais candidatos de ${ano} e onde estão em 2026`}</h3>
+    ${municipal && H22.mv === 'prefeitos' ? renderPrefeitos(ano) : municipal && H22.mv === 'camaras' ? renderCamaras(ano) : municipal && H22.mv === 'perfil' ? renderPerfil(ano, j) : H22.local ? (municipal ? fichaCidadeMunicipal(ano, H22.local.cd) : '') + renderLocal(H22, el) : `${abstSC(H22, elEstado, ano)}<section class="cartao"><h3>${municipal && !H22.local ? `Mais votados de SC em ${ano} (${esc(el.nome)}) e onde estão em 2026` : prop ? `Eleitos em ${ano} (${eleitos.length}) e onde estão em 2026` : `Principais candidatos de ${ano} e onde estão em 2026`}</h3>
       ${municipal && !H22.local ? '<p class="nota">Escolha um município acima para ver os candidatos dele e os votos por zona, bairro, local e seção.</p>' : ''}
       <ul class="h22-lista">${destaque.map(cartaoCand).join('')}</ul></section>
     ${partidos}
