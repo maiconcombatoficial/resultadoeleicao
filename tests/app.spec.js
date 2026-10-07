@@ -417,3 +417,39 @@ test('modo telão: abre pelo link, passa as telas e sai com Esc', async ({ page 
   await page.goto('/#telao')
   await expect(page.locator('.telao .tv-topo h2')).toContainText('Governador')
 })
+
+test('abstenção, brancos e nulos: SC por município, bairros e seção', async ({ page }) => {
+  // SC inteira (2024): lista por município e por associação
+  await page.goto('/#h2022?ano=2024&e=t1-c13')
+  const sc = page.locator('.cartao.abst-sc')
+  await expect(sc).toContainText('Abstenção')
+  await expect(sc.locator('.abst-tab tbody tr').first()).toBeVisible()
+  await sc.locator('[data-abst-grupo="assoc"]').click()
+  await expect(page.locator('.cartao.abst-sc .abst-tab')).toContainText('GRANFPOLIS')
+  await page.locator('.cartao.abst-sc [data-abst-grupo="mun"]').click()
+  // tocar num município abre o explorador já no modo abstenção
+  await page.locator('.cartao.abst-sc tr[data-h22-mun]').first().click()
+  await expect(page).toHaveURL(/v=abst/)
+  await expect(page.locator('.h22-tot')).toContainText('Eleitores aptos')
+  // Florianópolis por bairro, depois uma seção: aptos e comparecimento do TSE
+  await page.goto('about:blank')
+  await page.goto('/#h2022?ano=2024&e=t1-c13&m=81051&v=abst')
+  await expect(page.locator('.h22-tot')).toContainText('Abstenção')
+  await page.locator('[data-h22-grupo="bairro"]').click()
+  await expect(page.locator('.abst-tab tbody tr').first()).toContainText('%')
+  await page.locator('[data-h22-ord="br"]').click()
+  await page.locator('[data-h22-grupo="secao"]').click()
+  await page.locator('.abst-tab tr[data-h22-secao]').first().click()
+  const tot = page.locator('.h22-tot')
+  const n = async (rot) => Number((await tot.locator('div', { hasText: rot }).locator('strong').textContent()).replace(/\D/g, ''))
+  const zs = new URL(page.url()).hash.match(/s=([0-9-]+)/)[1]
+  const arq = await page.evaluate(() => fetch('dados2024/secoes/81051.json').then((r) => r.json()))
+  expect([await n('Eleitores aptos'), await n('Comparecimento')]).toEqual(arq.ap.t1[zs])
+  const csv = await baixar(page, page.locator('[data-csv-local]'))
+  expect(csv.nome).toMatch(/abstencao-brancos-nulos/)
+  // Bairros 2026: o mesmo modo
+  await page.goto('about:blank')
+  await page.goto('/#bairros?m=81051&v=abst')
+  await expect(page.locator('.h22-tot')).toContainText('Eleitores aptos')
+  await expect(page.locator('.abst-tab tbody tr').first()).toBeVisible()
+})

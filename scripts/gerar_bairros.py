@@ -41,6 +41,8 @@ if a.ano == 2026:
                 novos.add(el)
             arq['votos'].setdefault(el, {})[zs] = arr
         comp[f'{cd}|{zs}'] = [o['aptos'], o['comp']]
+        # aptos e comparecimento da seção (abstenção no explorador)
+        arq.setdefault('ap', {}).setdefault(f't{a.turno}', {})[zs] = [o['aptos'], o['comp']]
     json.dump(comp, open(os.path.join(CACHE, f'comparecimento-t{a.turno}.json'), 'w'))
     log('boletins', len(comp), 'eleições', sorted(novos))
 else:
