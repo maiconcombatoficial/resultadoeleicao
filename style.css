@@ -1223,3 +1223,5 @@ html.com-telao { overflow: hidden; }
 .hist-lista li.clicavel, .fc-cand.clicavel, .h22-cand.clicavel { cursor: pointer; }
 .hist-lista li.clicavel:hover .hist-info strong, .fc-cand.clicavel:hover .fc-nome strong, .h22-cand.clicavel:hover .cand-nome { text-decoration: underline; }
 .link-ficha { color: var(--primaria); font-weight: 600; }
+.busca-cand .segmentado { margin-top: 8px; }
+.busca-cand #h22-busca { width: 100%; }
