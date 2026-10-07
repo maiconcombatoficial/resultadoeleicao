@@ -582,7 +582,8 @@ test('compartilhar as urnas da zona e do bairro', async ({ page }) => {
   const img = await baixar(page, page.locator('[data-card^="urnas-81051|13"]').first())
   expect(img.nome).toMatch(/urnas.*13.*zona.*\.png$/)
   expect(img.bytes).toBeGreaterThan(30_000)
-  await expect(page.locator('[data-urnas-car^="81051|13"]').first()).toContainText('Carrossel')
+  // a zona tem mais de 160 urnas (mais de 20 imagens): só PDF
+  await expect(page.locator('.zona-urnas [data-urnas-pdf^="81051|13"]').first()).toContainText('PDF com todas')
   // bairro Campeche na 13ª zona: imagem e carrossel
   await card.locator('[data-bai-zona^="81051|13"]').click()
   await page.locator('[data-bai-bairro-urnas="81051|13|Campeche"]').click()
