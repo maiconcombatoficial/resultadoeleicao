@@ -453,3 +453,35 @@ test('abstenção, brancos e nulos: SC por município, bairros e seção', async
   await expect(page.locator('.h22-tot')).toContainText('Eleitores aptos')
   await expect(page.locator('.abst-tab tbody tr').first()).toBeVisible()
 })
+
+test('urna por urna: todas as seções do candidato em SC', async ({ page }) => {
+  await page.goto('/#depest')
+  await page.locator('[data-cand]').first().click()
+  const u = page.locator('.cartao.urnas')
+  await expect(u).toBeVisible()
+  await expect(u.locator('[data-urnas-carregar], .urnas-tab').first()).toBeVisible()
+  if (await u.locator('[data-urnas-carregar]').count()) await u.locator('[data-urnas-carregar]').click()
+  await expect(page.locator('.cartao.urnas .urnas-tab tbody tr').first()).toBeVisible({ timeout: 30_000 })
+  await expect(page.locator('.cartao.urnas [data-urnas-csv]')).toBeEnabled({ timeout: 60_000 })
+  // soma de todas as urnas = votos do candidato no arquivo por município
+  const r = await page.evaluate(async () => {
+    const t = document.querySelector('.cartao.urnas .nota strong:nth-of-type(2)').textContent
+    return Number(t.replace(/\D/g, ''))
+  })
+  const nome = (await page.locator('.det-id h2').textContent()).trim()
+  const total = await page.evaluate(async (nm) => {
+    const num = [...document.querySelectorAll('.det-id .cand-meta, .det-id')].map((e) => e.textContent).join(' ').match(/nº\s*(\d+)/)?.[1]
+    const j = await fetch('dados2026/municipios-t1-c7.json').then((x) => x.json())
+    return Object.values(j.c[num] || {}).reduce((a, v) => a + v, 0)
+  }, nome)
+  expect(r).toBe(total)
+  // filtro, ordem, planilha e abrir a urna no explorador
+  await page.locator('#urnas-busca').fill('florianopolis')
+  await expect(page.locator('.cartao.urnas .urnas-tab tbody tr').first()).toContainText('Florianópolis')
+  await page.locator('[data-urnas-ord="p"]').click()
+  const csv = await baixar(page, page.locator('[data-urnas-csv]'))
+  expect(csv.nome).toMatch(/urna-por-urna/)
+  await page.locator('.cartao.urnas tr[data-urnas-ir]').first().click()
+  await expect(page.locator('[data-aba="bairros"][aria-selected="true"]')).toBeVisible()
+  await expect(page.locator('.migalhas')).toContainText('Seção')
+})

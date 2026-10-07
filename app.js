@@ -4,12 +4,12 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { icone } from './icones.js?v=202610081100'
-import { calcularVagas } from './vagas.js?v=202610081100'
-import { chanceDe, NIVEIS } from './chances.js?v=202610081100'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610081100'
-import { FLORIPA } from './floripa.js?v=202610081100'
-import { corPartido, corTexto } from './cores.js?v=202610081100'
+import { icone } from './icones.js?v=202610081200'
+import { calcularVagas } from './vagas.js?v=202610081200'
+import { chanceDe, NIVEIS } from './chances.js?v=202610081200'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610081200'
+import { FLORIPA } from './floripa.js?v=202610081200'
+import { corPartido, corTexto } from './cores.js?v=202610081200'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -3310,7 +3310,7 @@ function blocoDisputa(d, c, aba) {
 function renderDetalhe() {
   const det = estado.detalhe
   if (!det) return
-  const idFoco = ['det-busca-mun', 'comp-busca', 'det-busca-bairro-mun'].includes(document.activeElement?.id) ? document.activeElement.id : null
+  const idFoco = ['det-busca-mun', 'comp-busca', 'det-busca-bairro-mun', 'urnas-busca'].includes(document.activeElement?.id) ? document.activeElement.id : null
   const focoBusca = idFoco ? document.activeElement.selectionStart : null
   renderDetalheConteudo()
   sincronizarLink()
@@ -3411,6 +3411,7 @@ function renderDetalheConteudo() {
     ${secaoHistorico(c, d, aba)}
     ${secaoAnalise(det, c, aba, d)}
     ${secaoBairros(det, c, aba)}
+    ${secaoUrnas(det, c, aba)}
     ${secaoMapaFicha(det, c, aba)}
     ${secaoMetas(det, c, aba)}
     <section class="cartao"><h3>${c.eleito || d.tseDefinido ? 'Situação oficial (TSE)' : 'Chance de reverter'}</h3>${textoChance(d, c, aba)}</section>
@@ -4088,6 +4089,7 @@ detalheEl.addEventListener('click', (ev) => {
     return gerarPDF([cmp, ...det.comp.dif.export.carrossel()].filter(Boolean), `${cmp?.nome || 'comparacao'}`, cdPdf)
   }
   if (det?.metas && tratarMetas(ev)) return
+  if (det && tratarUrnas(ev, det)) return
   const ccBtn = ev.target.closest('[data-comp-cargo]')
   if (ccBtn) return ((det.compCargo = ccBtn.dataset.compCargo || null), (det.buscaComp = ''), renderDetalhe())
   const D = !det?.escolhendo && det?.comp?.dif
@@ -4240,6 +4242,11 @@ function irParaBairro(det, cd, bairro, tipo, chave) {
   else ir()
 }
 detalheEl.addEventListener('input', (ev) => {
+  if (ev.target.id === 'urnas-busca' && estado.detalhe?.urnas) {
+    estado.detalhe.urnas.busca = ev.target.value
+    estado.detalhe.urnas.todos = false
+    return renderDetalhe()
+  }
   if (ev.target.id === 'det-busca-bairro-mun' && estado.detalhe?.comp?.dif && !estado.detalhe.escolhendo) {
     estado.detalhe.comp.dif.busca = ev.target.value
     return renderDetalhe()
@@ -5975,6 +5982,145 @@ function coordsLocais(re) {
 }
 
 // mapa da ficha: municípios (SC) ou locais de votação (lugar escolhido no cartão "Onde foi mais votado")
+/* ---------------- urna por urna (ficha) ---------------- */
+
+// Todas as seções (urnas) de SC onde o candidato teve voto: lê os arquivos de seções dos municípios em que
+// ele aparece (dados2026/municipios-<eleição>.json) e lista seção a seção, com local, bairro, % e posição.
+const URNAS = new Map() // `${eleição}|${número}` → { total, feitos, linhas, secoes, carregando }
+function carregarUrnas(k, elId, nr, cds, re) {
+  const U = { total: cds.length, feitos: 0, linhas: [], secoes: 0, carregando: true, ctrl: new AbortController() }
+  URNAS.set(k, U)
+  const prop = [6, 7, 13].includes(Number(elId.split('-c')[1]))
+  const turno = turnoDe(elId)
+  let ultimo = 0
+  emLotes(cds, 6, async (cd) => {
+    try {
+      const arq = await arquivoAno(`dados2026/secoes/${cd}.json`, () => {})
+      const ap = arq.ap?.[`t${turno}`] || {}
+      for (const [zs, arr] of Object.entries(arq.votos[elId] || {})) {
+        U.secoes++
+        let v = 0, val = 0, br = 0, nu = 0
+        const nominais = []
+        for (let i = 0; i < arr.length; i += 2) {
+          const n = arr[i], q = arr[i + 1]
+          if (n === 95) { br += q; continue }
+          if (n === 96 || n === 97) { nu += q; continue }
+          val += q
+          if (n === nr) v = q
+          if (!prop || n > 99) nominais.push(q)
+        }
+        if (!v) continue
+        const loc = arq.secoes[zs]
+        const [nomeLoc, end] = arq.locais[loc] || ['', '']
+        U.linhas.push({ cd, zs, z: Number(zs.split('-')[0]), s: Number(zs.split('-')[1]), loc, local: tituloLocal(nomeLoc || `Local ${loc}`), end, bairro: bairroDoLocal(arq, loc), v, val, pos: 1 + nominais.filter((q) => q > v).length, n: nominais.length, ap: ap[zs] || null })
+      }
+    } catch {}
+    U.feitos++
+    if (Date.now() - ultimo > 700) ((ultimo = Date.now()), re())
+  }, U.ctrl.signal).finally(() => {
+    U.carregando = false
+    re()
+  })
+}
+
+function secaoUrnas(det, c, aba) {
+  if (det.abr !== UF || !aba?.cargo || DEMO) return ''
+  const re = () => estado.detalhe === det && renderDetalhe()
+  const elId = eleicaoDoCargo(aba.cargo)
+  const nr = Number(c.numero)
+  const M = arquivoAno(`dados2026/municipios-${elId}.json`, re)
+  if (!M.valor) return M.erro ? '' : `<section class="cartao urnas"><h3>🗳️ Urna por urna</h3><p class="nota">Carregando…</p></section>`
+  const meus = M.valor.c[nr] || {}
+  const cds = Object.keys(meus).filter((cd) => meus[cd] > 0).sort((a, b) => meus[b] - meus[a])
+  if (!cds.length) return ''
+  const k = `${elId}|${nr}`
+  const U = URNAS.get(k)
+  const E = (det.urnas ??= { ord: 'v', busca: '', todos: false })
+  const cor = corPartido(c.partido)
+  if (!U) {
+    if (cds.length <= 20) carregarUrnas(k, elId, nr, cds, re)
+    else
+      return `<section class="cartao urnas" style="${estiloCor(cor)}"><h3>🗳️ Urna por urna</h3>
+        <p>Todas as seções eleitorais (urnas) onde <strong>${esc(c.nome)}</strong> teve voto em SC, com o local de votação, o bairro, os votos, o % na urna e a posição.</p>
+        <button type="button" class="botao" data-urnas-carregar>🗳️ Ver as urnas dos ${fmt.format(cds.length)} municípios</button>
+        <p class="nota">Lê os boletins de urna dos ${fmt.format(cds.length)} municípios onde teve voto (pode levar alguns segundos).</p></section>`
+  }
+  const V = URNAS.get(k)
+  const termo = semAcento(E.busca.trim())
+  let ls = V.linhas
+  if (termo) ls = ls.filter((u) => semAcento(`${NOME_MUN.get(u.cd) || ''} ${u.bairro} ${u.local} ${u.z}ª zona seção ${u.s}`).includes(termo))
+  const ord = { v: (a, b) => b.v - a.v, p: (a, b) => b.v / b.val - a.v / a.val || b.v - a.v, s: (a, b) => (NOME_MUN.get(a.cd) || '').localeCompare(NOME_MUN.get(b.cd) || '', 'pt-BR') || a.z - b.z || a.s - b.s }
+  ls = [...ls].sort(ord[E.ord] || ord.v)
+  const soma = ls.reduce((a, u) => a + u.v, 0)
+  const primeiro = V.linhas.filter((u) => u.pos === 1).length
+  const max = E.todos ? ls.length : 50
+  const prog = V.carregando ? `<div class="progresso mini"><div class="progresso-barra" style="width:${(100 * V.feitos) / V.total}%"></div></div><p class="nota">Lendo os boletins: ${V.feitos} de ${V.total} municípios…</p>` : ''
+  const nomeArq = `${nomeArquivo(c.nome)}-urna-por-urna-${nomeArquivo(ROTULO_26[elId] || elId)}`
+  det.urnasExport = {
+    nome: `${nomeArq}.csv`,
+    cab: ['Município', 'Zona', 'Seção', 'Local de votação', 'Endereço', 'Bairro', 'Votos', 'Votos válidos na urna', '% na urna', 'Posição na urna', 'Candidatos com voto', 'Aptos', 'Comparecimento'],
+    linhas: ls.map((u) => [NOME_MUN.get(u.cd) || u.cd, u.z, u.s, u.local, u.end, u.bairro, u.v, u.val, pctDe(u.v, u.val), u.pos, u.n, u.ap ? u.ap[0] : '', u.ap ? u.ap[1] : '']),
+  }
+  const top = [...V.linhas].sort(ord.v).slice(0, 8)
+  const card = {
+    chapeu: 'APURAÇÃO 2026 · URNA POR URNA', foto: c.foto, nome: c.nome, cor, sub: `${c.partido} · nº ${c.numero} · ${ROTULO_26[elId] || ''}`,
+    titulo: 'Urnas com mais votos', subtitulo: `${fmt.format(V.linhas.length)} urnas com voto · 1º lugar em ${fmt.format(primeiro)}`,
+    total: { rot: 'Votos nas urnas de SC', valor: `${fmt.format(V.linhas.reduce((a, u) => a + u.v, 0))} votos`, sub: `em ${fmt.format(V.linhas.length)} seções` },
+    linhas: top.map((u) => ({ nome: `Seção ${u.s} · ${u.z}ª zona`, extra: `${u.local} · ${u.bairro} · ${NOME_MUN.get(u.cd) || ''}`, valor: fmt.format(u.v), dir2: `${fmtPct.format(pctDe(u.v, u.val))}% · ${u.pos}º`, frac: u.v / (top[0]?.v || 1), corBarra: cor })),
+  }
+  return `<section class="cartao urnas" style="${estiloCor(cor)}"><h3>🗳️ Urna por urna</h3>
+    ${prog}
+    <div class="calc-num">
+      <div><span>Urnas com voto</span><strong>${fmt.format(V.linhas.length)}</strong><small>de ${fmt.format(V.secoes)} nos ${fmt.format(V.feitos)} municípios</small></div>
+      <div><span>1º lugar na urna</span><strong>${fmt.format(primeiro)}</strong><small>urnas</small></div>
+      <div><span>Maior votação</span><strong>${fmt.format(top[0]?.v || 0)}</strong><small>${top[0] ? `seção ${top[0].s} · ${esc(NOME_MUN.get(top[0].cd) || '')}` : ''}</small></div>
+    </div>
+    <input id="urnas-busca" type="search" autocomplete="off" placeholder="🔎 Filtrar por município, bairro, escola, zona ou seção…" value="${esc(E.busca)}">
+    <div class="segmentado" role="group" aria-label="Ordenar"><button type="button" data-urnas-ord="v" aria-pressed="${E.ord === 'v'}">Mais votos</button><button type="button" data-urnas-ord="p" aria-pressed="${E.ord === 'p'}">Maior % na urna</button><button type="button" data-urnas-ord="s" aria-pressed="${E.ord === 's'}">Município, zona e seção</button></div>
+    <p class="nota"><strong>${fmt.format(ls.length)}</strong> urnas${termo ? ' no filtro' : ''} · <strong>${fmt.format(soma)}</strong> votos${ls.length > max ? ` · mostrando ${max}` : ''}.</p>
+    <table class="tabela urnas-tab"><thead><tr><th>Urna (seção)</th><th class="dir">Votos</th></tr></thead><tbody>${ls
+      .slice(0, max)
+      .map((u) => `<tr class="clicavel" data-urnas-ir="${esc(u.cd)}|${esc(u.zs)}|${esc(u.loc)}"><td><strong>Seção ${u.s}</strong> <span class="mudo">· ${u.z}ª zona · ${esc(NOME_MUN.get(u.cd) || u.cd)}</span>
+          <div class="cand-meta">${esc(u.local)} · ${esc(u.bairro)}</div></td>
+        <td class="dir"><strong>${fmt.format(u.v)}</strong><div class="cand-meta">${fmtPct.format(pctDe(u.v, u.val))}% · ${u.pos}º de ${u.n}</div></td></tr>`)
+      .join('')}</tbody></table>
+    ${ls.length > max ? `<button type="button" class="botao secundario" data-urnas-todos>Mostrar todas as ${fmt.format(ls.length)} urnas</button>` : ''}
+    <div class="exportar">${V.carregando ? '' : botaoCard('urnas', card)}<button type="button" class="botao secundario" data-urnas-csv ${V.carregando ? 'disabled' : ''}>${icone('baixar')} Baixar planilha (CSV)</button><button type="button" class="botao secundario" data-urnas-xlsx ${V.carregando ? 'disabled' : ''}>${icone('baixar')} Excel</button></div>
+    <p class="nota">Votos de ${esc(c.nome)} em cada seção eleitoral (boletins de urna do TSE, ${turnoDe(elId)}º turno). "% na urna" = votos ÷ votos válidos da seção; posição entre os candidatos que tiveram voto ali. Toque numa urna para abri-la no explorador da aba Bairros.</p>
+  </section>`
+}
+function tratarUrnas(ev, det) {
+  const h = (sel) => ev.target.closest(sel)
+  if (h('[data-urnas-carregar]')) {
+    const aba = ABAS.find((a) => a.id === det.aba)
+    const elId = eleicaoDoCargo(aba.cargo)
+    const c = dadosDetalhe()?.candidatos.find((x) => x.sqcand === det.sqcand)
+    const M = ARQ_ANO.get(`dados2026/municipios-${elId}.json`)?.valor
+    if (!c || !M) return true
+    const nr = Number(c.numero)
+    const meus = M.c[nr] || {}
+    carregarUrnas(`${elId}|${nr}`, elId, nr, Object.keys(meus).filter((cd) => meus[cd] > 0).sort((a, b) => meus[b] - meus[a]), () => estado.detalhe === det && renderDetalhe())
+    renderDetalhe()
+    return true
+  }
+  const E = det.urnas
+  if (!E) return false
+  const o = h('[data-urnas-ord]')
+  if (o) return ((E.ord = o.dataset.urnasOrd), renderDetalhe(), true)
+  if (h('[data-urnas-todos]')) return ((E.todos = true), renderDetalhe(), true)
+  if (h('[data-urnas-csv]') && det.urnasExport) return (baixarCSV(det.urnasExport), true)
+  if (h('[data-urnas-xlsx]') && det.urnasExport) return (baixarExcel(det.urnasExport.nome.replace(/\.csv$/, '.xlsx'), [{ aba: 'Urnas', ...det.urnasExport }], h('[data-urnas-xlsx]')), true)
+  const ir = h('[data-urnas-ir]')
+  if (ir) {
+    const [cd, zs, loc] = ir.dataset.urnasIr.split('|')
+    const aba = ABAS.find((a) => a.id === det.aba)
+    const c = dadosDetalhe()?.candidatos.find((x) => x.sqcand === det.sqcand)
+    location.hash = hashDe('bairros', { e: eleicaoDoCargo(aba.cargo), m: cd, z: zs.split('-')[0], lv: loc, s: zs, f: c?.numero })
+    return true
+  }
+  return false
+}
+
 function secaoMapaFicha(det, c, aba) {
   if (det.abr !== UF || !aba?.cargo || DEMO) return ''
   const re = () => estado.detalhe === det && renderDetalhe()

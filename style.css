@@ -1155,3 +1155,9 @@ html.com-telao { overflow: hidden; }
 .abst-ord button { font-size: 0.8rem; }
 .abst-tab td:first-child { width: 100%; }
 .abst-tab td.dir { white-space: nowrap; }
+
+/* ---------- urna por urna ---------- */
+.urnas { border-top: 6px solid var(--cor); }
+.urnas #urnas-busca { width: 100%; margin: 6px 0 8px; }
+.urnas-tab td:first-child { width: 100%; }
+.urnas-tab td.dir { white-space: nowrap; }
