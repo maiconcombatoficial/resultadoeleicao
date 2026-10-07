@@ -1202,3 +1202,19 @@ html.com-telao { overflow: hidden; }
 .perfil-linha { color: #7a3fb0; }
 @media (prefers-color-scheme: dark) { .perfil-linha { color: #c49ae8; } .pc-tr span { background: #a874d6; } }
 .perfil tr { border-left: 4px solid var(--cor, transparent); }
+
+/* ---------- Início: escolha do ano ---------- */
+.hero { background: var(--topo); color: #fff; border: 0; display: grid; gap: 10px; }
+.hero h2 { margin: 0; font-size: 1.45rem; line-height: 1.2; }
+.hero-chapeu { margin: 0; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.85; font-weight: 700; }
+.hero-sub { margin: 0; font-size: 0.9rem; opacity: 0.92; }
+.hero-anos { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 6px; scrollbar-width: thin; }
+.hero-anos button { flex: none; display: grid; gap: 1px; text-align: left; border: 1px solid rgb(255 255 255 / 35%); background: rgb(255 255 255 / 12%); color: #fff; border-radius: 12px; padding: 8px 12px; cursor: pointer; font: inherit; min-width: 84px; }
+.hero-anos button strong { font-size: 1.1rem; }
+.hero-anos button small { font-size: 0.7rem; opacity: 0.9; }
+.hero-anos button.mun { border-style: dashed; }
+.hero-anos button[aria-selected="true"] { background: #fff; color: #0b3d1f; border-color: #fff; border-style: solid; }
+.hero-anos button[aria-selected="true"] small { opacity: 1; color: #0b7a45; font-weight: 700; }
+.hero-busca { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; border-radius: 999px; padding: 10px 14px; background: #fff; color: #5f6b65; font: inherit; cursor: pointer; text-align: left; }
+.hero-busca .ico { width: 18px; height: 18px; }
+.painel-cidade { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; color: inherit; text-decoration: none; width: 100%; }
