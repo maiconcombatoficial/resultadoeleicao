@@ -1175,3 +1175,6 @@ html.com-telao { overflow: hidden; }
 .pf-tab tr { border-left: 4px solid var(--cor); }
 .pf-tab td:first-child { width: 100%; padding-left: 10px; }
 .pf-tab td.dir { white-space: nowrap; }
+.cam-tab tr { border-left: 4px solid var(--cor); }
+.cam-tab td:first-child { width: 100%; padding-left: 10px; }
+.cam-sup { margin: 8px 0; }
