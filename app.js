@@ -4,12 +4,12 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { icone } from './icones.js?v=202610091500'
-import { calcularVagas } from './vagas.js?v=202610091500'
-import { chanceDe, NIVEIS } from './chances.js?v=202610091500'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610091500'
-import { FLORIPA } from './floripa.js?v=202610091500'
-import { corPartido, corTexto } from './cores.js?v=202610091500'
+import { icone } from './icones.js?v=202610091800'
+import { calcularVagas } from './vagas.js?v=202610091800'
+import { chanceDe, NIVEIS } from './chances.js?v=202610091800'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610091800'
+import { FLORIPA } from './floripa.js?v=202610091800'
+import { corPartido, corTexto } from './cores.js?v=202610091800'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -741,6 +741,7 @@ function paramsAba() {
     if (X.foco != null) p.f = X.foco
     if (X.vis === 'abst') p.v = 'abst'
     if (a.tipo === 'h22' && H22.mv && H22.mv !== 'votos') p.mv = H22.mv
+    if (a.tipo === 'h22') Object.assign(p, { q: H22.busca.trim() || null, st: H22.buscaSit || null, cg: H22.buscaCargo || null, bsc: H22.buscaSC ? 1 : null })
   }
   return p
 }
@@ -799,7 +800,7 @@ function aplicarLink(hash = location.hash) {
     X.local = m && NOME_MUN.get(m) ? { cd: m, nm: NOME_MUN.get(m), zona: p.get('z') || null, bairro: p.get('b') || null, localVot: p.get('lv') || null, secao: p.get('s') || null } : null
     X.foco = p.get('f') != null && p.get('f') !== '' ? Number(p.get('f')) : null
     X.vis = p.get('v') === 'abst' ? 'abst' : 'votos'
-    if (aba.tipo === 'h22') H22.mv = p.get('mv') || 'votos'
+    if (aba.tipo === 'h22') Object.assign(H22, { mv: p.get('mv') || 'votos', busca: p.get('q') || '', buscaSit: p.get('st') || '', buscaCargo: p.get('cg') || null, buscaSC: p.get('bsc') === '1', buscaTodos: false })
     X.grupo = X.local?.secao ? 'secao' : X.local?.localVot ? 'secao' : X.local?.bairro || X.local?.zona ? 'local' : X.local && X.foco != null ? 'bairro' : 'zona'
   }
   if (hashDe(estado.aba.id, paramsAba()) !== antesAba || !estado.dados) {
@@ -2109,6 +2110,20 @@ conteudo.addEventListener('click', (ev) => {
   const h = (sel) => ev.target.closest(sel)
   const X = estadoLocal()
   if (h('[data-h22-mv]')) return ((H22.mv = h('[data-h22-mv]').dataset.h22Mv), (H22.pfTodos = false), renderizar())
+  // 🔎 busca de candidatos
+  if (h('[data-bc-cargo]')) return ((H22.buscaCargo = h('[data-bc-cargo]').dataset.bcCargo), (H22.buscaTodos = false), renderizar())
+  if (h('[data-bc-sit]')) return ((H22.buscaSit = h('[data-bc-sit]').dataset.bcSit), (H22.buscaTodos = false), renderizar())
+  if (h('[data-bc-sc]')) return ((H22.buscaSC = h('[data-bc-sc]').dataset.bcSc === '1'), (H22.buscaTodos = false), renderizar())
+  if (h('[data-bc-todos]')) return ((H22.buscaTodos = true), renderizar())
+  if (h('[data-bc-csv]') && H22.csvBusca) return baixarCSV(H22.csvBusca)
+  if (h('[data-bc-xlsx]') && H22.csvBusca) return baixarExcel(H22.csvBusca.nome.replace(/\.csv$/, '.xlsx'), [{ aba: 'Candidatos', ...H22.csvBusca }], h('[data-bc-xlsx]'))
+  if (h('[data-bc-ir]')) {
+    // atalho (câmara, explorador): abre a busca no cargo e na situação pedidos
+    const b = h('[data-bc-ir]').dataset
+    Object.assign(H22, { mv: 'votos', buscaCargo: b.bcIr, buscaSit: b.bcIrSit || '', buscaSC: false, buscaTodos: false, busca: '' })
+    renderizar()
+    return document.getElementById('busca-cand')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
   if (tratarPrefeitos(h)) return
   if (tratarCamaras(h)) return
   if (tratarPerfil(h)) return
@@ -2192,6 +2207,7 @@ conteudo.addEventListener('click', (ev) => {
     X.sel = h22Btn.dataset.h22
     X.busca = ''
     X.foco = null
+    if (X === H22) H22.buscaCargo = null
     if (X === B26) carregar()
     else renderizar()
     return
@@ -2298,6 +2314,7 @@ conteudo.addEventListener('input', (ev) => {
   }
   if (ev.target.id === 'h22-busca') {
     H22.busca = ev.target.value
+    H22.buscaTodos = false
     renderizar()
     return
   }
@@ -5189,7 +5206,7 @@ function renderLocal(X, el) {
     </section>
     ${X.vis === 'abst' ? listaAbstLocal(X, el, L, arq, grupo, grupos, ag) : ''}
     <section class="cartao"><h3>Mais votados aqui · ${esc(ROTULO_ELEICAO[el.id] || el.nome)}</h3>
-      <p class="nota">Toque num candidato para ver quantos votos teve em cada ${grupo === 'secao' ? 'seção' : grupo}.</p>
+      <p class="nota">Toque num candidato para ver quantos votos teve em cada ${grupo === 'secao' ? 'seção' : grupo}.${el.ano !== 2026 ? ` <button type="button" class="link-zonas leve" data-bc-ir="${el.id}">🔎 Buscar qualquer candidato (eleitos e não eleitos)</button>` : ''}</p>
       <ul class="h22-lista">${linhasRank}</ul>
       ${ranking.length > 25 && !X.verTodos ? `<button type="button" class="botao secundario" data-h22-todos>Mostrar todos (${ranking.length})</button>` : ''}
     </section>
@@ -5507,6 +5524,7 @@ function renderCamaras(ano) {
         .map((e, i) => `<tr class="clicavel" style="${estiloCor(corPartido(e[2]))}" ${attrHist(ano, 't1-c13', { sq: e[0], cd })}><td><span class="pos">${i + 1}º</span> <strong>${esc(e[1])}</strong> ${pill(e[2])}<div class="cand-meta">${e[4] === 'QP' ? 'Eleito por QP' : 'Eleito por média'} · ${fmtPct.format(pctDe(e[3], cam.val))}% dos válidos</div></td><td class="dir"><strong>${fmt.format(e[3])}</strong></td></tr>`)
         .join('')}</tbody></table>
       ${cam.sup.length ? `<details class="cam-sup"><summary>Primeiros suplentes de cada partido (${cam.sup.length})</summary><table class="tabela"><tbody>${cam.sup.map((x) => `<tr class="clicavel" ${attrHist(ano, 't1-c13', { sq: x[0], cd })}><td>${esc(x[1])} ${pill(x[2])}</td><td class="dir">${fmt.format(x[3])}</td></tr>`).join('')}</tbody></table></details>` : ''}
+      <button type="button" class="botao" data-bc-ir="t1-c13" data-bc-ir-sit="nao">🔎 Todos os candidatos a vereador (inclui os não eleitos)</button>
       <div class="exportar">${botaoCard(`cam-${ano}-${cd}`, card)}<button type="button" class="botao secundario" data-cam-csv>${icone('baixar')} Planilha (CSV)</button><button type="button" class="botao secundario" data-cam-xlsx>${icone('baixar')} Excel</button>${botaoLink()}</div>
       <p class="nota">Quociente eleitoral = votos válidos de vereador (nominais + legenda) ÷ vagas. "QP" = eleito pelo quociente partidário; "média" = nas sobras. Fonte: TSE.</p>
     </section>`
@@ -5834,8 +5852,7 @@ function render2022() {
         .join('')}</tbody></table>
       <p class="nota">Partidos mudaram de nome ou se fundiram desde ${ano}; a comparação é pela sigla.</p></section>`
   }
-  const termo = semAcento(H22.busca.trim())
-  const lista = el.candidatos.filter((c) => !termo || semAcento(`${c.nome} ${c.nomeCompleto} ${c.partido} ${c.numero}`).includes(termo))
+  const busca = !municipal || !H22.mv || H22.mv === 'votos' ? cartaoBuscaCand(ano, j) : ''
   return `<section class="cartao resumo">
       <div class="resumo-titulo"><h2>Eleições ${ano} · ${esc(el.nome)}${el.turno === 2 ? ' (2º turno)' : ''} · ${municipal && H22.local ? esc(H22.local.nm) : 'SC'}</h2><span class="selo final">Resultado oficial</span></div>
       ${municipal ? seletorMunicipal() : ''}
@@ -5843,18 +5860,55 @@ function render2022() {
       ${seletorLocal(H22)}
       <p class="nota">${fmt.format(el.validos)} votos nominais válidos · ${el.candidatos.length} candidatos${prop && el.vagas ? ` · ${el.vagas} vagas` : ''}.${prop && el.qe ? ` <strong>📐 Quociente eleitoral de ${ano}: ${fmt.format(el.qe)}</strong> (${fmt.format(el.validosTotais)} válidos com legenda ÷ ${el.vagas}).` : ''} Toque num candidato para abrir a ficha dele em ${ano}: onde foi mais votado (até a urna), mapa e histórico.</p>
     </section>
+    ${busca}
     ${municipal && H22.mv === 'prefeitos' ? renderPrefeitos(ano) : municipal && H22.mv === 'camaras' ? renderCamaras(ano) : municipal && H22.mv === 'perfil' ? renderPerfil(ano, j) : H22.local ? (municipal ? fichaCidadeMunicipal(ano, H22.local.cd) : '') + renderLocal(H22, el) : `${abstSC(H22, elEstado, ano)}<section class="cartao"><h3>${municipal && !H22.local ? `Mais votados de SC em ${ano} (${esc(el.nome)}) e onde estão em 2026` : prop ? `Eleitos em ${ano} (${eleitos.length}) e onde estão em 2026` : `Principais candidatos de ${ano} e onde estão em 2026`}</h3>
       ${municipal && !H22.local ? '<p class="nota">Escolha um município acima para ver os candidatos dele e os votos por zona, bairro, local e seção.</p>' : ''}
       <ul class="h22-lista">${destaque.map(cartaoCand).join('')}</ul></section>
     ${partidos}
-    <section class="cartao"><h3>Todos os candidatos de ${ano}${municipal && !H22.local ? ' em SC' : ''}</h3>
-      <input id="h22-busca" type="search" placeholder="Buscar por nome, partido ou número…" value="${esc(H22.busca)}" autocomplete="off">
-      <ul class="h22-lista">${lista.slice(0, termo ? 200 : 60).map(cartaoCand).join('')}</ul>
-      ${lista.length > 60 && !termo ? `<p class="nota">Mostrando 60 de ${lista.length}. Use a busca.</p>` : ''}
-    </section>
     `}
     <p class="nota centro">Fonte: TSE, Portal de Dados Abertos (votação por candidato/município/zona e por seção eleitoral, ${ano}).</p>
     <p class="centro"><label class="mini-pref"><input type="checkbox" data-pref="2022" checked> Mostrar dados de 2022 no app</label></p>`
+}
+
+// 🔎 busca de candidatos do ano: nome, partido ou número, com filtros de cargo, situação (eleitos, suplentes,
+// não eleitos) e cidade; cada linha abre a ficha completa do candidato naquela eleição
+const sitBusca = (c) => (/^ELEITO/.test(c.sit || '') ? 'eleito' : /SUPLENTE/.test(c.sit || '') ? 'suplente' : 'nao')
+function cartaoBuscaCand(ano, j) {
+  const el = j.eleicoes.find((e) => e.id === H22.buscaCargo) || j.eleicoes.find((e) => e.id === H22.sel) || j.eleicoes[0]
+  const municipal = ehMunicipal(el.cargo)
+  const cid = municipal && H22.local && !H22.buscaSC ? H22.local : null
+  const palavras = semAcento(H22.busca.trim()).split(/\s+/).filter(Boolean)
+  const sit = H22.buscaSit || ''
+  const base = cid ? el.candidatos.filter((c) => c.cd === cid.cd) : el.candidatos
+  const achados = base.filter((c) => !palavras.length || casa(semAcento(`${c.nome} ${c.nomeCompleto} ${c.partido} ${c.numero}`), palavras))
+  const conta = { eleito: 0, suplente: 0, nao: 0 }
+  for (const c of achados) conta[sitBusca(c)]++
+  // "não eleitos" inclui os suplentes (todos os que não ganharam a vaga)
+  conta.naoTodos = conta.nao + conta.suplente
+  const lista = achados.filter((c) => !sit || (sit === 'nao' ? sitBusca(c) !== 'eleito' : sitBusca(c) === sit)).sort((a, b) => b.votos - a.votos)
+  const max = H22.buscaTodos ? lista.length : 60
+  const onde = cid ? cid.nm : 'SC'
+  const rotSit = { '': 'Todos', eleito: '✔ Eleitos', nao: '✖ Não eleitos', suplente: 'Só suplentes' }
+  H22.csvBusca = {
+    nome: `candidatos-${nomeArquivo(ROTULO_ELEICAO[el.id] || el.nome)}-${ano}-${nomeArquivo(onde)}${sit ? `-${sit}` : ''}.csv`,
+    cab: ['Candidato', 'Nome completo', 'Número', 'Partido', ...(municipal ? ['Município', 'Posição na cidade'] : ['Posição']), 'Votos', 'Situação'],
+    linhas: lista.map((c) => [c.nome, c.nomeCompleto, c.numero, c.partido, ...(municipal ? [NOME_MUN.get(c.cd) || c.cd, c.pos] : [c.pos]), c.votos, c.sit]),
+  }
+  const linha = (c) => `<li class="h22-cand clicavel" style="${estiloCor(corPartido(c.partido))}" ${attrHist(ano, el.id, c)}>
+      <div class="cand-linha"><span class="cand-nome">${esc(c.nome)}</span> ${pill(c.partido)} <span class="mudo">nº ${esc(c.numero)}</span> ${situ2022(c.sit || '')}</div>
+      <div class="cand-meta">${fmt.format(c.votos)} votos · ${c.pos}º ${municipal ? `em ${esc(NOME_MUN.get(c.cd) || '')}` : 'em SC'}${c.nomeCompleto && c.nomeCompleto !== c.nome ? ` · ${esc(c.nomeCompleto)}` : ''} · <span class="link-ficha">ver a ficha ›</span></div>
+      ${municipal ? linhaPerfil(ano, c.sq) : ''}</li>`
+  return `<section class="cartao busca-cand" id="busca-cand"><h3>🔎 Buscar candidato · ${ano}</h3>
+      <input id="h22-busca" type="search" placeholder="Nome, partido ou número (eleitos e não eleitos)…" value="${esc(H22.busca)}" autocomplete="off">
+      <div class="segmentado" role="group" aria-label="Cargo">${j.eleicoes.map((e) => `<button type="button" data-bc-cargo="${e.id}" aria-pressed="${e === el}">${esc(ROTULO_ELEICAO[e.id] || e.nome)}</button>`).join('')}</div>
+      <div class="segmentado" role="group" aria-label="Situação">${Object.entries(rotSit).map(([k, r]) => `<button type="button" data-bc-sit="${k}" aria-pressed="${sit === k}">${r}${k ? ` <small>${fmt.format(k === 'nao' ? conta.naoTodos : conta[k])}</small>` : ''}</button>`).join('')}</div>
+      ${municipal && H22.local ? `<div class="atalhos-chips"><button type="button" class="atalho ${cid ? 'ativo' : ''}" data-bc-sc="0">📍 Só ${esc(H22.local.nm)}</button><button type="button" class="atalho ${cid ? '' : 'ativo'}" data-bc-sc="1">🗺️ SC inteira</button></div>` : ''}
+      <p class="nota"><strong>${fmt.format(lista.length)}</strong> ${lista.length === 1 ? 'candidato' : 'candidatos'} a ${esc((ROTULO_ELEICAO[el.id] || el.nome).toLowerCase())} em ${esc(onde)}${palavras.length ? ' na busca' : ''} · ${fmt.format(conta.eleito)} eleitos · ${fmt.format(conta.naoTodos)} não eleitos${conta.suplente ? ` (${fmt.format(conta.suplente)} suplentes)` : ''}${lista.length > max ? ` · mostrando ${max}` : ''}.${municipal && !H22.local ? ' Escolha um município acima para ver só os candidatos dele.' : ''}</p>
+      <ul class="h22-lista">${lista.slice(0, max).map(linha).join('') || '<li class="nota">Nenhum candidato encontrado.</li>'}</ul>
+      ${lista.length > max ? `<button type="button" class="botao secundario" data-bc-todos>Mostrar todos (${fmt.format(lista.length)})</button>` : ''}
+      <div class="exportar"><button type="button" class="botao secundario" data-bc-csv>${icone('baixar')} Planilha (CSV)</button><button type="button" class="botao secundario" data-bc-xlsx>${icone('baixar')} Excel</button>${botaoLink()}</div>
+      <p class="nota">Toque num candidato para abrir a ficha completa dele em ${ano} (votos por zona, bairro, seção e urna, mapa, histórico, comparar e acompanhar). Fonte: TSE.</p>
+    </section>`
 }
 
 // eleição municipal vista de uma cidade: só os candidatos dela, com os válidos da cidade

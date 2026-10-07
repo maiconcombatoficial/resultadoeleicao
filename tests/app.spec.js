@@ -828,3 +828,29 @@ test('ficha de eleição anterior: acompanhar, comparar, análise e exportar', a
   await page.locator('.fav[data-cand]').click()
   await expect(page.locator('.detalhe .det-cabeca h2')).toHaveText('GEMADA')
 })
+
+test('busca de candidatos do Histórico: não eleitos, nome e ficha', async ({ page }) => {
+  // Florianópolis 2024, vereadores não eleitos
+  await page.goto('/#h2022?ano=2024&m=81051&e=t1-c13')
+  const bc = page.locator('#busca-cand')
+  await bc.locator('[data-bc-sit="nao"]').click()
+  await expect(page).toHaveURL(/st=nao/)
+  const itens = bc.locator('.h22-lista > li')
+  await expect(itens.first()).toBeVisible()
+  await expect(bc.locator('.h22-lista .eleito-tse')).toHaveCount(0)
+  // buscar pelo nome e abrir a ficha
+  await bc.locator('#h22-busca').fill('monica duarte')
+  await expect(itens).toHaveCount(1)
+  await itens.first().click()
+  await expect(page.locator('.detalhe .det-cabeca h2')).toHaveText('MONICA DUARTE')
+  await expect(page.locator('.detalhe .det-cabeca')).toContainText(/não eleito/i)
+  // SC inteira, sem cidade
+  await page.goto('about:blank')
+  await page.goto('/#h2022?ano=2024&e=t1-c13&q=gemada')
+  await expect(page.locator('#busca-cand .h22-lista > li').first()).toContainText('Florianópolis')
+  // atalho da câmara leva à busca dos não eleitos
+  await page.goto('about:blank')
+  await page.goto('/#h2022?ano=2024&m=81051&mv=camaras')
+  await page.locator('[data-bc-ir="t1-c13"]').click()
+  await expect(page.locator('#busca-cand [data-bc-sit="nao"]')).toHaveAttribute('aria-pressed', 'true')
+})
