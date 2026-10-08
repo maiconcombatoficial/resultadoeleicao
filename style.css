@@ -1236,3 +1236,5 @@ html.com-telao { overflow: hidden; }
 .idade-barras span { display: block; height: 7px; border-radius: 3px; min-width: 2px; }
 .idade-num small { color: var(--mudo); }
 .idade-linha .var { font-size: .74rem; white-space: nowrap; }
+.idade-sec { color: var(--primaria); }
+#urnas-faixa { margin: 6px 0; max-width: 100%; }
