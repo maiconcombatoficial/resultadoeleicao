@@ -12,6 +12,8 @@ pro/idade-<ano>-<eleição>.bin:
   c       por candidato (número nas eleições gerais, SQ nas municipais): m = % de cada faixa nas seções onde
           votou (ponderado pelos votos dele), t = votos, qj/qi = % dos válidos dele em cada quinto das seções,
           da menor à maior presença de jovens (16 a 24) / de idosos (60+), quintos em SC ou na cidade
+e pro/idade-secoes-<ano>.bin: eleitores de cada seção por faixa ({'s': {cd: {'zona-seção': [7]}}}), para a
+lista de urnas da ficha mostrar o público de cada seção.
 """
 import argparse, collections, csv, io, json, os, re, sys, zipfile
 from comum import CACHE, CDN, RAIZ, baixar, ler_locais
@@ -66,7 +68,7 @@ def quintos(itens):
     return g
 
 
-def gerar(ano, chave):
+def gerar(ano, chave, so_secoes=False):
     D = os.path.join(RAIZ, f'dados{ano}')
     secoes = {f[:5]: json.load(open(os.path.join(D, 'secoes', f))) for f in os.listdir(os.path.join(D, 'secoes'))}
     if ano == 2026:
@@ -87,6 +89,14 @@ def gerar(ano, chave):
         for i in range(7):
             p[i] += v[i]
     log(ano, 'eleitores no perfil', f'{sum(sum(v) for v in perf.values()):,}', 'seções', len(perf))
+    # eleitorado de cada seção por faixa (para a lista de urnas da ficha): {cd: {'zona-seção': [7 faixas]}}
+    por_cd = collections.defaultdict(dict)
+    for (cd, zs), v in perf.items():
+        if sum(v):
+            por_cd[cd][zs] = v
+    gravar(chave, f'idade-secoes-{ano}', {'ano': ano, 'faixas': FAIXAS, 's': por_cd})
+    if so_secoes:
+        return
     for el in els:
         cargo = int(el.split('-c')[1])
         municipal = cargo in (11, 13)
@@ -168,7 +178,8 @@ def gerar(ano, chave):
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
     ap.add_argument('--ano', type=int, nargs='+', required=True)
+    ap.add_argument('--secoes', action='store_true', help='só o arquivo com a idade do eleitorado de cada seção')
     a = ap.parse_args()
     k = obter_chave()
     for ano in a.ano:
-        gerar(ano, k)
+        gerar(ano, k, a.secoes)

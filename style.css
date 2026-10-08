@@ -98,6 +98,10 @@ h1::before { content: "🗳️ "; }
 }
 .abas button:hover { background: rgb(255 255 255 / 22%); }
 .abas button[aria-selected="true"] { background: #fff; color: var(--azul); border-color: #fff; }
+/* computador (mouse): as abas quebram em mais de uma linha, todas visíveis, sem precisar rolar de lado */
+@media (hover: hover) and (pointer: fine) and (min-width: 700px) {
+  .abas { flex-wrap: wrap; overflow-x: visible; justify-content: center; row-gap: 8px; }
+}
 
 .aviso {
   max-width: 888px; margin: 12px auto 0; padding: 10px 14px; border-radius: 10px;
@@ -1236,3 +1240,5 @@ html.com-telao { overflow: hidden; }
 .idade-barras span { display: block; height: 7px; border-radius: 3px; min-width: 2px; }
 .idade-num small { color: var(--mudo); }
 .idade-linha .var { font-size: .74rem; white-space: nowrap; }
+.idade-sec { color: var(--primaria); }
+#urnas-faixa { margin: 6px 0; max-width: 100%; }

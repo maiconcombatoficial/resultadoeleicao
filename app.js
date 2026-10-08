@@ -4,12 +4,12 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { icone } from './icones.js?v=202610092100'
-import { calcularVagas } from './vagas.js?v=202610092100'
-import { chanceDe, NIVEIS } from './chances.js?v=202610092100'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610092100'
-import { FLORIPA } from './floripa.js?v=202610092100'
-import { corPartido, corTexto } from './cores.js?v=202610092100'
+import { icone } from './icones.js?v=202610100900'
+import { calcularVagas } from './vagas.js?v=202610100900'
+import { chanceDe, NIVEIS } from './chances.js?v=202610100900'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610100900'
+import { FLORIPA } from './floripa.js?v=202610100900'
+import { corPartido, corTexto } from './cores.js?v=202610100900'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -696,6 +696,13 @@ function montarAbas() {
   $('#abas [aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'center' })
 }
 
+// mouse: a roda rola as abas para os lados quando elas não cabem numa linha (janela estreita)
+$('#abas').addEventListener('wheel', (ev) => {
+  const n = ev.currentTarget
+  if (n.scrollWidth <= n.clientWidth || Math.abs(ev.deltaX) > Math.abs(ev.deltaY)) return
+  ev.preventDefault()
+  n.scrollLeft += ev.deltaY
+}, { passive: false })
 $('#abas').addEventListener('click', (ev) => {
   const b = ev.target.closest('[data-aba]')
   if (!b) return
@@ -4666,6 +4673,10 @@ detalheEl.addEventListener('input', (ev) => {
     Object.assign(estado.detalhe.urnas, { zona: ev.target.value ? Number(ev.target.value) : null, vis: 'urnas', todos: false, busca: '' })
     return renderDetalhe()
   }
+  if (ev.target.id === 'urnas-faixa' && estado.detalhe?.urnas) {
+    Object.assign(estado.detalhe.urnas, { faixa: ev.target.value === '' ? null : Number(ev.target.value), todos: false })
+    return renderDetalhe()
+  }
   if (ev.target.id === 'urnas-busca' && estado.detalhe?.urnas) {
     estado.detalhe.urnas.busca = ev.target.value
     estado.detalhe.urnas.todos = false
@@ -4899,7 +4910,8 @@ const situ2022 = (sit) =>
 // série histórica do candidato: todas as eleições de 2012 a 2024 em SC (pelo nome completo) + 2026
 function secaoHistorico(c, d, aba) {
   if (!PREF.mostrar2022 || DEMO) return ''
-  if (!ANOS_HIST.every((a) => HIST.get(a)?.resumo || HIST.get(a)?.carregando)) carregarHistorico().then(() => estado.detalhe && renderDetalhe())
+  // carrega as eleições anteriores uma vez só: se um ano falhar, não fica redesenhando em laço
+  if (!historicoPronto && !ANOS_HIST.every((a) => HIST.get(a)?.resumo || HIST.get(a)?.carregando)) carregarHistorico().then(() => estado.detalhe && renderDetalhe())
   const parts = acharAnteriores(c)
   if (!parts.length) return ''
   // na ficha de uma eleição anterior, "esta" é a participação da ficha; 2026 entra se ele concorre agora
@@ -7070,10 +7082,15 @@ function secaoUrnas(det, c, aba) {
   const mz = termoBruto.match(/^(\d+)\s*(ª|a)?\s*(zona)?$/i)
   const zonaFiltro = E.zona ?? (mz ? Number(mz[1]) : null)
   const termo = mz ? '' : semAcento(termoBruto)
+  // 🔒 público de cada seção (faixa etária que predomina)
+  const I = idadeSecoes(F.ano, re)
+  if (I) for (const u of V.linhas) u.ida ??= perfilSecao(I, u.cd, u.zs)
+  if (!I && (E.ord === 'j' || E.ord === 'i')) E.ord = 'v'
   let ls = V.linhas
   if (zonaFiltro != null) ls = ls.filter((u) => u.z === zonaFiltro)
+  if (I && E.faixa != null) ls = ls.filter((u) => u.ida?.top === E.faixa)
   if (termo) ls = ls.filter((u) => semAcento(`${NOME_MUN.get(u.cd) || ''} ${u.bairro} ${u.local} ${u.z}ª zona seção ${u.s}`).includes(termo))
-  const ord = { v: (a, b) => b.v - a.v, p: (a, b) => b.v / b.val - a.v / a.val || b.v - a.v, s: (a, b) => (zonaFiltro != null ? 0 : (NOME_MUN.get(a.cd) || '').localeCompare(NOME_MUN.get(b.cd) || '', 'pt-BR')) || a.z - b.z || a.s - b.s }
+  const ord = { j: (a, b) => (b.ida?.j || 0) - (a.ida?.j || 0) || b.v - a.v, i: (a, b) => (b.ida?.i || 0) - (a.ida?.i || 0) || b.v - a.v, v: (a, b) => b.v - a.v, p: (a, b) => b.v / b.val - a.v / a.val || b.v - a.v, s: (a, b) => (zonaFiltro != null ? 0 : (NOME_MUN.get(a.cd) || '').localeCompare(NOME_MUN.get(b.cd) || '', 'pt-BR')) || a.z - b.z || a.s - b.s }
   ls = [...ls].sort(ord[E.ord] || ord.v)
   const soma = ls.reduce((a, u) => a + u.v, 0)
   const primeiro = V.linhas.filter((u) => u.pos === 1).length
@@ -7086,8 +7103,8 @@ function secaoUrnas(det, c, aba) {
   det.urnasZonas = { cab: ['Zona', 'Municípios', 'Votos', 'Urnas com voto', '% nas urnas da zona', '1º lugar em', 'Melhor seção', 'Votos na melhor seção'], linhas: lz.map((z) => [z.z, cidadesZ(z).join(', '), z.v, z.n, pctDe(z.v, z.val), z.primeiro, `Seção ${z.melhor.s} · ${NOME_MUN.get(z.melhor.cd) || ''}`, z.melhor.v]) }
   det.urnasExport = {
     nome: `${nomeArq}.csv`,
-    cab: ['Município', 'Zona', 'Seção', 'Local de votação', 'Endereço', 'Bairro', 'Votos', 'Votos válidos na urna', '% na urna', 'Posição na urna', 'Candidatos com voto', 'Aptos', 'Comparecimento'],
-    linhas: ls.map((u) => [NOME_MUN.get(u.cd) || u.cd, u.z, u.s, u.local, u.end, u.bairro, u.v, u.val, pctDe(u.v, u.val), u.pos, u.n, u.ap ? u.ap[0] : '', u.ap ? u.ap[1] : '']),
+    cab: ['Município', 'Zona', 'Seção', 'Local de votação', 'Endereço', 'Bairro', 'Votos', 'Votos válidos na urna', '% na urna', 'Posição na urna', 'Candidatos com voto', 'Aptos', 'Comparecimento', ...(I ? CAB_IDADE : [])],
+    linhas: ls.map((u) => [NOME_MUN.get(u.cd) || u.cd, u.z, u.s, u.local, u.end, u.bairro, u.v, u.val, pctDe(u.v, u.val), u.pos, u.n, u.ap ? u.ap[0] : '', u.ap ? u.ap[1] : '', ...(I ? colsIdade(u.ida) : [])]),
   }
   const top = [...(zonaFiltro != null ? ls : V.linhas)].sort(ord.v).slice(0, 8)
   const cardZonas = {
@@ -7100,7 +7117,7 @@ function secaoUrnas(det, c, aba) {
     chapeu: `${chapeu} · URNA POR URNA`, foto: c.foto, nome: c.nome, cor, sub: `${c.partido} · nº ${c.numero} · ${rotEl}`,
     titulo: zonaFiltro != null ? `Urnas com mais votos · ${zonaFiltro}ª zona` : 'Urnas com mais votos', subtitulo: zonaFiltro != null ? `${fmt.format(ls.length)} urnas com voto na zona · ${cidadesZ(zonas.get(zonaFiltro) || { cds: new Set() }).join(', ')}` : `${fmt.format(V.linhas.length)} urnas com voto · 1º lugar em ${fmt.format(primeiro)}`,
     total: zonaFiltro != null ? { rot: `Votos na ${zonaFiltro}ª zona`, valor: `${fmt.format(soma)} votos`, sub: `em ${fmt.format(ls.length)} seções` } : { rot: `Votos nas urnas de ${ondeUF}`, valor: `${fmt.format(V.linhas.reduce((a, u) => a + u.v, 0))} votos`, sub: `em ${fmt.format(V.linhas.length)} seções` },
-    linhas: top.map((u) => ({ nome: `Seção ${u.s} · ${u.z}ª zona`, extra: `${u.local} · ${u.bairro} · ${NOME_MUN.get(u.cd) || ''}`, valor: fmt.format(u.v), dir2: `${fmtPct.format(pctDe(u.v, u.val))}% · ${u.pos}º`, frac: u.v / (top[0]?.v || 1), corBarra: cor })),
+    linhas: top.map((u) => ({ nome: `Seção ${u.s} · ${u.z}ª zona`, extra: `${u.local} · ${u.bairro} · ${NOME_MUN.get(u.cd) || ''}${u.ida ? ` · 👥 ${FAIXA_CURTA[u.ida.top]}` : ''}`, valor: fmt.format(u.v), dir2: `${fmtPct.format(pctDe(u.v, u.val))}% · ${u.pos}º`, frac: u.v / (top[0]?.v || 1), corBarra: cor })),
   }
   return `<section class="cartao urnas" style="${estiloCor(cor)}"><h3>🗳️ Urna por urna</h3>
     ${prog}
@@ -7123,17 +7140,18 @@ function secaoUrnas(det, c, aba) {
       : `${zonaFiltro != null && zonas.get(zonaFiltro) ? (() => { const zz = zonas.get(zonaFiltro); return `<div class="urnas-zona-res"><button type="button" class="atalho ativo" data-urnas-zona="">📍 ${zonaFiltro}ª zona ✕</button>
       <span><strong>${fmt.format(zz.v)}</strong> votos · ${fmt.format(zz.n)} urnas · ${fmtPct.format(pctDe(zz.v, zz.val))}% · ${esc(cidadesZ(zz).join(', '))}</span></div>` })() : ''}
     <input id="urnas-busca" type="search" autocomplete="off" placeholder="🔎 Filtrar por município, bairro, escola, zona ou seção…" value="${esc(E.busca)}">
-    <div class="segmentado" role="group" aria-label="Ordenar"><button type="button" data-urnas-ord="v" aria-pressed="${E.ord === 'v'}">Mais votos</button><button type="button" data-urnas-ord="p" aria-pressed="${E.ord === 'p'}">Maior % na urna</button><button type="button" data-urnas-ord="s" aria-pressed="${E.ord === 's'}">Município, zona e seção</button></div>
+    <div class="segmentado" role="group" aria-label="Ordenar"><button type="button" data-urnas-ord="v" aria-pressed="${E.ord === 'v'}">Mais votos</button><button type="button" data-urnas-ord="p" aria-pressed="${E.ord === 'p'}">Maior % na urna</button><button type="button" data-urnas-ord="s" aria-pressed="${E.ord === 's'}">Município, zona e seção</button>${I ? `<button type="button" data-urnas-ord="j" aria-pressed="${E.ord === 'j'}">👥 Mais jovens</button><button type="button" data-urnas-ord="i" aria-pressed="${E.ord === 'i'}">👥 Mais idosos</button>` : ''}</div>
+    ${I ? `<select id="urnas-faixa" aria-label="Faixa etária que predomina na seção"><option value="">👥 Faixa que predomina na seção: todas</option>${FAIXA_CURTA.map((f, k) => `<option value="${k}" ${E.faixa === k ? 'selected' : ''}>Predomina ${f} anos (${fmt.format(V.linhas.filter((u) => u.ida?.top === k).length)} urnas)</option>`).join('')}</select>` : PRO.chave || DEMO ? '' : '<p class="nota">🔒 <button type="button" class="link-zonas leve" data-pro-abrir>Entre na área protegida</button> para ver a faixa etária que predomina em cada seção.</p>'}
     <p class="nota"><strong>${fmt.format(ls.length)}</strong> urnas${termo ? ' no filtro' : ''} · <strong>${fmt.format(soma)}</strong> votos${ls.length > max ? ` · mostrando ${max}` : ''}.</p>
     <table class="tabela urnas-tab"><thead><tr><th>Urna (seção)</th><th class="dir">Votos</th></tr></thead><tbody>${ls
       .slice(0, max)
       .map((u) => `<tr class="clicavel" data-urnas-ir="${esc(u.cd)}|${esc(u.zs)}|${esc(u.loc)}"><td><strong>Seção ${u.s}</strong> <span class="mudo">· ${u.z}ª zona · ${esc(NOME_MUN.get(u.cd) || u.cd)}</span>
-          <div class="cand-meta">${esc(u.local)} · ${esc(u.bairro)}</div></td>
+          <div class="cand-meta">${esc(u.local)} · ${esc(u.bairro)}</div>${txtIdadeSecao(u.ida)}</td>
         <td class="dir"><strong>${fmt.format(u.v)}</strong><div class="cand-meta">${fmtPct.format(pctDe(u.v, u.val))}% · ${u.pos}º de ${u.n}</div></td></tr>`)
       .join('')}</tbody></table>
     ${ls.length > max ? `<button type="button" class="botao secundario" data-urnas-todos>Mostrar todas as ${fmt.format(ls.length)} urnas</button>` : ''}`}
     <div class="exportar">${V.carregando ? '' : botaoCard(E.vis === 'zonas' ? 'urnas-zonas' : 'urnas', E.vis === 'zonas' ? cardZonas : card)}<button type="button" class="botao secundario" data-urnas-csv ${V.carregando ? 'disabled' : ''}>${icone('baixar')} Baixar planilha (CSV)</button><button type="button" class="botao secundario" data-urnas-xlsx ${V.carregando ? 'disabled' : ''}>${icone('baixar')} Excel</button></div>
-    <p class="nota">Votos de ${esc(c.nome)} em cada seção eleitoral (${F.hist ? `TSE, votação por seção de ${F.ano}` : 'boletins de urna do TSE'}, ${turnoDe(elId)}º turno). "% na urna" = votos ÷ votos válidos da seção; posição entre os candidatos que tiveram voto ali. Toque numa urna para abri-la no explorador ${F.hist ? 'do 📅 Histórico' : 'da aba Bairros'}.</p>
+    <p class="nota">Votos de ${esc(c.nome)} em cada seção eleitoral (${F.hist ? `TSE, votação por seção de ${F.ano}` : 'boletins de urna do TSE'}, ${turnoDe(elId)}º turno). "% na urna" = votos ÷ votos válidos da seção; posição entre os candidatos que tiveram voto ali. Toque numa urna para abri-la no explorador ${F.hist ? 'do 📅 Histórico' : 'da aba Bairros'}.${I ? ` 👥 Público de cada seção: eleitorado da seção por faixa etária (TSE, perfil do eleitorado por seção, ${F.ano}); "predomina" é a faixa com mais eleitores, e as faixas têm tamanhos diferentes (18–24 tem 7 idades; 45–59, 15).` : ''}</p>
   </section>`
 }
 function tratarUrnas(ev, det) {
@@ -7246,6 +7264,30 @@ function secaoMapaFicha(det, c, aba) {
 // Estimativa: cruza os votos do candidato em cada seção com o perfil etário do eleitorado da seção
 // (TSE, perfil_eleitor_secao). Arquivos criptografados pro/idade-<ano>-<eleição>.bin (scripts/gerar_idade.py).
 const FAIXA_CURTA = ['16–17', '18–24', '25–34', '35–44', '45–59', '60–69', '70+']
+// eleitorado de cada seção por faixa etária (área 🔒): {cd: {'zona-seção': [7 faixas]}}
+function idadeSecoes(ano, re) {
+  if (!PRO.chave || DEMO) return null
+  const A = arquivoPro(`idade-secoes-${ano}`)
+  if (!A.valor) {
+    if (!A.erro) A.then(re).catch(() => {})
+    return null
+  }
+  return A.valor.s
+}
+// público de uma seção: faixa que predomina, % de jovens (16–24) e de idosos (60+)
+function perfilSecao(I, cd, zs) {
+  const v = I?.[cd]?.[zs]
+  if (!v) return null
+  const t = v.reduce((a, x) => a + x, 0) || 1
+  const p = v.map((x) => x / t)
+  const top = p.indexOf(Math.max(...p))
+  return { p, top, j: p[0] + p[1], i: p[5] + p[6] }
+}
+const txtIdadeSecao = (q) =>
+  q ? `<div class="cand-meta idade-sec">👥 predomina <strong>${FAIXA_CURTA[q.top]} anos</strong> (${fmtPct.format(100 * q.p[q.top])}%) · jovens 16–24: ${fmtPct.format(100 * q.j)}% · 60+: ${fmtPct.format(100 * q.i)}%</div>` : ''
+const colsIdade = (q) => (q ? [`${FAIXA_CURTA[q.top]} anos`, 100 * q.j, 100 * q.i, ...q.p.map((x) => 100 * x)] : ['', '', '', '', '', '', '', '', '', ''])
+const CAB_IDADE = ['Faixa que predomina', '% jovens 16–24', '% 60+', ...FAIXA_CURTA.map((f) => `% ${f}`)]
+
 function dadosIdade(det, c, aba, re) {
   const ano = aba.hist ? aba.ano : 2026
   const el = aba.hist ? aba.el : eleicaoDoCargo(aba.cargo)
@@ -8152,12 +8194,15 @@ function secaoBairros(det, c, aba) {
     // urnas (seções) de um recorte, já com o voto do candidato
     const listaUrnasRecorte = (lista, total, onde, mostrarBairro, rotulo, chave) => {
       const ordU = B.ordUrnas || 'v'
-      const us = [...lista].sort(ordU === 's' ? (a, b) => a.s - b.s : ordU === 'p' ? (a, b) => b.v / b.val - a.v / a.val || b.v - a.v : (a, b) => b.v - a.v)
+      // 🔒 público de cada seção (faixa etária que predomina)
+      const I = idadeSecoes(F.ano, re)
+      if (I) for (const u of lista) u.ida ??= perfilSecao(I, u.cd, u.zs)
+      const us = [...lista].sort(ordU === 's' ? (a, b) => a.s - b.s : ordU === 'p' ? (a, b) => b.v / b.val - a.v / a.val || b.v - a.v : ordU === 'j' && I ? (a, b) => (b.ida?.j || 0) - (a.ida?.j || 0) : ordU === 'i' && I ? (a, b) => (b.ida?.i || 0) - (a.ida?.i || 0) : (a, b) => b.v - a.v)
       // compartilhar: imagem com as urnas mais votadas e carrossel com todas
       const somaU = us.reduce((a, u) => a + u.v, 0)
       const primeiros = us.filter((u) => u.pos?.p === 1).length
       const maxU = Math.max(1, ...us.map((u) => u.v))
-      const linhaU = (u) => ({ nome: u.nome, extra: mostrarBairro ? `${u.local} · ${u.bairro}` : u.local, valor: fmt.format(u.v), dir2: `${fmtPct.format(pctDe(u.v, u.val))}% · ${u.pos ? `${u.pos.p}º de ${u.pos.n}` : ''}`, frac: u.v / maxU, corBarra: cor })
+      const linhaU = (u) => ({ nome: u.nome, extra: `${mostrarBairro ? `${u.local} · ${u.bairro}` : u.local}${u.ida ? ` · 👥 ${FAIXA_CURTA[u.ida.top]}` : ''}`, valor: fmt.format(u.v), dir2: `${fmtPct.format(pctDe(u.v, u.val))}% · ${u.pos ? `${u.pos.p}º de ${u.pos.n}` : ''}`, frac: u.v / maxU, corBarra: cor })
       const baseU = { ...chapeuH, turno: turnoDe(elId), foto: c.foto, nome: c.nome, cor, sub: `${c.partido} · nº ${c.numero} · ${rotCargo}`, chapeu: `${F.hist ? `${F.chapeu} · ` : ''}URNA POR URNA · ${lugar.toUpperCase()}`,
         titulo: `Urnas · ${rotulo}`, subtitulo: `${fmt.format(us.length)} urnas com voto${primeiros ? ` · 1º lugar em ${fmt.format(primeiros)}` : ''}`,
         total: { rot: `Votos · ${rotulo}`, quem: c.nome, valor: `${fmt.format(somaU)} votos`, sub: `em ${fmt.format(us.length)} de ${fmt.format(total)} urnas` } }
@@ -8168,8 +8213,8 @@ function secaoBairros(det, c, aba) {
         ? `<div class="exportar">${botaoCard(`urnas-${chave}`, { ...baseU, linhas: us.slice(0, POR).map(linhaU) }, `${icone('compartilhar')} Compartilhar estas urnas`, 'botao secundario')}${paginas > 1 ? botoesPartes(chave, paginas, 'botao secundario') : ''}${paginas > 1 ? `<button type="button" class="botao secundario" data-urnas-pdf="${esc(chave)}">${icone('pdf')} PDF com todas (${paginas} páginas)</button>` : ''}</div>`
         : ''
       return `<div class="zona-urnas"><p class="nota"><strong>${fmt.format(us.length)}</strong> urnas com voto de ${fmt.format(total)} ${onde} · <strong>${fmt.format(us.reduce((a, u) => a + u.v, 0))}</strong> votos</p>
-          <div class="segmentado" role="group" aria-label="Ordenar urnas"><button type="button" data-bai-urnas-ord="v" aria-pressed="${ordU === 'v'}">Mais votos</button><button type="button" data-bai-urnas-ord="p" aria-pressed="${ordU === 'p'}">Maior %</button><button type="button" data-bai-urnas-ord="s" aria-pressed="${ordU === 's'}">Nº da seção</button></div>
-          ${us.length ? `<table class="tabela urnas-tab"><tbody>${us.map((u) => `<tr class="clicavel" ${u.ir}><td><strong>${esc(u.nome)}</strong><div class="cand-meta">${esc(u.local)}${mostrarBairro ? ` · ${esc(u.bairro)}` : ''}</div></td><td class="dir"><strong>${fmt.format(u.v)}</strong><div class="cand-meta">${fmtPct.format(pctDe(u.v, u.val))}% · ${u.pos ? `${u.pos.p === 1 ? '🏆 ' : ''}${u.pos.p}º de ${u.pos.n}` : ''}</div></td></tr>`).join('')}</tbody></table>` : `<p class="nota">Sem votos nas urnas ${onde}.</p>`}
+          <div class="segmentado" role="group" aria-label="Ordenar urnas"><button type="button" data-bai-urnas-ord="v" aria-pressed="${ordU === 'v'}">Mais votos</button><button type="button" data-bai-urnas-ord="p" aria-pressed="${ordU === 'p'}">Maior %</button><button type="button" data-bai-urnas-ord="s" aria-pressed="${ordU === 's'}">Nº da seção</button>${I ? `<button type="button" data-bai-urnas-ord="j" aria-pressed="${ordU === 'j'}">👥 Mais jovens</button><button type="button" data-bai-urnas-ord="i" aria-pressed="${ordU === 'i'}">👥 Mais idosos</button>` : ''}</div>
+          ${us.length ? `<table class="tabela urnas-tab"><tbody>${us.map((u) => `<tr class="clicavel" ${u.ir}><td><strong>${esc(u.nome)}</strong><div class="cand-meta">${esc(u.local)}${mostrarBairro ? ` · ${esc(u.bairro)}` : ''}</div>${txtIdadeSecao(u.ida)}</td><td class="dir"><strong>${fmt.format(u.v)}</strong><div class="cand-meta">${fmtPct.format(pctDe(u.v, u.val))}% · ${u.pos ? `${u.pos.p === 1 ? '🏆 ' : ''}${u.pos.p}º de ${u.pos.n}` : ''}</div></td></tr>`).join('')}</tbody></table>` : `<p class="nota">Sem votos nas urnas ${onde}.</p>`}
           ${compartilhar}</div>`
     }
     // botão + urnas de um bairro dentro da zona
@@ -8411,7 +8456,7 @@ function dadosBairrosFicha(B, elId, aba, nr, p22, re, F) {
       .filter((x) => x.foco > 0)
       .map((x) => {
         const loc = arq.secoes[x.chave]
-        return { s: Number(x.chave.split('-')[1]), nome: `Seção ${x.chave.split('-')[1]}`, local: tituloLocal((arq.locais[loc] || [''])[0]), bairro: bairroDoLocal(arq, loc), v: x.foco, val: x.validos, pos: posicaoNoGrupo(x, nr), ir: `data-bai-ir="${esc(cd)}" data-bai-tipo="secao" data-bai-chave="${esc(x.chave)}"` }
+        return { cd, zs: x.chave, s: Number(x.chave.split('-')[1]), nome: `Seção ${x.chave.split('-')[1]}`, local: tituloLocal((arq.locais[loc] || [''])[0]), bairro: bairroDoLocal(arq, loc), v: x.foco, val: x.validos, pos: posicaoNoGrupo(x, nr), ir: `data-bai-ir="${esc(cd)}" data-bai-tipo="secao" data-bai-chave="${esc(x.chave)}"` }
       })
     return { urnas, urnasTotal: gs.grupos.length }
   }
