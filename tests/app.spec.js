@@ -873,3 +873,24 @@ test('urna por urna: faixa etária de cada seção só com login', async ({ page
   await expect(u.locator('.idade-sec')).toHaveCount(0)
   await expect(u.locator('[data-urnas-ord="j"]')).toHaveCount(0)
 })
+
+test('computador: todas as abas visíveis sem rolar para o lado', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/#inicio')
+  const abas = page.locator('#abas [data-aba]')
+  const n = await abas.count()
+  expect(n).toBeGreaterThan(8)
+  for (let i = 0; i < n; i++) {
+    const b = await abas.nth(i).boundingBox()
+    expect(b.x).toBeGreaterThanOrEqual(0)
+    expect(b.x + b.width).toBeLessThanOrEqual(1280)
+  }
+})
+
+test('ficha não trava se o resumo de um ano anterior falhar', async ({ page }) => {
+  await page.route('**/dados2016/resumo.json*', (r) => r.fulfill({ status: 500, body: '' }))
+  await page.goto('/#h2022?ano=2024&m=81051&e=t1-c13&c=240002149675&ca=h2024-t1-c13&cr=81051')
+  await expect(page.locator('.detalhe .det-cabeca h2')).toHaveText('GEMADA')
+  await expect(page.locator('.detalhe .cartao.historico')).toContainText('2020')
+  await page.goto('about:blank', { timeout: 10_000 })
+})

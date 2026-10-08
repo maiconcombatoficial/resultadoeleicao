@@ -4,12 +4,12 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { icone } from './icones.js?v=202610092300'
-import { calcularVagas } from './vagas.js?v=202610092300'
-import { chanceDe, NIVEIS } from './chances.js?v=202610092300'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610092300'
-import { FLORIPA } from './floripa.js?v=202610092300'
-import { corPartido, corTexto } from './cores.js?v=202610092300'
+import { icone } from './icones.js?v=202610100900'
+import { calcularVagas } from './vagas.js?v=202610100900'
+import { chanceDe, NIVEIS } from './chances.js?v=202610100900'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610100900'
+import { FLORIPA } from './floripa.js?v=202610100900'
+import { corPartido, corTexto } from './cores.js?v=202610100900'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -696,6 +696,13 @@ function montarAbas() {
   $('#abas [aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'center' })
 }
 
+// mouse: a roda rola as abas para os lados quando elas não cabem numa linha (janela estreita)
+$('#abas').addEventListener('wheel', (ev) => {
+  const n = ev.currentTarget
+  if (n.scrollWidth <= n.clientWidth || Math.abs(ev.deltaX) > Math.abs(ev.deltaY)) return
+  ev.preventDefault()
+  n.scrollLeft += ev.deltaY
+}, { passive: false })
 $('#abas').addEventListener('click', (ev) => {
   const b = ev.target.closest('[data-aba]')
   if (!b) return
@@ -4903,7 +4910,8 @@ const situ2022 = (sit) =>
 // série histórica do candidato: todas as eleições de 2012 a 2024 em SC (pelo nome completo) + 2026
 function secaoHistorico(c, d, aba) {
   if (!PREF.mostrar2022 || DEMO) return ''
-  if (!ANOS_HIST.every((a) => HIST.get(a)?.resumo || HIST.get(a)?.carregando)) carregarHistorico().then(() => estado.detalhe && renderDetalhe())
+  // carrega as eleições anteriores uma vez só: se um ano falhar, não fica redesenhando em laço
+  if (!historicoPronto && !ANOS_HIST.every((a) => HIST.get(a)?.resumo || HIST.get(a)?.carregando)) carregarHistorico().then(() => estado.detalhe && renderDetalhe())
   const parts = acharAnteriores(c)
   if (!parts.length) return ''
   // na ficha de uma eleição anterior, "esta" é a participação da ficha; 2026 entra se ele concorre agora

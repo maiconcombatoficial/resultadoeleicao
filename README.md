@@ -102,6 +102,8 @@ Tudo colorido com as cores de cada partido: barra de divisão dos votos (com a l
 Atualiza sozinho a cada 30 s, mostra o percentual de seções totalizadas, comparecimento, brancos/nulos,
 quantos votos cada candidato ganhou desde a última atualização e marca eleitos / 2º turno conforme o TSE.
 
+**🖥️ No computador:** com mouse e janela larga, as abas do topo quebram em mais de uma linha (todas visíveis, sem rolar para o lado); em janela estreita, a roda do mouse rola as abas para os lados.
+
 ## Como usar
 
 É um site estático (HTML + CSS + JS, sem build). O navegador consulta o TSE diretamente (o TSE libera CORS).
