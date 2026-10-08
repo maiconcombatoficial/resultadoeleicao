@@ -4,12 +4,12 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { icone } from './icones.js?v=202610091800'
-import { calcularVagas } from './vagas.js?v=202610091800'
-import { chanceDe, NIVEIS } from './chances.js?v=202610091800'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610091800'
-import { FLORIPA } from './floripa.js?v=202610091800'
-import { corPartido, corTexto } from './cores.js?v=202610091800'
+import { icone } from './icones.js?v=202610092100'
+import { calcularVagas } from './vagas.js?v=202610092100'
+import { chanceDe, NIVEIS } from './chances.js?v=202610092100'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610092100'
+import { FLORIPA } from './floripa.js?v=202610092100'
+import { corPartido, corTexto } from './cores.js?v=202610092100'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -3626,6 +3626,7 @@ function renderDetalheConteudo() {
     ${secaoBairros(det, c, aba)}
     ${secaoUrnas(det, c, aba)}
     ${secaoMapaFicha(det, c, aba)}
+    ${secaoIdade(det, c, aba)}
     ${secaoMetas(det, c, aba)}
     <section class="cartao"><h3>${c.eleito || d.tseDefinido ? 'Situação oficial (TSE)' : 'Chance de reverter'}</h3>${textoChance(d, c, aba)}</section>
     <section class="cartao"><h3>Disputa</h3>${blocoDisputa(d, c, aba)}</section>
@@ -3672,6 +3673,7 @@ function fichaHist(det, d, c, aba) {
     ${secaoBairros(det, c, aba)}
     ${secaoUrnas(det, c, aba)}
     ${secaoMapaFicha(det, c, aba)}
+    ${secaoIdade(det, c, aba)}
     ${secaoMetas(det, c, aba)}`
 }
 
@@ -4510,6 +4512,7 @@ detalheEl.addEventListener('click', (ev) => {
     return renderDetalhe()
   }
   if (det && ev.target.closest('[data-pro-abrir]')) return abrirAnalises(det)
+  if (det?.idade && ev.target.closest('[data-idade-xlsx]')) return baixarExcel(det.idade.xlsx.nome, det.idade.xlsx.abas, ev.target.closest('[data-idade-xlsx]'))
   const zu = ev.target.closest('[data-bai-zona-urnas]')
   if (zu && det?.bai) {
     const us = (det.bai.zonasUrnas ??= new Set())
@@ -7238,6 +7241,83 @@ function secaoMapaFicha(det, c, aba) {
   </section>`
 }
 
+/* ---------------- 👥 idade do eleitorado onde o candidato vota (área 🔒) ---------------- */
+
+// Estimativa: cruza os votos do candidato em cada seção com o perfil etário do eleitorado da seção
+// (TSE, perfil_eleitor_secao). Arquivos criptografados pro/idade-<ano>-<eleição>.bin (scripts/gerar_idade.py).
+const FAIXA_CURTA = ['16–17', '18–24', '25–34', '35–44', '45–59', '60–69', '70+']
+function dadosIdade(det, c, aba, re) {
+  const ano = aba.hist ? aba.ano : 2026
+  const el = aba.hist ? aba.el : eleicaoDoCargo(aba.cargo)
+  const A = arquivoPro(`idade-${ano}-${el}`)
+  if (!A.valor) {
+    if (!A.erro) A.then(re).catch(re)
+    return { ano, el, carregando: !A.erro, erro: A.erro }
+  }
+  const municipal = ehMunicipal(aba.cargo)
+  const x = A.valor.c[municipal ? c.sqcand : String(Number(c.numero))]
+  const base = A.valor.b[municipal ? c.cd || det.abr : 'sc']
+  return { ano, el, x, base, faixas: A.valor.faixas, onde: municipal ? NOME_MUN.get(c.cd || det.abr) || '' : 'SC' }
+}
+function secaoIdade(det, c, aba) {
+  if (DEMO || !aba?.cargo || (!det.hist && det.abr !== UF)) return ''
+  const tit = '<h3>👥 Idade do eleitorado onde vota <span class="tag">🔒</span></h3>'
+  if (!PRO.chave)
+    return `<section class="cartao idade">${tit}<p class="nota">Estimativa da faixa etária dos eleitores das seções onde ${esc(c.nome)} teve votos (16 a 70+ anos), comparada com a média ${ehMunicipal(aba.cargo) ? 'da cidade' : 'de SC'}, e o desempenho nas seções mais jovens e mais idosas. Disponível na área protegida.</p>
+      <button type="button" class="botao secundario" data-pro-abrir>🔒 Entrar na área protegida</button></section>`
+  const re = () => estado.detalhe === det && renderDetalhe()
+  const D = dadosIdade(det, c, aba, re)
+  if (D.carregando || D.erro) return `<section class="cartao idade">${tit}<p class="nota">${D.erro ? 'O perfil etário desta eleição ainda não está no app.' : 'Carregando…'}</p></section>`
+  if (!D.x || !D.base) return `<section class="cartao idade">${tit}<p class="nota">Poucos votos para estimar (mínimo de 30).</p></section>`
+  const { x, base, onde } = D
+  const cor = corPartido(c.partido)
+  const idx = x.m.map((m, i) => (base[i] ? m / base[i] : 1))
+  const max = Math.max(...x.m, ...base, 0.01)
+  const melhor = idx.indexOf(Math.max(...idx)), pior = idx.indexOf(Math.min(...idx))
+  const mediaQ = (q) => q.reduce((a, v) => a + v, 0) / 5
+  const frases = [
+    `Nas seções onde ${c.nome} teve votos, há proporcionalmente mais eleitores de ${D.faixas[melhor]} (${fmtPct.format(100 * x.m[melhor])}% × ${fmtPct.format(100 * base[melhor])}% na média ${onde === 'SC' ? 'de SC' : `de ${onde}`}, índice ${fmtDec(idx[melhor])}).`,
+    `E menos eleitores de ${D.faixas[pior]} (${fmtPct.format(100 * x.m[pior])}% × ${fmtPct.format(100 * base[pior])}%, índice ${fmtDec(idx[pior])}).`,
+    x.qj[4] >= x.qj[0]
+      ? `Vai melhor nas seções mais jovens: ${fmtPct.format(x.qj[4])}% dos válidos nas 20% com mais jovens (16 a 24) contra ${fmtPct.format(x.qj[0])}% nas com menos.`
+      : `Vai melhor nas seções com menos jovens: ${fmtPct.format(x.qj[0])}% dos válidos contra ${fmtPct.format(x.qj[4])}% nas 20% com mais jovens (16 a 24).`,
+    x.qi[4] >= x.qi[0]
+      ? `Nas 20% seções com mais idosos (60+), teve ${fmtPct.format(x.qi[4])}% dos válidos, contra ${fmtPct.format(x.qi[0])}% nas com menos.`
+      : `Nas 20% seções com mais idosos (60+), teve só ${fmtPct.format(x.qi[4])}% dos válidos, contra ${fmtPct.format(x.qi[0])}% nas com menos.`,
+  ]
+  const linha = (i) => {
+    const v = idx[i], cls = v >= 1.05 ? 'var-alta' : v <= 0.95 ? 'var-queda' : 'var-igual'
+    return `<div class="idade-linha"><span class="idade-rot">${esc(FAIXA_CURTA[i])}</span>
+      <div class="idade-barras"><span class="b-cand" style="width:${(100 * x.m[i]) / max}%;background:${cor}"></span><span class="b-base" style="width:${(100 * base[i]) / max}%"></span></div>
+      <span class="idade-num"><strong>${fmtPct.format(100 * x.m[i])}%</strong> <small>média ${fmtPct.format(100 * base[i])}%</small></span><span class="var ${cls}">${v >= 1 ? '▲' : '▼'} ${fmtDec(v)}</span></div>`
+  }
+  const quintos = (q, rot) => {
+    const mx = Math.max(...q, 0.01)
+    return `<div class="perfil-graf"><div class="perfil-tit">${esc(rot)} <span class="mudo">· % dos válidos de ${esc(c.nome)} em cada quinto das seções de ${esc(onde)}</span></div>
+      <div class="perfil-barras">${q.map((v) => `<div class="perfil-col"><span class="perfil-val">${fmtPct.format(v)}%</span><span class="perfil-barra" style="height:${Math.max(2, (100 * v) / mx)}%"></span></div>`).join('')}</div>
+      <div class="perfil-eixo"><span>menos</span><span>mais →</span></div></div>`
+  }
+  const sub = `${c.partido} · nº ${c.numero} · ${aba.rotulo.replace(/ SC$/, '')}${ehMunicipal(aba.cargo) ? ` · ${onde}` : ''}`
+  det.idade = {
+    card: { chapeu: `${aba.hist ? `ELEIÇÕES ${aba.ano}` : 'APURAÇÃO 2026'} · IDADE DO ELEITORADO`, exclusivo: true, foto: c.foto, nome: c.nome, cor, sub, titulo: 'Idade do eleitorado onde vota', subtitulo: `Seções onde teve votos × média ${onde === 'SC' ? 'de SC' : `de ${onde}`}`, numerar: false,
+      linhas: FAIXA_CURTA.map((f, i) => ({ nome: `${f} anos`, extra: `média ${fmtPct.format(100 * base[i])}%`, valor: `${fmtPct.format(100 * x.m[i])}%`, dir2: `${idx[i] >= 1 ? '▲' : '▼'} ${fmtDec(idx[i])}`, corDir2: idx[i] >= 1.05 ? '#0b7a45' : idx[i] <= 0.95 ? '#c62828' : null, barras: [{ frac: x.m[i] / max, cor }, { frac: base[i] / max, cor: '#9aa19d' }] })),
+      rodape: 'Estimativa pelo perfil do eleitorado de cada seção (TSE) · o voto é secreto' },
+    xlsx: { nome: `${nomeArquivo(c.nome)}-idade-${D.ano}-${D.el}.xlsx`, abas: [
+      { aba: 'Faixas', cab: ['Faixa etária', '% nas seções onde votou', `% média ${onde}`, 'Índice'], linhas: D.faixas.map((f, i) => [f, 100 * x.m[i], 100 * base[i], idx[i]]) },
+      { aba: 'Quintos', cab: ['Quinto das seções', '% dos válidos (jovens 16–24)', '% dos válidos (idosos 60+)'], linhas: [0, 1, 2, 3, 4].map((q) => [`${q + 1}º (${q === 0 ? 'menos' : q === 4 ? 'mais' : '…'})`, x.qj[q], x.qi[q]]) },
+    ] },
+  }
+  return `<section class="cartao idade perfil" style="--cor-perfil:${cor}">${tit}
+    <ul class="perfil-frases">${frases.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>
+    <div class="idade-leg"><span><i style="background:${cor}"></i>Seções onde ${esc(c.nome)} teve votos (pesado pelos votos dele)</span><span><i class="b-base"></i>Média ${esc(onde === 'SC' ? 'de SC' : `de ${onde}`)}</span></div>
+    ${FAIXA_CURTA.map((_, i) => linha(i)).join('')}
+    ${quintos(x.qj, 'Seções com mais jovens (16 a 24)')}
+    ${quintos(x.qi, 'Seções com mais idosos (60+)')}
+    <div class="exportar">${botaoCard('idade', det.idade.card)}<button type="button" class="botao secundario" data-idade-xlsx>${icone('baixar')} Excel</button></div>
+    <p class="nota">Estimativa pelo perfil do eleitorado de cada seção (TSE, ${D.ano}) cruzado com os votos de ${esc(c.nome)} em cada seção (${fmtPct.format(mediaQ(x.qj))}% dos válidos em média). Não é o voto por idade — o voto é secreto. Índice = % da faixa nas seções dele ÷ média ${onde === 'SC' ? 'de SC' : 'da cidade'}.</p>
+  </section>`
+}
+
 // mapa da comparação: cor de quem venceu em cada município ou local
 function mapaComparacao(D, P, linhas) {
   if (D.grupo !== 'mun' && D.grupo !== 'local') return ''
@@ -8933,10 +9013,11 @@ conteudo.addEventListener('input', (ev) => {
 })
 // da ficha do candidato direto para as análises dele
 function abrirAnalises(det) {
-  const aba = ABAS.find((a) => a.id === det.aba)
+  const aba = abaDe(det.aba)
   const c = dadosDetalhe()?.candidatos.find((x) => x.sqcand === det.sqcand)
   if (!aba?.cargo || !c) return
-  Object.assign(PRO, { sel: eleicaoDoCargo(aba.cargo), cand: Number(c.numero), aba: 'mapa', busca: '' })
+  // eleição anterior: só abre a área (entrar com a senha); 2026: já com o candidato em destaque
+  if (!aba.hist) Object.assign(PRO, { sel: eleicaoDoCargo(aba.cargo), cand: Number(c.numero), aba: 'mapa', busca: '' })
   const ir = () => {
     trocarAba('analises')
     window.scrollTo({ top: 0 })

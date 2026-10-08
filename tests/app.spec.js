@@ -854,3 +854,13 @@ test('busca de candidatos do Histórico: não eleitos, nome e ficha', async ({ p
   await page.locator('[data-bc-ir="t1-c13"]').click()
   await expect(page.locator('#busca-cand [data-bc-sit="nao"]')).toHaveAttribute('aria-pressed', 'true')
 })
+
+test('idade do eleitorado onde vota: fechado sem login, abre a área protegida', async ({ page }) => {
+  await page.goto('/#h2022?ano=2024&m=81051&e=t1-c13&c=240002149675&ca=h2024-t1-c13&cr=81051')
+  const s = page.locator('.detalhe .cartao.idade')
+  await expect(s).toContainText('Idade do eleitorado onde vota')
+  await expect(s).toContainText('área protegida')
+  await expect(s.locator('.idade-linha')).toHaveCount(0)
+  await s.locator('[data-pro-abrir]').click()
+  await expect(page.locator('[data-aba="analises"][aria-selected="true"]')).toBeVisible()
+})

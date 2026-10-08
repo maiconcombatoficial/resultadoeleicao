@@ -1225,3 +1225,14 @@ html.com-telao { overflow: hidden; }
 .link-ficha { color: var(--primaria); font-weight: 600; }
 .busca-cand .segmentado { margin-top: 8px; }
 .busca-cand #h22-busca { width: 100%; }
+
+/* 👥 idade do eleitorado onde vota (ficha, área 🔒) */
+.idade-leg { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: .78rem; color: var(--mudo); margin: 6px 0 8px; }
+.idade-leg i { display: inline-block; width: 12px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+.idade-leg i.b-base, .idade-barras .b-base { background: #9aa19d; }
+.idade-linha { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 4px 0; font-size: .86rem; }
+.idade-rot { font-weight: 700; }
+.idade-barras { display: grid; gap: 2px; }
+.idade-barras span { display: block; height: 7px; border-radius: 3px; min-width: 2px; }
+.idade-num small { color: var(--mudo); }
+.idade-linha .var { font-size: .74rem; white-space: nowrap; }
