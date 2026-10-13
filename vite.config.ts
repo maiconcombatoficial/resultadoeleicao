@@ -35,7 +35,7 @@ export default defineConfig({
   server: {
     port: 5173,
     // a API roda à parte no desenvolvimento (npm run dev:api); no Vercel, /api é uma função serverless
-    proxy: { '/api': { target: `http://localhost:${process.env.PORT || 8787}`, changeOrigin: true } },
+    proxy: { '^/api/': { target: `http://localhost:${process.env.PORT || 8787}`, changeOrigin: true } },
   },
   preview: { port: 8765 },
 })
