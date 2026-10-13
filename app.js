@@ -38,6 +38,9 @@ const ABAS = [
   { id: 'depfed', rotulo: 'Dep. Federal SC', cargo: 6, eleicao: 'estadual', tipo: 'prop', abrangencias: [UF], turno1: true },
   { id: 'depest', rotulo: 'Dep. Estadual SC', cargo: 7, eleicao: 'estadual', tipo: 'prop', abrangencias: [UF], turno1: true },
   { id: 'governador', rotulo: 'Governador SC', cargo: 3, eleicao: 'estadual', tipo: 'maj', abrangencias: [UF] },
+  // eleições municipais (2024, 2020, 2016, 2012): sempre dentro de um município
+  { id: 'prefeito', rotulo: 'Prefeito', cargo: 11, eleicao: 'municipal', tipo: 'maj', abrangencias: [UF], municipal: true },
+  { id: 'vereador', rotulo: 'Vereador', cargo: 13, eleicao: 'municipal', tipo: 'prop', abrangencias: [UF], municipal: true },
   { id: 'sobre', rotulo: 'ℹ️ Sobre', tipo: 'sobre', abrangencias: ['br'] },
 ]
 
@@ -588,11 +591,57 @@ const estado = {
   controlador: null,
   timer: null,
   anterior: new Map(), // votos da última leitura, para mostrar o quanto cada um subiu
+  // ano da eleição em consulta (2026 = apuração ao vivo; anteriores = resultado oficial, com as mesmas telas)
+  ano: [2026, 2024, 2022, 2020, 2018, 2016, 2014, 2012].includes(Number(lerLocal('ano:v1', '2026'))) ? Number(lerLocal('ano:v1', '2026')) : 2026,
+  turnoHist: 1, // 1º ou 2º turno nos anos anteriores (governador, prefeito)
 }
 
 const $ = (sel) => document.querySelector(sel)
 const conteudo = $('#conteudo')
 const statusEl = $('#status')
+
+/* ---------------- ano da eleição: a mesma consulta em todos os anos (2012 a 2026) ---------------- */
+
+const anoAtual = () => estado.ano || 2026
+const ehAoVivo = () => anoAtual() === 2026
+const ehAnoMunicipal = (a = anoAtual()) => a % 4 === 0
+const turnoAtual = () => (ehAoVivo() ? TURNO : estado.turnoHist || 1)
+// eleição (t<turno>-c<cargo>) do cargo no ano escolhido
+const elDoAno = (cargo) => `t${turnoAtual() === 2 && (cargo === 1 || cargo === 3 || cargo === 11) ? 2 : 1}-c${cargo}`
+// id da "aba" que a ficha e os favoritos usam: a própria aba em 2026, ou a eleição anterior (h<ano>-<eleição>)
+const abaIdAtual = (aba = estado.aba) => (aba.cargo && !ehAoVivo() ? idHist(anoAtual(), elDoAno(aba.cargo)) : aba.id)
+// abrangência da ficha: nos cargos municipais de anos anteriores, o município escolhido
+const abrFicha = () => (!ehAoVivo() && estado.aba.municipal ? estado.mun?.cd || FLORIPA_CD : abrAtual())
+// abas disponíveis no ano: 2026 = apuração ao vivo; anos anteriores = resultado oficial (gerais ou municipais)
+function abasDoAno(ano = anoAtual()) {
+  if (ano === 2026) return ABAS.filter((a) => !a.municipal && (a.tipo !== 'h22' || PREF.mostrar2022))
+  const municipal = ehAnoMunicipal(ano)
+  return ABAS.filter((a) => {
+    if (['painel', 'fav', 'camp', 'sobre', 'h22', 'pro'].includes(a.tipo)) return true
+    if (['mun', 'bai'].includes(a.tipo)) return false
+    if (a.cargo === 1) return false
+    return municipal ? !!a.municipal : !a.municipal
+  })
+}
+const rotuloAba = (a) => (a.tipo === 'h22' && !ehAoVivo() ? '🏘️ Bairros e seções' : a.rotulo)
+const subtituloAno = (ano = anoAtual()) => (ano === 2026 ? `Eleições Gerais 2026 · ${TURNO}º turno · apuração ao vivo` : `Eleições ${ehAnoMunicipal(ano) ? 'Municipais' : 'Gerais'} ${ano} · resultado oficial do TSE`)
+// troca o ano em consulta: as abas, o Início e o explorador de seções passam a seguir esse ano
+function definirAno(ano, recarregar = true) {
+  if (!ANOS_INICIO().includes(ano) || ano === estado.ano) return
+  estado.ano = ano
+  estado.anoInicio = ano
+  estado.turnoHist = 1
+  if (ano !== 2026) H22.ano = ano
+  else if (!ANOS_HIST.includes(H22.ano)) H22.ano = 2022
+  gravarLocal('ano:v1', String(ano))
+  Object.assign(estado, { busca: '', visao: 'candidatos', partido: null, dados: null, anterior: new Map() })
+  if (!abasDoAno().includes(estado.aba)) estado.aba = ABAS[0]
+  $('.sub').textContent = subtituloAno(ano)
+  if (recarregar) {
+    montarAbas()
+    carregar()
+  }
+}
 
 function abrAtual() {
   const a = estado.aba
@@ -689,13 +738,16 @@ const esqueleto = (texto, extra = '', linhas = 6) => `<div class="cartao esq" ro
   ${Array.from({ length: linhas }, (_, i) => `<div class="esq-linha"><div class="esq-bloco esq-avatar"></div><div class="esq-col"><div class="esq-bloco" style="width:${70 - ((i * 13) % 35)}%"></div><div class="esq-bloco esq-fino" style="width:${45 - ((i * 7) % 20)}%"></div></div></div>`).join('')}</div>`
 const ICONE_ABA = { inicio: 'inicio', favoritos: 'acompanhados', municipios: 'municipios', bairros: 'bairros', analises: 'analises', h2022: 'h2022', sobre: 'sobre' }
 function montarAbas() {
-  $('#abas').innerHTML = ABAS.filter((a) => a.tipo !== 'h22' || PREF.mostrar2022).map(
-    (a) =>
-      `<button role="tab" type="button" data-aba="${a.id}" aria-selected="${a === estado.aba}">${ICONE_ABA[a.id] ? `${icone(ICONE_ABA[a.id])} ${esc(semEmoji(a.rotulo))}` : esc(a.rotulo)}${
-        a.tipo === 'fav' && favoritos.length ? ` <span class="contador">${favoritos.length}</span>` : ''
-      }</button>`,
-  ).join('')
+  $('#abas').innerHTML = abasDoAno().map((a) => {
+    const ic = a.tipo === 'h22' && !ehAoVivo() ? 'bairros' : ICONE_ABA[a.id]
+    return `<button role="tab" type="button" data-aba="${a.id}" aria-selected="${a === estado.aba}">${ic ? `${icone(ic)} ${esc(semEmoji(rotuloAba(a)))}` : esc(rotuloAba(a))}${
+      a.tipo === 'fav' && favoritos.length ? ` <span class="contador">${favoritos.length}</span>` : ''
+    }</button>`
+  }).join('')
   $('#abas [aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'center' })
+  // anos: 2026 (ao vivo) e as eleições anteriores, gerais e municipais
+  const anos = $('#anos')
+  if (anos) anos.innerHTML = ANOS_INICIO().map((a) => `<button type="button" role="tab" data-ano="${a}" aria-selected="${a === anoAtual()}" class="${ehAnoMunicipal(a) ? 'mun' : 'ger'}" title="${a === 2026 ? 'Eleições Gerais 2026 · apuração ao vivo' : `Eleições ${ehAnoMunicipal(a) ? 'Municipais' : 'Gerais'} ${a}`}">${a}</button>`).join('')
 }
 
 // mouse: a roda rola as abas para os lados quando elas não cabem numa linha (janela estreita)
@@ -709,6 +761,10 @@ $('#abas').addEventListener('click', (ev) => {
   const b = ev.target.closest('[data-aba]')
   if (!b) return
   trocarAba(b.dataset.aba)
+})
+$('#anos')?.addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-ano]')
+  if (b) definirAno(Number(b.dataset.ano))
 })
 
 // usa o endereço do evento: uma renderização pendente da tela anterior pode já ter reescrito location.hash
@@ -740,11 +796,13 @@ function paramsAba() {
     if (m) Object.assign(p, { m: m.regiao || m.cd, z: m.zona })
     if (estado.partido) p.p = estado.partido
   }
-  if (a.tipo === 'painel' && estado.anoInicio && estado.anoInicio !== 2026) p.ano = estado.anoInicio
+  if (!ehAoVivo()) {
+    p.ano = anoAtual()
+    if (estado.turnoHist === 2 && (a.tipo === 'maj' || a.tipo === 'prop')) p.t = 2
+  }
   if (a.tipo === 'camp') Object.assign(p, paramsCampanha())
   if (a.tipo === 'bai' || a.tipo === 'h22') {
     const X = estadoLocal()
-    if (a.tipo === 'h22' && (H22.ano || 2022) !== 2022) p.ano = H22.ano
     if (X.sel && X.sel !== 't1-c7') p.e = X.sel
     const L = X.local
     if (L) Object.assign(p, { m: L.cd, z: L.zona, b: L.bairro, lv: L.localVot, s: L.secao })
@@ -780,15 +838,23 @@ function aplicarLink(hash = location.hash) {
     return abrirTelao()
   }
   if (TELAO.aberto) fecharTelao(false)
-  const aba = ABAS.find((a) => a.id === id)
+  let aba = ABAS.find((a) => a.id === id)
   if (!aba) return
   const antesAba = hashDe(estado.aba.id, paramsAba())
+  // ano: o do link; sem ele, um link com parâmetros é de 2026 e um simples troca de aba mantém o ano
+  const anoLink = p.has('ano') ? Number(p.get('ano')) : [...p.keys()].length ? 2026 : anoAtual()
+  if (ANOS_INICIO().includes(anoLink) && anoLink !== anoAtual()) definirAno(anoLink, false)
+  if (!ehAoVivo()) estado.turnoHist = p.get('t') === '2' ? 2 : 1
+  if (!abasDoAno().includes(aba)) {
+    if (!p.has('ano')) definirAno(aba.municipal ? 2024 : 2026, false)
+    if (!abasDoAno().includes(aba)) aba = ABAS[0]
+  }
   if (aba !== estado.aba) {
     estado.aba = aba
     Object.assign(estado, { busca: '', visao: 'candidatos', partido: null, dados: null, anterior: new Map() })
     gravarLocal('aba', id)
-    montarAbas()
   }
+  montarAbas()
   const temParams = [...p.keys()].length > 0
   if (aba.tipo === 'maj' || aba.tipo === 'prop') {
     const r = p.get('r')
@@ -801,7 +867,6 @@ function aplicarLink(hash = location.hash) {
       if (estado.partido) estado.visao = 'candidatos'
     }
   }
-  if (aba.tipo === 'painel') estado.anoInicio = ANOS_INICIO().includes(Number(p.get('ano'))) ? Number(p.get('ano')) : 2026
   if (aba.tipo === 'camp' && temParams) aplicarParamsCampanha(p)
   if ((aba.tipo === 'bai' || aba.tipo === 'h22') && temParams) {
     const X = aba.tipo === 'bai' ? B26 : H22
@@ -1278,15 +1343,24 @@ $('#buscar-tudo').innerHTML = icone('busca')
 $('#buscar-tudo').addEventListener('click', () => abrirBusca())
 document.addEventListener('click', (ev) => {
   if (ev.target.closest('[data-abrir-busca]')) return abrirBusca()
+  const t = ev.target.closest('[data-turno-hist]')
+  if (t) {
+    estado.turnoHist = Number(t.dataset.turnoHist) === 2 ? 2 : 1
+    estado.dados = null
+    return carregar()
+  }
   const b = ev.target.closest('[data-inicio-ano]')
   if (!b) return
-  estado.anoInicio = Number(b.dataset.inicioAno)
-  renderizar()
+  definirAno(Number(b.dataset.inicioAno))
 })
 
 function trocarAba(id) {
   const aba = ABAS.find((a) => a.id === id)
   if (!aba) return
+  if (!abasDoAno().includes(aba)) {
+    definirAno(aba.municipal ? 2024 : 2026, false)
+    if (!abasDoAno().includes(aba)) return
+  }
   estado.aba = aba
   estado.busca = ''
   estado.visao = 'candidatos'
@@ -1332,6 +1406,7 @@ async function carregar() {
     statusEl.className = 'status ok'
     return
   }
+  if (!ehAoVivo()) return carregarHist(ctrl)
   const mun = munAtual()
   try {
     const dados = await buscar(aba, abr, TURNO, ctrl.signal, mun)
@@ -1439,9 +1514,9 @@ async function carregarPainel(ctrl) {
   if (ctrl.signal.aborted) return
   estado.dados = { painel: true, final: [...estado.favDados.values()].every((d) => d.final) && estado.favDados.size > 0 }
   renderizar()
-  statusEl.textContent = erros ? 'Erro ao atualizar' : estado.dados.final ? 'Apuração encerrada' : `Atualizado ${new Date().toLocaleTimeString('pt-BR')}`
-  statusEl.className = erros ? 'status erro' : 'status ok'
-  if (estado.controlador === ctrl && !estado.dados.final) agendar()
+  statusEl.textContent = !ehAoVivo() ? `Resultado oficial · TSE ${anoAtual()}` : erros ? 'Erro ao atualizar' : estado.dados.final ? 'Apuração encerrada' : `Atualizado ${new Date().toLocaleTimeString('pt-BR')}`
+  statusEl.className = erros && ehAoVivo() ? 'status erro' : 'status ok'
+  if (estado.controlador === ctrl && !estado.dados.final && ehAoVivo()) agendar()
 }
 
 // eleitos (TSE) ou, enquanto não definido, os eleitos pela projeção, agrupados por partido
@@ -1467,7 +1542,7 @@ function heroInicio(ano) {
   </section>`
 }
 function renderPainel() {
-  const ano = estado.anoInicio || 2026
+  const ano = anoAtual()
   if (ano !== 2026) return heroInicio(ano) + renderPainelAno(ano)
   return heroInicio(ano) + renderPainel2026()
 }
@@ -1927,22 +2002,32 @@ function cabecalhoAbrangencia() {
   </div>`
   if (atual !== UF) return seg
   const mun = estado.mun
+  const municipal = !ehAoVivo() && !!a.municipal
   return `${seg}<div class="local ${mun ? 'com-mun' : ''}">
     <span class="local-icone" aria-hidden="true">📍</span>
     <div class="local-campo">
       <input id="mun-busca" type="search" autocomplete="off" enterkeyhint="search"
-        placeholder="SC inteira · buscar município" value="${esc(mun?.nm || '')}" aria-label="Escolher município de SC">
-      ${mun ? '<button type="button" class="local-limpar" data-mun-limpar aria-label="Voltar para o estado todo">✕</button>' : ''}
+        placeholder="${municipal ? 'Escolher município' : 'SC inteira · buscar município'}" value="${esc(mun?.nm || '')}" aria-label="Escolher município de SC">
+      ${mun && !municipal ? '<button type="button" class="local-limpar" data-mun-limpar aria-label="Voltar para o estado todo">✕</button>' : ''}
       <ul id="mun-sugestoes" class="sugestoes" hidden></ul>
     </div>
-  </div>${seletorZonas(mun)}${atalhosLocal(mun)}`
+  </div>${ehAoVivo() ? seletorZonas(mun) : seletorTurnoHist()}${atalhosLocal(mun, municipal)}`
 }
 
 const chip = (cd, nm, ativo) => `<button type="button" class="atalho ${ativo ? 'ativo' : ''}" data-mun-cd="${esc(cd)}" data-mun-nm="${esc(nm)}">${esc(nm)}</button>`
 
-function atalhosLocal(mun) {
+function atalhosLocal(mun, soCidades = false) {
   // fechado por padrão; o app lembra se a pessoa deixou aberto
   const aberto = estado.atalhos ?? lerLocal('atalhos:v1', '0') === '1'
+  // cargos municipais: só cidades (sem somar regiões)
+  if (soCidades) {
+    const ativo = (cd) => mun && !mun.regiao && mun.cd === cd
+    const gf = GRANDE_FLORIPA.map((nm) => MUNICIPIOS_SC.find((m) => chaveNome(m[2]) === chaveNome(nm))).filter(Boolean)
+    const gfSet = new Set(gf.map((m) => m[0]))
+    const maiores = MUNICIPIOS_SC.filter((m) => !gfSet.has(m[0])).slice(0, 12)
+    return `<div class="atalhos"><div class="atalhos-grupo"><span class="atalhos-rot">🏝️ Grande Florianópolis</span><div class="atalhos-chips">${gf.map((m) => chip(m[0], m[2], ativo(m[0]))).join('')}</div></div>
+      <div class="atalhos-grupo"><span class="atalhos-rot">🏙️ Maiores cidades</span><div class="atalhos-chips">${maiores.map((m) => chip(m[0], m[2], ativo(m[0]))).join('')}</div></div></div>`
+  }
   // associações da FECAM sempre à mostra (uma linha que rola para o lado)
   const assoc = `<div class="assoc-linha"><span class="atalhos-rot">🤝 Associações</span><div class="assoc-chips">${Object.keys(ASSOCIACOES)
     .map((sg) => `<button type="button" class="atalho regiao ${mun?.regiao === 'assoc:' + sg ? 'ativo' : ''}" data-regiao="assoc:${sg}" title="${esc(ASSOCIACOES[sg])}">${esc(sg)}</button>`)
@@ -2002,7 +2087,7 @@ async function mostrarSugestoes() {
   if (!ul || !input) return
   let lista
   try {
-    lista = await municipios(estado.aba)
+    lista = ehAoVivo() ? await municipios(estado.aba) : MUNICIPIOS_SC.map((m) => ({ cd: m[0], nm: m[2], capital: m[0] === FLORIPA_CD, zonas: [] }))
   } catch {
     ul.innerHTML = '<li class="sug-info">Não consegui carregar a lista de municípios do TSE. Tente de novo em instantes.</li>'
     ul.hidden = false
@@ -2018,9 +2103,10 @@ async function mostrarSugestoes() {
     .slice(0, 40)
   const assocs = termo.length >= 2 ? Object.entries(ASSOCIACOES).filter(([sg, nm]) => semAcento(sg).includes(termo) || semAcento(nm).includes(termo)).slice(0, 6) : []
   const bairros = termo.length >= 3 ? BAIRROS_FLORIPA.filter((b) => semAcento(b.nome).includes(termo)).slice(0, 6) : []
+  const municipal = !ehAoVivo() && !!estado.aba.municipal
   ul.innerHTML =
-    `<li><button type="button" data-mun-limpar class="sug-estado">🗺️ Santa Catarina inteira</button></li>` +
-    assocs.map(([sg, nm]) => `<li><button type="button" data-regiao="assoc:${sg}">🤝 ${esc(sg)} <span class="mudo">· ${esc(nm)} (associação)</span></button></li>`).join('') +
+    (municipal ? '' : `<li><button type="button" data-mun-limpar class="sug-estado">🗺️ Santa Catarina inteira</button></li>`) +
+    (municipal ? [] : assocs).map(([sg, nm]) => `<li><button type="button" data-regiao="assoc:${sg}">🤝 ${esc(sg)} <span class="mudo">· ${esc(nm)} (associação)</span></button></li>`).join('') +
     bairros
       .map((b) => `<li><button type="button" data-bairro-zona="${b.zona}">🏘️ ${esc(b.nome)} <span class="mudo">· Florianópolis, ${Number(b.zona)}ª zona</span></button></li>`)
       .join('') +
@@ -2211,9 +2297,10 @@ conteudo.addEventListener('click', (ev) => {
   if (h('[data-xlsx-local]') && X.csv) return baixarExcel(X.csv.nome.replace(/\.csv$/, '.xlsx'), [{ aba: X.vis === 'abst' ? 'Abstenção' : 'Votos', ...X.csv }], h('[data-xlsx-local]'))
   const anoBtn = ev.target.closest('[data-h22-ano]')
   if (anoBtn) {
-    Object.assign(H22, { ano: Number(anoBtn.dataset.h22Ano), busca: '', foco: null })
-    statusEl.textContent = `Dados de ${H22.ano} · TSE`
-    return renderizar()
+    Object.assign(H22, { busca: '', foco: null })
+    const a = Number(anoBtn.dataset.h22Ano)
+    if (a === anoAtual() || (ehAoVivo() && a === H22.ano)) return renderizar()
+    return definirAno(a)
   }
   const h22Btn = ev.target.closest('[data-h22]')
   if (h22Btn) {
@@ -2387,15 +2474,32 @@ function resumo(d) {
   const f = (n) => tpl.querySelector(`[data-f="${n}"]`)
   const local = nomeLocal(d)
   f('titulo').textContent = `${d.cargoNome} · ${local}`
-  f('selo').textContent = d.final ? 'Totalização final · TSE' : d.tseDefinido ? 'Eleitos definidos pelo TSE' : TURNO === 2 ? '2º turno' : 'Em apuração'
+  f('selo').textContent = d.hist ? `Resultado oficial · TSE ${d.ano}` : d.final ? 'Totalização final · TSE' : d.tseDefinido ? 'Eleitos definidos pelo TSE' : TURNO === 2 ? '2º turno' : 'Em apuração'
   f('selo').classList.toggle('final', !!(d.final || d.tseDefinido))
   const p = d.secoes.percentual
   f('barra').style.width = `${Math.min(100, p)}%`
   f('barra').parentElement.setAttribute('aria-valuenow', String(Math.round(p)))
-  f('ptexto').innerHTML = `<strong>${fmtPct.format(p)}%</strong> das seções totalizadas
-    <span class="mudo">(${fmt.format(d.secoes.totalizadas)} de ${fmt.format(d.secoes.total)})</span>`
   const item = (rot, cls, valor, extra) =>
     `<div class="num ${cls}"><dt>${rot}</dt><dd>${valor}${extra != null && !Number.isNaN(extra) ? ` <span class="mudo">${fmtPct.format(extra)}%</span>` : ''}</dd></div>`
+  if (d.hist) {
+    // eleição anterior: válidos e vagas; aptos e comparecimento quando o arquivo do ano já estiver no app
+    const C = arquivoAno(`dados${d.ano}/comparecimento.json`, () => estado.dados === d && renderizar())
+    const cds = d.mun ? (d.mun.regiao ? d.mun.membros.map((m) => m.cd) : [d.mun.cd]) : d.cd ? [d.cd] : null
+    const t = C.valor?.[`t${Number(String(d.el.id)[1]) || 1}`]
+    let aptos = 0, comp = 0
+    if (t) for (const cd of cds || Object.keys(t)) if (t[cd]) (aptos += t[cd][0]), (comp += t[cd][1])
+    f('ptexto').innerHTML = `<strong>100%</strong> das seções totalizadas <span class="mudo">· resultado oficial da eleição de ${d.ano}</span>`
+    f('numeros').innerHTML = [
+      ...(aptos ? [item('Comparecimento', 'n-comp', fmt.format(comp), pctDe(comp, aptos)), item('Abstenção', 'n-abst', fmt.format(aptos - comp), pctDe(aptos - comp, aptos))] : []),
+      item('Votos válidos', 'n-val', fmt.format(d.votos.validos), aptos ? pctDe(d.votos.validos, comp) : null),
+      item(d.vagas > 1 ? 'Vagas' : 'Vaga', 'n-vag', fmt.format(d.vagas)),
+    ].join('')
+    const div = document.createElement('div')
+    div.appendChild(tpl)
+    return div.innerHTML
+  }
+  f('ptexto').innerHTML = `<strong>${fmtPct.format(p)}%</strong> das seções totalizadas
+    <span class="mudo">(${fmt.format(d.secoes.totalizadas)} de ${fmt.format(d.secoes.total)})</span>`
   f('numeros').innerHTML = [
     item('Comparecimento', 'n-comp', fmt.format(d.eleitorado.comparecimento), d.eleitorado.pComparecimento),
     item('Abstenção', 'n-abst', fmt.format(d.eleitorado.abstencao), d.eleitorado.pAbstencao),
@@ -2552,7 +2656,7 @@ function barraEmpilhada(fatias, { marco50 = false, legenda = true, total: totalI
   return `<div class="empilhada">${segs}${marco50 ? '<span class="marco50" data-dica="50% dos votos válidos + 1 vence no 1º turno"></span>' : ''}</div>${leg}`
 }
 
-function estrela(c, abaId = estado.aba.id, abr = abrAtual()) {
+function estrela(c, abaId = abaIdAtual(), abr = abrFicha()) {
   const on = ehFavorito(abaId, abr, c.sqcand)
   return `<button type="button" class="estrela ${on ? 'on' : ''}" data-fav="${esc(c.sqcand)}" data-fav-aba="${esc(abaId)}" data-fav-abr="${esc(abr)}"
     aria-pressed="${on}" aria-label="${on ? 'Deixar de acompanhar' : 'Acompanhar'} ${esc(c.nome)}" title="${on ? 'Deixar de acompanhar' : 'Acompanhar este candidato'}">${on ? '♥' : '♡'}</button>`
@@ -2642,9 +2746,9 @@ function cardFavorito(f, d, { mostrarCargo = false } = {}) {
 }
 
 function secaoAcompanhando(d) {
-  const abr = abrAtual()
+  const abr = abrFicha()
   if (munAtual()) return ''
-  const meus = favoritos.filter((f) => f.aba === estado.aba.id && f.abr === abr)
+  const meus = favoritos.filter((f) => f.aba === abaIdAtual() && f.abr === abr)
   if (!meus.length) return ''
   return `<section class="cartao acompanhando">
     <h3>❤️ Acompanhando</h3>
@@ -2716,11 +2820,15 @@ function renderMajoritario(d) {
   if (resto) fatias.push({ valor: resto, cor: OUTROS, rotulo: 'Demais candidatos' })
   const nota =
     estado.aba.cargo === 5
-      ? `<p class="nota">Em 2026 o Senado renova 2/3: SC elege <strong>${d.vagas}</strong> senadores — os ${d.vagas} mais votados.</p>`
-      : `<p class="nota">A linha tracejada marca 50% dos votos válidos: quem passar dela vence no 1º turno.</p>`
+      ? ehAoVivo()
+        ? `<p class="nota">Em 2026 o Senado renova 2/3: SC elege <strong>${d.vagas}</strong> senadores — os ${d.vagas} mais votados.</p>`
+        : `<p class="nota">Em ${anoAtual()} SC elegeu <strong>${d.vagas}</strong> ${d.vagas > 1 ? 'senadores' : 'senador'}: ${d.vagas > 1 ? 'os' : 'o'} mais ${d.vagas > 1 ? 'votados' : 'votado'}.</p>`
+      : turnoAtual() === 2
+        ? '<p class="nota">2º turno: vence quem tem mais votos válidos.</p>'
+        : `<p class="nota">A linha tracejada marca 50% dos votos válidos: quem passar dela vence no 1º turno${estado.aba.cargo === 11 ? ' (nas cidades com 2º turno, acima de 200 mil eleitores)' : ''}.</p>`
   return `<section class="cartao">
       <h3>Divisão dos votos válidos</h3>
-      ${barraEmpilhada(fatias, { marco50: estado.aba.cargo !== 5 && TURNO === 1, total: d.votos.validos })}
+      ${barraEmpilhada(fatias, { marco50: estado.aba.cargo !== 5 && turnoAtual() === 1, total: d.votos.validos })}
       ${nota}
       <div class="exportar">${botaoCard('lista', cardLista(d))}</div>
     </section>
@@ -3335,7 +3443,7 @@ function registrarSessao(abaId, abr, mun, dados) {
   })
 }
 
-function attrCand(c, abaId = estado.aba.id, abr = abrAtual()) {
+function attrCand(c, abaId = abaIdAtual(), abr = abrFicha()) {
   return `data-cand="${esc(c.sqcand)}" data-cand-aba="${esc(abaId)}" data-cand-abr="${esc(abr)}"`
 }
 
@@ -6109,6 +6217,80 @@ async function carregarCampanha(ctrl) {
   renderizar()
   statusEl.textContent = 'Campanha'
   statusEl.className = 'status ok'
+}
+
+/* ---------------- anos anteriores nas abas de cargo: as mesmas telas da apuração, com o resultado oficial ---------------- */
+
+// candidatos do cargo no município ou região escolhidos (votos por município de dados<ano>/mun-<eleição>.json)
+async function dadosHistMun(base, ano, elId, mun) {
+  const M = await munAno(ano, elId)
+  const cds = mun.regiao ? mun.membros.map((m) => m.cd) : [mun.cd]
+  const soma = (obj) => cds.reduce((a, cd) => a + (obj?.[cd] || 0), 0)
+  const validos = soma(M.validos)
+  const candidatos = base.candidatos
+    .map((c) => ({ ...c, votos: soma(M.cand[c.sqcand]) }))
+    .sort((a, b) => b.votos - a.votos)
+    .map((c) => ({ ...c, percentual: pctDe(c.votos, validos) }))
+  return { ...base, candidatos, votos: { validos } }
+}
+
+async function carregarHist(ctrl) {
+  const aba = estado.aba, ano = anoAtual()
+  try {
+    await resumoAno(ano)
+  } catch {
+    if (ctrl.signal.aborted) return
+    estado.dados = null
+    conteudo.innerHTML = `<div class="cartao vazio erro"><p>Não consegui carregar os dados de ${ano}.</p></div>`
+    statusEl.textContent = 'Erro ao carregar'
+    statusEl.className = 'status erro'
+    return
+  }
+  if (ctrl.signal.aborted) return
+  // cargos municipais: sempre dentro de uma cidade (Florianópolis se nenhuma foi escolhida)
+  if (aba.municipal && (!estado.mun || estado.mun.regiao)) {
+    estado.mun = { cd: FLORIPA_CD, nm: 'Florianópolis' }
+    gravarLocal(`${PREFIXO}municipio:v1`, JSON.stringify(estado.mun))
+  }
+  const mun = munAtual()
+  let elId = elDoAno(aba.cargo)
+  let d = dadosHist(idHist(ano, elId), aba.municipal ? mun.cd : 'sc')
+  if ((!d || !d.candidatos.length) && turnoAtual() === 2) {
+    estado.turnoHist = 1
+    elId = elDoAno(aba.cargo)
+    d = dadosHist(idHist(ano, elId), aba.municipal ? mun.cd : 'sc')
+  }
+  if (!d || !d.candidatos.length) {
+    estado.dados = null
+    conteudo.innerHTML = cabecalhoAbrangencia() + `<div class="cartao vazio"><p class="vazio-titulo">Sem resultado de ${esc(aba.rotulo)} em ${ano}${aba.municipal && mun ? ` para ${esc(mun.nm)}` : ''}</p><p>${aba.municipal ? 'Escolha outro município.' : 'Essa eleição não está nos dados do app.'}</p></div>`
+    statusEl.textContent = `Resultado oficial · TSE ${ano}`
+    statusEl.className = 'status ok'
+    return
+  }
+  try {
+    if (mun && !aba.municipal) d = await dadosHistMun(d, ano, elId, mun)
+  } catch {
+    if (ctrl.signal.aborted) return
+    d = { ...d, erroMun: true }
+  }
+  if (ctrl.signal.aborted) return
+  const turno = Number(elId[1]) || 1
+  d = { ...d, mun: aba.municipal ? null : mun, cargoNome: `${(ROTULO_ELEICAO[elId] || aba.rotulo).replace(/ · 2º turno$/, '')}${turno === 2 ? ' · 2º turno' : ''}`, abrangencia: UF, atualizadoEm: `${ano} (resultado oficial)` }
+  estado.anterior = new Map()
+  estado.dados = d
+  renderizar()
+  statusEl.textContent = `Resultado oficial · TSE ${ano}`
+  statusEl.className = 'status ok'
+}
+
+// 1º/2º turno nos anos anteriores (governador e prefeito, quando houve)
+function seletorTurnoHist() {
+  const aba = estado.aba
+  if (ehAoVivo() || !(aba.cargo === 3 || aba.cargo === 11)) return ''
+  const el2 = eleicaoHist(anoAtual(), `t2-c${aba.cargo}`)
+  const tem2 = !!el2 && (!aba.municipal || cidadeDe(el2, estado.mun?.cd || FLORIPA_CD).candidatos.length > 0)
+  if (!tem2) return ''
+  return `<div class="segmentado turnos" role="group" aria-label="Turno">${[1, 2].map((t) => `<button type="button" data-turno-hist="${t}" aria-pressed="${turnoAtual() === t}">${t}º turno</button>`).join('')}</div>`
 }
 
 /* ---------------- Meu território: os votos "entregues" nas escolas e seções de uma liderança ---------------- */
@@ -9163,7 +9345,7 @@ if (DEMO) {
   $('#aviso-demo').hidden = false
   $('#link-demo').hidden = true
 }
-if (TURNO === 2) $('.sub').textContent = 'Eleições Gerais · 2º turno · foco em Santa Catarina'
+$('.sub').textContent = subtituloAno()
 // 🧭 Campanha (campanha.js): formulários e helpers do app
 conteudo.addEventListener('submit', (ev) => {
   const f = ev.target.closest('[data-camp-form]')
