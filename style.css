@@ -1370,9 +1370,9 @@ h1::before { content: "🗳️ "; }
   .abas button:hover { background: rgb(255 255 255 / 14%); }
   .abas button[aria-selected="true"] { background: #fff; color: var(--azul); }
   .abas .contador { margin-left: auto; }
-  .aviso, main, .rodape { grid-column: 2; }
+  body > .aviso, main, .rodape { grid-column: 2; }
   main { max-width: 1100px; width: 100%; padding: 26px 36px 12px; gap: 16px; }
-  .aviso { max-width: 1028px; margin: 22px 36px 0; }
+  body > .aviso { max-width: 1028px; margin: 22px 36px 0; }
   .rodape { max-width: 1100px; padding: 8px 36px 36px; text-align: left; }
   .det-corpo { max-width: 820px; }
   .hero { padding: 24px; }
