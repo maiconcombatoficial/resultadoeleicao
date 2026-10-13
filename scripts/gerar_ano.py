@@ -13,13 +13,13 @@ Só entram as eleições ordinárias (suplementares ficam de fora). Eleição = 
 c3 Governador, c5 Senado, c6 Dep. Federal, c7 Dep. Estadual, c11 Prefeito, c13 Vereador.
 """
 import argparse, collections, csv, io, json, os, subprocess, sys, zipfile
-from comum import CACHE, CDN, RAIZ, baixar
+from comum import CACHE, CDN, PUBLICO, RAIZ, baixar
 
 ap = argparse.ArgumentParser()
 ap.add_argument('--ano', type=int, required=True)
 a = ap.parse_args()
 ANO, UF = a.ano, 'SC'
-DIR = os.path.join(RAIZ, f'dados{ANO}')
+DIR = os.path.join(PUBLICO, f'dados{ANO}')
 CARGOS = {3: 'Governador', 5: 'Senador', 6: 'Deputado Federal', 7: 'Deputado Estadual', 11: 'Prefeito', 13: 'Vereador'}
 VAGAS = {3: 1, 5: 2 if ANO == 2018 else 1, 6: 16, 7: 40, 11: 1, 13: 0}
 log = lambda *x: print(*x, file=sys.stderr, flush=True)

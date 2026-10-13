@@ -13,7 +13,7 @@ App web para acompanhar a apuração das **Eleições Gerais 2026** com os dados
 
 **🔄 Chance de reverter:** selo em cada candidato dizendo se, com as urnas que faltam, ainda dá para mudar a situação: ✅ Garantido / ❌ Sem chance (certeza matemática nos majoritários: a diferença é maior que todos os votos que faltam), 🛡️ Vaga segura, 👍 provável, ⚠️ em risco, 🔄 Pode reverter, ⏳ Reversão difícil, 📉 improvável. Nos deputados usa o próprio cálculo do TSE para achar quantos votos a mais (ou a menos) mudariam a vaga; a lógica está em `chances.js`. Votos que faltam = válidos apurados × seções que faltam ÷ seções apuradas.
 
-**📅 Histórico (2012 a 2024):** a aba "📅 Histórico" traz, além de 2022, as eleições municipais de 2024, 2020, 2016 e 2012 (prefeito e vereador) e as eleições gerais de 2018 e 2014 em SC, com o mesmo detalhamento por zona, bairro, local e seção (escolha o ano e o município). Na ficha de cada candidato, "📜 Histórico eleitoral" mostra todas as eleições dele de 2012 a 2026 (ligadas pelo nome completo, aceitando sobrenome acrescentado). Dados gerados por `python3 scripts/gerar_ano.py --ano <ano>` a partir dos dados abertos do TSE (`votacao_candidato_munzona` e `votacao_secao`), em `dados<ano>/`. Os totais de cada eleição conferem com a soma das seções (votos de candidatos inaptos, que renunciaram ou foram cassados entram como nulos, como no TSE).
+**📅 Histórico (2012 a 2024):** a aba "📅 Histórico" traz, além de 2022, as eleições municipais de 2024, 2020, 2016 e 2012 (prefeito e vereador) e as eleições gerais de 2018 e 2014 em SC, com o mesmo detalhamento por zona, bairro, local e seção (escolha o ano e o município). Na ficha de cada candidato, "📜 Histórico eleitoral" mostra todas as eleições dele de 2012 a 2026 (ligadas pelo nome completo, aceitando sobrenome acrescentado). Dados gerados por `python3 scripts/gerar_ano.py --ano <ano>` a partir dos dados abertos do TSE (`votacao_candidato_munzona` e `votacao_secao`), em `public/dados<ano>/`. Os totais de cada eleição conferem com a soma das seções (votos de candidatos inaptos, que renunciaram ou foram cassados entram como nulos, como no TSE).
 
 **📍 Meu território:** na aba 🏘️ Bairros, "Meu território" deixa uma liderança ou vereador marcar as escolas (locais de votação) ou seções onde trabalhou, em um ou mais municípios (salvo no aparelho). Para o candidato escolhido, mostra os votos "entregues" ali, o % dos válidos, a posição, quanto isso representa do total do candidato em SC, a comparação com 2022 nas mesmas seções e, opcionalmente, com a própria votação de vereador/prefeito em 2024, 2020 ou 2016. Card "Entreguei X votos para…" e planilha.
 
@@ -104,16 +104,43 @@ quantos votos cada candidato ganhou desde a última atualização e marca eleito
 
 **🖥️ No computador:** com mouse e janela larga, as abas do topo quebram em mais de uma linha (todas visíveis, sem rolar para o lado); em janela estreita, a roda do mouse rola as abas para os lados.
 
+**🧭 Campanha (conta, equipe, IA e notas):** aba com login, ligada ao banco da campanha (Postgres no [Neon](https://neon.com)). O comitê cria a conta (vira *admin*), escolhe o candidato e gera **convites** (link `#campanha?convite=CÓDIGO`, pronto para o WhatsApp) para coordenadores e cabos eleitorais; cada pessoa entra com o código e responde a um coordenador. O **📍 Meu território** de cada um (aba 🏘️ Bairros) sincroniza sozinho com o servidor, e o comitê ou o coordenador também pode marcar o território de quem não usa o app. O **📊 relatório de votos por liderança** mostra, para o candidato do comitê, quantos votos cada coordenador e cabo "entregou" nas escolas e seções que marcou: votos, % dos válidos, posição, % do total em SC, 2022 nas mesmas seções, meta × atingido, soma por coordenação, as **seções marcadas por mais de uma pessoa** e o total da equipe (seções únicas) contra o total do candidato — com card, Excel (abas Lideranças, Coordenadores, Locais, Sobreposições) e PDF (capa + uma página por coordenação). **🧠 IA:** perguntas e relatórios sobre os dados de votação (ex.: "onde mais cresceu desde 2022?", "bairros de Joinville com potencial não aproveitado", "urnas onde ficamos em 2º por pouco", "abstenção alta nos nossos redutos", "relatório do que cada coordenador entregou"). É um RAG híbrido: o modelo (Claude, pela API da Anthropic, no servidor) pede os números por *ferramentas* que rodam **no navegador** sobre os arquivos do TSE já carregados (candidatos, votos por município e associação, por zona/bairro/local/seção, bairros de SC, abstenção, comparação entre candidatos, território da equipe) e busca nas **📝 notas** da equipe (busca textual em português no Neon). As respostas vêm em Markdown (tabelas), podem ser **salvas como relatório** do comitê e a conversa fica guardada. Limite diário por pessoa (`IA_LIMITE_DIA`, padrão 80). A chave da API fica só no servidor; os votos não saem do app.
+
 ## Como usar
 
-É um site estático (HTML + CSS + JS, sem build). O navegador consulta o TSE diretamente (o TSE libera CORS).
+Front-end sem framework (HTML + CSS + módulos ES) empacotado pelo **Vite**; API em **TypeScript** com **Hono**, **Drizzle ORM** e **Postgres no Neon**, publicada como função serverless no **Vercel**. O navegador consulta o TSE diretamente (o TSE libera CORS); os arquivos estáticos (dados por seção, área protegida, bibliotecas, ícones) ficam em `public/`.
 
 ```bash
-python3 -m http.server 8000
-# abra http://localhost:8000
+npm ci
+cp .env.example .env         # DATABASE_URL do Neon (+ ANTHROPIC_API_KEY para a 🧠 IA)
+npm run db:migrate           # cria as tabelas no Neon (migrações em drizzle/)
+npm run dev                  # Vite em http://localhost:5173 + API em http://localhost:8787 (/api é encaminhado)
 ```
 
-Para publicar: GitHub Pages (Settings → Pages → branch `main`, pasta `/`), Netlify, Vercel ou qualquer hospedagem estática.
+Outros comandos: `npm run build` (gera `dist/`), `npm run preview`, `npm run typecheck`, `npm run test:api`, `npm test` (Playwright), `npm run db:generate` (nova migração depois de mudar `server/db/schema.ts`), `npm run db:studio`.
+
+### Publicar no Vercel + Neon
+
+1. **Neon:** crie o projeto e copie a string de conexão (`postgresql://…?sslmode=require`). No Vercel, a [integração Neon](https://vercel.com/marketplace/neon) cria `DATABASE_URL` sozinha.
+2. **Vercel:** importe o repositório (framework Vite; `vercel.json` já define o build, a pasta `dist`, o rewrite de `/api/*` para a função `api/index.ts`, o tempo máximo de 60 s da função e os cabeçalhos de cache). Variáveis de ambiente: `DATABASE_URL` (Neon), `ANTHROPIC_API_KEY` (IA), opcionais `IA_MODELO` (padrão `claude-opus-5-5`) e `IA_LIMITE_DIA`.
+3. **Tabelas:** `DATABASE_URL=… npm run db:migrate` (uma vez por banco; as migrações estão em `drizzle/`).
+4. Pronto: o site e a API ficam no mesmo domínio. Sem `DATABASE_URL`, tudo funciona menos a aba 🧭 Campanha (que avisa). Sem `ANTHROPIC_API_KEY`, só a 🧠 IA fica desligada.
+
+**GitHub Pages** continua recebendo o site estático (workflow `.github/workflows/pages.yml`; em Settings → Pages escolha a fonte "GitHub Actions"); lá não há API, então a aba 🧭 Campanha mostra o aviso. Para o Pages usar a API do Vercel, defina `VITE_API_URL=https://<seu-projeto>.vercel.app` no build.
+
+### Estrutura
+
+| Pasta/arquivo | O que é |
+|---|---|
+| `index.html`, `app.js`, `style.css`, `campanha.js`, `api.js`, `*.js` | front-end (Vite empacota; `campanha.js` = aba 🧭 Campanha; `api.js` = cliente da API) |
+| `public/` | arquivos estáticos copiados como estão: `dados<ano>/`, `pro/`, `lib/`, `img/`, `sw.js`, `manifest.webmanifest` |
+| `server/` | API Hono: `app.ts` (rotas), `ia.ts` (🧠 IA), `auth.ts` (senhas scrypt, tokens), `db/schema.ts` (tabelas), `dev.ts` (servidor local) |
+| `api/index.ts` | entrada da função serverless no Vercel |
+| `drizzle/` | migrações SQL geradas pelo Drizzle Kit |
+| `scripts/` | geração dos dados a partir do TSE (Python) |
+| `tests/` | testes Playwright (a API é simulada) |
+
+**API** (`/api`, JSON, `Authorization: Bearer <token>`): `POST /auth/cadastrar`, `POST /auth/entrar`, `POST /auth/sair`, `GET|PATCH /me`, `PATCH /comite`, `GET|POST /convites`, `DELETE /convites/:codigo`, `GET|PUT /territorio`, `GET /equipe`, `PATCH|DELETE /equipe/:id`, `PUT /equipe/:id/territorio`, `GET|POST /notas`, `DELETE /notas/:id`, `GET|POST /relatorios`, `GET|DELETE /relatorios/:id`, `GET /ia/estado`, `POST /ia/chat`, `GET|POST /ia/conversas`, `GET|PUT|DELETE /ia/conversas/:id`, `GET /saude`. Papéis: `admin` (comitê), `coordenador`, `cabo`. Senhas só como hash (scrypt); sessões de 60 dias guardadas pelo hash do token.
 
 Parâmetros de URL:
 
@@ -143,11 +170,11 @@ Projeto independente, sem vínculo com a Justiça Eleitoral.
 
 ## Atualização automática (2º turno)
 
-O workflow `.github/workflows/boletins.yml` roda sozinho na noite do 2º turno (25/10/2026) e de madrugada no dia 26. Também pode ser disparado à mão em **Actions → Boletins de urna → Run workflow**. Ele baixa os boletins de urna de SC, gera os dados por seção e bairro (`dados2026/`) e publica. A aba "🏘️ Bairros" e a ficha passam a mostrar o 2º turno sem mudança no código. Para refazer também a área protegida (mapa, perfil, abstenção e transferência do 2º turno), cadastre o segredo **`PRO_SENHA`** em *Settings → Secrets and variables → Actions*, com a senha de um usuário da área. Os scripts estão em `scripts/` (veja `scripts/README.md`).
+O workflow `.github/workflows/boletins.yml` roda sozinho na noite do 2º turno (25/10/2026) e de madrugada no dia 26. Também pode ser disparado à mão em **Actions → Boletins de urna → Run workflow**. Ele baixa os boletins de urna de SC, gera os dados por seção e bairro (`public/dados2026/`) e publica. A aba "🏘️ Bairros" e a ficha passam a mostrar o 2º turno sem mudança no código. Para refazer também a área protegida (mapa, perfil, abstenção e transferência do 2º turno), cadastre o segredo **`PRO_SENHA`** em *Settings → Secrets and variables → Actions*, com a senha de um usuário da área. Os scripts estão em `scripts/` (veja `scripts/README.md`).
 
 ## Testes automáticos
 
-`npm test` abre o app num Chromium de celular (Playwright) e confere as telas principais: Início, cada aba, ficha com "Onde foi mais votado", relatório em PDF, comparação entre cargos, associações, Sobre, aviso de versão nova e prévia de link. Os dados do TSE usados nos testes ficam gravados em `tests/fixtures/tse` (regravar com `npm run test:gravar`), então o resultado não depende da internet. O workflow `.github/workflows/testes.yml` roda tudo em cada PR e em cada publicação na `main`.
+`npm test` faz o build e abre o app (`vite preview`) num Chromium de celular (Playwright), conferindo as telas principais: Início, cada aba (inclusive 🧭 Campanha, com a API simulada), ficha com "Onde foi mais votado", relatório em PDF, comparação entre cargos, associações, Sobre, aviso de versão nova e prévia de link. Os dados do TSE usados nos testes ficam gravados em `tests/fixtures/tse` (regravar com `npm run test:gravar`), então o resultado não depende da internet. `npm run test:api` testa senhas, tokens e convites da API (`node --test`); `npm run typecheck` confere os tipos. O workflow `.github/workflows/testes.yml` roda tudo em cada PR e em cada publicação na `main`.
 
 Para rodar localmente: `npm ci && npx playwright install chromium && npm test`.
 

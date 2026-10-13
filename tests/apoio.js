@@ -34,6 +34,8 @@ export const test = base.extend({
     })
     // mapas da área protegida não entram nos testes
     await page.route(/tile\.openstreetmap\.org|arcgisonline\.com/, (r) => r.fulfill({ status: 404, body: '' }))
+    // a API da campanha (/api, Neon) não existe no site estático dos testes: responde como "sem banco"
+    await page.route('**/api/**', (r) => r.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ erro: 'Banco de dados não configurado neste servidor.' }) }))
     await use(page)
     expect(erros, 'erros de JavaScript na página').toEqual([])
   },

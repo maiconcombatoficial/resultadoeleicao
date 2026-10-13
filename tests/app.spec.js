@@ -15,7 +15,7 @@ test('Início abre por padrão com o resumo de SC', async ({ page }) => {
   expect(img.bytes).toBeGreaterThan(30_000)
 })
 
-for (const aba of ['depfed', 'depest', 'governador', 'senador', 'municipios', 'bairros', 'h2022', 'sobre']) {
+for (const aba of ['depfed', 'depest', 'governador', 'senador', 'municipios', 'bairros', 'campanha', 'h2022', 'sobre']) {
   test(`aba ${aba} abre sem erro`, async ({ page }) => {
     await page.goto(`/#${aba}`)
     await expect(page.locator(`[data-aba="${aba}"][aria-selected="true"]`)).toBeVisible()
@@ -84,7 +84,7 @@ test('Sobre traz metodologia, privacidade e versão', async ({ page }) => {
 test('aviso de versão nova', async ({ page }) => {
   await page.route(/\?checar=/, async (r) => {
     const res = await r.fetch()
-    r.fulfill({ status: 200, body: (await res.text()).replace(/app\.js\?v=\d+/, 'app.js?v=209912312359'), headers: { 'content-type': 'text/html' } })
+    r.fulfill({ status: 200, body: (await res.text()).replace(/<meta name="versao" content="[^"]+"/, '<meta name="versao" content="209912312359-nova"'), headers: { 'content-type': 'text/html' } })
   })
   await page.goto('/#sobre')
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
@@ -893,4 +893,27 @@ test('ficha não trava se o resumo de um ano anterior falhar', async ({ page }) 
   await expect(page.locator('.detalhe .det-cabeca h2')).toHaveText('GEMADA')
   await expect(page.locator('.detalhe .cartao.historico')).toContainText('2020')
   await page.goto('about:blank', { timeout: 10_000 })
+})
+
+test('Campanha: sem servidor, mostra o login e o aviso de indisponível', async ({ page }) => {
+  await page.goto('/#campanha')
+  await expect(page.locator('.camp-login')).toBeVisible()
+  await expect(page.locator('.camp-aviso')).toContainText('servidor da campanha')
+  await page.locator('[data-camp-modo="criar"]').click()
+  await expect(page.locator('#camp-nome')).toBeVisible()
+  await expect(page.locator('#camp-comite')).toBeVisible()
+})
+
+test('Campanha: link de convite preenche o código no cadastro', async ({ page }) => {
+  await page.goto('/#campanha?convite=abcd2345')
+  await expect(page.locator('#camp-convite')).toHaveValue('ABCD2345')
+  await expect(page.locator('#camp-comite')).toHaveCount(0)
+})
+
+test('Campanha: tentativa de entrar sem servidor avisa e não trava', async ({ page }) => {
+  await page.goto('/#campanha')
+  await page.locator('#camp-usuario').fill('maria')
+  await page.locator('#camp-senha').fill('segredo1')
+  await page.locator('.camp-login button[type="submit"]').click()
+  await expect(page.locator('.camp-erro')).toBeVisible()
 })

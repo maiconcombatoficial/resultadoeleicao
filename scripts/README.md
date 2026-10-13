@@ -1,6 +1,6 @@
 # Scripts de dados
 
-Geram os arquivos estáticos do app a partir dos dados públicos do TSE. Precisam de Python 3 com `asn1tools` e `cryptography` (`pip install asn1tools cryptography`). Os downloads ficam em `.cache/`, que não vai para o git.
+Geram os arquivos estáticos do app (em `public/`: `dados<ano>/` e `pro/`) a partir dos dados públicos do TSE. Precisam de Python 3 com `asn1tools` e `cryptography` (`pip install asn1tools cryptography`). Os downloads ficam em `.cache/`, que não vai para o git.
 
 | Script | O que faz |
 |---|---|

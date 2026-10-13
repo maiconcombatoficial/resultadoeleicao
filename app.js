@@ -4,12 +4,13 @@
 //   6257/6258 = Eleição Geral Federal (Presidente) 1º/2º turno
 //   6259/6260 = Eleições Gerais Estaduais (Governador, Senador, Deputados) 1º/2º turno
 
-import { icone } from './icones.js?v=202610100900'
-import { calcularVagas } from './vagas.js?v=202610100900'
-import { chanceDe, NIVEIS } from './chances.js?v=202610100900'
-import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js?v=202610100900'
-import { FLORIPA } from './floripa.js?v=202610100900'
-import { corPartido, corTexto } from './cores.js?v=202610100900'
+import { icone } from './icones.js'
+import { calcularVagas } from './vagas.js'
+import { chanceDe, NIVEIS } from './chances.js'
+import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js'
+import { FLORIPA } from './floripa.js'
+import { corPartido, corTexto } from './cores.js'
+import { configurarCampanha, renderCampanha, tratarCampanha, inputCampanha, submitCampanha, prepararCampanha, aoSalvarTerritorio, CAMPOS_CAMPANHA, paramsCampanha, aplicarParamsCampanha } from './campanha.js'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -29,6 +30,7 @@ const ABAS = [
   { id: 'favoritos', rotulo: '❤️ Acompanhados', tipo: 'fav', abrangencias: ['br'] },
   { id: 'municipios', rotulo: '📊 Municípios', tipo: 'mun', abrangencias: ['sc'] },
   { id: 'bairros', rotulo: '🏘️ Bairros', tipo: 'bai', abrangencias: ['sc'] },
+  { id: 'campanha', rotulo: '🧭 Campanha', tipo: 'camp', abrangencias: ['sc'] },
   { id: 'analises', rotulo: '🔒 Análises', tipo: 'pro', abrangencias: ['sc'] },
   { id: 'h2022', rotulo: '📅 Histórico', tipo: 'h22', abrangencias: ['sc'] },
   { id: 'presidente', rotulo: 'Presidente', cargo: 1, eleicao: 'federal', tipo: 'maj', abrangencias: ['br', UF] },
@@ -739,6 +741,7 @@ function paramsAba() {
     if (estado.partido) p.p = estado.partido
   }
   if (a.tipo === 'painel' && estado.anoInicio && estado.anoInicio !== 2026) p.ano = estado.anoInicio
+  if (a.tipo === 'camp') Object.assign(p, paramsCampanha())
   if (a.tipo === 'bai' || a.tipo === 'h22') {
     const X = estadoLocal()
     if (a.tipo === 'h22' && (H22.ano || 2022) !== 2022) p.ano = H22.ano
@@ -799,6 +802,7 @@ function aplicarLink(hash = location.hash) {
     }
   }
   if (aba.tipo === 'painel') estado.anoInicio = ANOS_INICIO().includes(Number(p.get('ano'))) ? Number(p.get('ano')) : 2026
+  if (aba.tipo === 'camp' && temParams) aplicarParamsCampanha(p)
   if ((aba.tipo === 'bai' || aba.tipo === 'h22') && temParams) {
     const X = aba.tipo === 'bai' ? B26 : H22
     if (aba.tipo === 'h22') H22.ano = ANOS_HIST.includes(Number(p.get('ano'))) ? Number(p.get('ano')) : 2022
@@ -1310,7 +1314,7 @@ async function carregar() {
   const abr = abrAtual()
   statusEl.textContent = 'Atualizando…'
   statusEl.className = 'status carregando'
-  if (!estado.dados) conteudo.innerHTML = (['fav', 'mun', 'h22', 'bai', 'pro', 'sobre', 'painel'].includes(aba.tipo) ? '' : cabecalhoAbrangencia()) + esqueleto(`Carregando ${semEmoji(aba.rotulo)}${munAtual() ? ` em ${munAtual().nm}` : ''}…`, munAtual()?.regiao ? '<small id="progresso-regiao" class="mudo"></small>' : '')
+  if (!estado.dados) conteudo.innerHTML = (['fav', 'mun', 'h22', 'bai', 'camp', 'pro', 'sobre', 'painel'].includes(aba.tipo) ? '' : cabecalhoAbrangencia()) + esqueleto(`Carregando ${semEmoji(aba.rotulo)}${munAtual() ? ` em ${munAtual().nm}` : ''}…`, munAtual()?.regiao ? '<small id="progresso-regiao" class="mudo"></small>' : '')
   if (aba.tipo === 'fav') return carregarFavoritos(ctrl)
   if (aba.tipo === 'painel') return carregarPainel(ctrl)
   if (aba.tipo === 'mun') return carregarPainelMunicipios(ctrl)
@@ -1319,6 +1323,7 @@ async function carregar() {
     return carregar2022(ctrl)
   }
   if (aba.tipo === 'bai') return carregarBairros(ctrl)
+  if (aba.tipo === 'camp') return carregarCampanha(ctrl)
   if (aba.tipo === 'pro') return carregarPro(ctrl)
   if (aba.tipo === 'sobre') {
     estado.dados = { sobre: true }
@@ -2175,6 +2180,7 @@ conteudo.addEventListener('click', (ev) => {
     if (h('[data-h22-vergrupos]')) return ((X.verGrupos = true), renderizar())
   }
   if (h('[data-h22-todos-est]')) return ((B26.verTodos = true), renderizar())
+  if (estado.aba.tipo === 'camp' && tratarCampanha(h)) return
   if (estado.aba.tipo === 'bai') {
     const fav = h('[data-b26-fav]')
     if (fav) {
@@ -2308,6 +2314,7 @@ conteudo.addEventListener('input', (ev) => {
     return
   }
   if (['terr-mun', 'terr-ref-busca', 'terr-nome'].includes(ev.target.id)) return inputTerritorio(ev.target)
+  if (estado.aba.tipo === 'camp' && (CAMPOS_CAMPANHA.includes(ev.target.id) || ev.target.dataset.campPapel || ev.target.dataset.campCoord || ['camp-cv-papel', 'camp-cv-coord', 'camp-cv-usos'].includes(ev.target.id))) return inputCampanha(ev.target)
   if (ev.target.id === 'qr-foto') return lerFotoQR(ev.target)
   if (ev.target.id === 'b26-busca') {
     B26.buscaCand = ev.target.value
@@ -3220,6 +3227,21 @@ function renderizar() {
   }
   if (estado.aba.tipo === 'painel') {
     conteudo.innerHTML = renderPainel()
+    return
+  }
+  if (estado.aba.tipo === 'camp') {
+    const idf = CAMPOS_CAMPANHA.includes(document.activeElement?.id) ? document.activeElement.id : null
+    const foco = idf ? document.activeElement.selectionStart : null
+    conteudo.innerHTML = renderCampanha()
+    if (idf) {
+      const el = document.getElementById(idf)
+      el?.focus()
+      if (foco != null && el?.setSelectionRange) {
+        try {
+          el.setSelectionRange(foco, foco)
+        } catch {}
+      }
+    }
     return
   }
   if (estado.aba.tipo === 'h22' || estado.aba.tipo === 'bai' || estado.aba.tipo === 'pro') {
@@ -4799,7 +4821,8 @@ const versaoLegivel = () => (/^\d{12}$/.test(VERSAO) ? `${VERSAO.slice(6, 8)}/${
 /* ---------------- eleições de 2022 (SC) ---------------- */
 
 // Resultado oficial de 2022 em SC (TSE, votacao_candidato_munzona_2022), em dados2022/.
-const VERSAO = new URL(import.meta.url).searchParams.get('v') || ''
+// Versão do build (injetada pelo Vite em vite.config.ts); fora do build, o ?v= do script
+const VERSAO = typeof __VERSAO__ !== 'undefined' ? __VERSAO__ : new URL(import.meta.url).searchParams.get('v') || ''
 const H22 = { resumo: null, carregando: null, mun: new Map(), atual: null, atualT: 0, sel: 't1-c7', busca: '', ano: 2022 }
 // eleições anteriores com dados no app (dados<ano>/): 2022 é o H22; as outras ficam em HIST
 const ANOS_HIST = [2024, 2022, 2020, 2018, 2016, 2014, 2012]
@@ -6063,6 +6086,31 @@ async function carregarBairros(ctrl) {
   statusEl.className = 'status ok'
 }
 
+// candidatos de 2026 de um cargo, no formato do explorador (B26.els), carregando do TSE se preciso
+async function carregarEleicao(cargo, signal) {
+  await indice26Pronto
+  const id = eleicaoDoCargo(cargo)
+  if (B26.els.has(id)) return B26.els.get(id)
+  const aba = ABAS.find((a) => a.cargo === cargo)
+  if (!aba) throw new Error('Cargo inválido')
+  const d = await buscar(aba, UF, turnoDe(id), signal)
+  const el = eleicao26(d, cargo, turnoDe(id))
+  B26.els.set(id, el)
+  return el
+}
+
+// 🧭 Campanha: conta, equipe, IA e notas (campanha.js)
+async function carregarCampanha(ctrl) {
+  try {
+    await prepararCampanha(ctrl.signal)
+  } catch {}
+  if (ctrl.signal.aborted) return
+  estado.dados = { camp: true }
+  renderizar()
+  statusEl.textContent = 'Campanha'
+  statusEl.className = 'status ok'
+}
+
 /* ---------------- Meu território: os votos "entregues" nas escolas e seções de uma liderança ---------------- */
 
 // itens: { "cd|z-loc": [] (local inteiro) ou ["z-s", …] (só essas seções) } · ref: candidato municipal de comparação
@@ -6073,31 +6121,36 @@ const TERR = (() => {
   } catch {}
   return { nome: 'Meu território', itens: {}, ref: null, cdEdit: null, buscaMun: '', buscaRef: '', abertos: new Set() }
 })()
-const salvarTerr = () => gravarLocal('territorio:v1', JSON.stringify({ nome: TERR.nome, itens: TERR.itens, ref: TERR.ref }))
-const terrCds = () => [...new Set(Object.keys(TERR.itens).map((k) => k.split('|')[0]))]
+// semEnviar: veio do servidor (campanha.js), não precisa mandar de volta
+const salvarTerr = (semEnviar = false) => {
+  gravarLocal('territorio:v1', JSON.stringify({ nome: TERR.nome, itens: TERR.itens, ref: TERR.ref }))
+  if (!semEnviar) aoSalvarTerritorio()
+}
+const terrCds = (itens = TERR.itens) => [...new Set(Object.keys(itens).map((k) => k.split('|')[0]))]
 
 // seções (z-s) do território num arquivo de seções do município cd
-function secoesDoTerr(arq, cd) {
+function secoesDoTerr(arq, cd, itens = TERR.itens) {
   const out = []
   for (const [zs, loc] of Object.entries(arq.secoes)) {
-    const it = TERR.itens[`${cd}|${loc}`]
+    const it = itens[`${cd}|${loc}`]
     if (it && (!it.length || it.includes(zs))) out.push([zs, loc])
   }
   return out
 }
 
 // soma uma eleição nas seções do território, por local; foco = número do candidato
-function somaTerr(ano, elId, cargo, foco, anul = new Set(), re) {
+// itens: o território (o da pessoa, ou o de um membro da equipe em campanha.js)
+function somaTerr(ano, elId, cargo, foco, anul = new Set(), re, itens = TERR.itens) {
   const porLocal = new Map(), total = new Map()
   let validos = 0, faltam = 0
-  for (const cd of terrCds()) {
+  for (const cd of terrCds(itens)) {
     const arq26 = secoesAno(2026, cd, re)
     const arq = ano === 2026 ? arq26 : secoesAno(ano, cd, re)
     if (!arq26 || !arq) {
       if (!erroSecoes(ano, cd)) faltam++
       continue
     }
-    for (const [zs, loc] of secoesDoTerr(arq26, cd)) {
+    for (const [zs, loc] of secoesDoTerr(arq26, cd, itens)) {
       const arr = arq.votos[elId]?.[zs]
       if (!arr) continue
       const k = `${cd}|${loc}`
@@ -9078,13 +9131,13 @@ function abrirAnalises(det) {
 // instalar como app (PWA): service worker com rede primeiro
 if ('serviceWorker' in navigator && !DEMO) navigator.serviceWorker.register('sw.js').catch(() => {})
 
-// Versão nova publicada: compara o ?v= do app.js no index.html do servidor com o desta página
+// Versão nova publicada: compara a <meta name="versao"> do index.html do servidor com a desta página
 // e oferece recarregar (sem precisar fechar e abrir o app).
 async function checarVersao() {
   if (!VERSAO || document.getElementById('versao-nova')) return
   try {
     const html = await (await fetch(`./?checar=${Date.now()}`, { cache: 'no-store' })).text()
-    const v = html.match(/app\.js\?v=(\d+)/)?.[1]
+    const v = html.match(/<meta name="versao" content="([\w.-]+)"/)?.[1]
     if (!v || v === VERSAO) return
     const faixa = document.createElement('div')
     faixa.id = 'versao-nova'
@@ -9111,6 +9164,22 @@ if (DEMO) {
   $('#link-demo').hidden = true
 }
 if (TURNO === 2) $('.sub').textContent = 'Eleições Gerais · 2º turno · foco em Santa Catarina'
+// 🧭 Campanha (campanha.js): formulários e helpers do app
+conteudo.addEventListener('submit', (ev) => {
+  const f = ev.target.closest('[data-camp-form]')
+  if (!f) return
+  ev.preventDefault()
+  submitCampanha(f)
+})
+configurarCampanha({
+  esc, fmt, fmtPct, pctDe, semAcento, nomeArquivo, esqueleto, icone, estiloCor, corPartido, pill, attrCand, variacao, COR_VAR, totalCard, listaComparada, botaoCard, baixarCSV, baixarExcel, baixarArquivo, gerarPDF, hashDe,
+  NOME_MUN, MUNICIPIOS_SC, ASSOCIACAO_MUN, ASSOCIACOES, ROTULO_26, ROTULO_ELEICAO, INDICE26, eleicaoDoCargo, turnoDe, ehProp, UF, ABAS, PREF, H22, B26, TERR,
+  get favoritos() {
+    return favoritos
+  },
+  achar2022, resumo2022, munAno, somaTerr, secoesAno, erroSecoes, arquivoAno, agregarSecoes, bairroDoLocal, tituloLocal, posicaoNoGrupo, salvarTerr, carregarEleicao,
+  carregar, rerender: () => estado.aba.tipo === 'camp' && !estado.detalhe && renderizar(),
+})
 montarAbas()
 if (lerHash().p.toString() || lerHash().id === 'telao') aplicarLink()
 else carregar()
