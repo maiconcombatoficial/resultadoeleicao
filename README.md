@@ -114,9 +114,14 @@ Front-end sem framework (HTML + CSS + módulos ES) empacotado pelo **Vite**; API
 
 ```bash
 npm ci
-cp .env.example .env         # DATABASE_URL do Neon (+ ANTHROPIC_API_KEY para a 🧠 IA)
-npm run db:migrate           # cria as tabelas no Neon (migrações em drizzle/)
 npm run dev                  # Vite em http://localhost:5173 + API em http://localhost:8787 (/api é encaminhado)
+```
+
+Sem `DATABASE_URL`, o desenvolvimento usa um **Postgres embutido (PGlite)** gravado em `.dados-local/`, com as migrações aplicadas sozinhas: dá para criar o comitê, convidar a equipe, marcar territórios e ver o relatório sem configurar nada (`BANCO_LOCAL=0` desliga). Para usar o Neon também no PC, ou a 🧠 IA:
+
+```bash
+cp .env.example .env         # DATABASE_URL do Neon e/ou ANTHROPIC_API_KEY
+npm run db:migrate           # cria as tabelas no Neon (migrações em drizzle/)
 ```
 
 Outros comandos: `npm run build` (gera `dist/`), `npm run preview`, `npm run typecheck`, `npm run test:api`, `npm test` (Playwright), `npm run db:generate` (nova migração depois de mudar `server/db/schema.ts`), `npm run db:studio`.

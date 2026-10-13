@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",
+    "@electric-sql/pglite": "^0.5.9",
     "@hono/vercel": "^1.0.1",
     "@neondatabase/serverless": "^1.0.1",
     "drizzle-orm": "^0.44.2",

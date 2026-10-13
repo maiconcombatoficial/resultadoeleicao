@@ -8,7 +8,7 @@ import type { Context } from 'hono'
 import { cors } from 'hono/cors'
 import { and, desc, eq, gt, inArray, sql } from 'drizzle-orm'
 import { z } from 'zod'
-import { db, schema, temBanco } from './db/index.ts'
+import { bancoLocal, db, prontoBanco, schema, temBanco } from './db/index.ts'
 import { DIAS_CONVITE, DIAS_SESSAO, conferirSenha, daquiA, gerarHash, hashToken, novoCodigo, novoToken } from './auth.ts'
 import type { Candidato, Itens, Papel, Usuario } from './db/schema.ts'
 import { Invalido, Proibido, corpo, type Vars } from './comum.ts'
@@ -21,7 +21,13 @@ export const app = new Hono<{ Variables: Vars }>().basePath('/api')
 app.use('*', cors({ origin: (o) => o, credentials: false, allowHeaders: ['Authorization', 'Content-Type'] }))
 app.notFound((c) => c.json({ erro: 'Rota não encontrada' }, 404))
 
-app.get('/saude', (c) => c.json({ ok: true, banco: temBanco(), ia: temIA(), agora: new Date().toISOString() }))
+// prepara o banco (Neon, ou o PGlite local no desenvolvimento) antes de qualquer rota
+app.use('*', async (c, next) => {
+  await prontoBanco().catch(() => null)
+  return next()
+})
+
+app.get('/saude', (c) => c.json({ ok: true, banco: temBanco(), bancoLocal: bancoLocal(), ia: temIA(), agora: new Date().toISOString() }))
 
 // sem banco configurado, tudo (menos /saude) responde 503: o app mostra "indisponível" e segue funcionando
 app.use('*', async (c, next) => {
