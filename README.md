@@ -146,7 +146,7 @@ Outros comandos: `npm run build` (gera `dist/`), `npm run preview`, `npm run typ
 
 | Pasta/arquivo | O que é |
 |---|---|
-| `index.html`, `app.js`, `style.css`, `campanha.js`, `api.js`, `*.js` | front-end (Vite empacota; `campanha.js` = aba 🧭 Campanha; `api.js` = cliente da API) |
+| `index.html`, `app.js`, `style.css`, `*.js` | front-end (Vite empacota). Módulos: `nucleo.js` (constantes, formatação, armazenamento local, elementos da página), `exportar.js` (cards, carrosséis, PDF, Excel, CSV), `telao.js` (modo telão), `pro.js` (área 🔒 Análises), `qr.js` (leitura do boletim de urna), `campanha.js` (aba 🧭 Campanha), `api.js` (cliente da API); `app.js` concentra abas, ficha, histórico e explorador. Os módulos importam do `app.js` só o que usam dentro de funções (importações circulares são seguras assim; nada no topo de um módulo toca o que ainda não foi avaliado). |
 | `public/` | arquivos estáticos copiados como estão: `dados<ano>/`, `pro/`, `lib/`, `img/`, `sw.js`, `manifest.webmanifest` |
 | `server/` | API Hono: `app.ts` (rotas), `sessao.ts` (sessões, contas, limites do plano), `google.ts` (login com Google), `cobranca.ts` (planos e Mercado Pago), `planos.ts` (catálogo, também usado pelo front), `ia.ts` (🧠 IA), `limites.ts` (rate limit), `email.ts` (Resend), `auth.ts` (senhas scrypt, tokens), `db/schema.ts` (tabelas), `dev.ts` (servidor local), `api.test.ts` (testes contra o PGlite) |
 | `api/index.ts` | entrada da função serverless no Vercel |
