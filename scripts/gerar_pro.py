@@ -7,10 +7,10 @@ Nenhuma senha é gravada: usuarios.json guarda só a chave dos dados embrulhada 
 """
 import argparse, base64, collections, csv, gzip, hashlib, io, json, os, sys, zipfile
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from comum import CACHE, CDN, RAIZ, TSE, baixar, baixar_json, chave_nome, ler_locais
+from comum import CACHE, CDN, PUBLICO, RAIZ, TSE, baixar, baixar_json, chave_nome, ler_locais
 from transferencia import de_arquivos
 
-OUT = os.path.join(RAIZ, 'pro')
+OUT = os.path.join(PUBLICO, 'pro')
 ITER = 310000
 os.makedirs(OUT, exist_ok=True)
 log = lambda *x: print(*x, file=sys.stderr, flush=True)
@@ -85,7 +85,7 @@ def main():
     if not usuarios['u']:
         add_usuario(chave, os.environ['PRO_USUARIO'], os.environ['PRO_SENHA'])
 
-    D26 = os.path.join(RAIZ, 'dados2026')
+    D26 = os.path.join(PUBLICO, 'dados2026')
     ELS = json.load(open(os.path.join(D26, 'indice.json')))['eleicoes']
     secoes = {f[:5]: json.load(open(os.path.join(D26, 'secoes', f))) for f in os.listdir(os.path.join(D26, 'secoes'))}
     L, S, PRINC = ler_locais(2026, 1)
@@ -115,12 +115,12 @@ def main():
         gravar(chave, 'locais' if turno == 1 else f'locais-t{turno}', {'cargos': cargos, 'turno': turno, 'l': locais})
 
     # votos por município (mapa de SC), com 2022 ligado pelo nome completo
-    r22 = json.load(open(os.path.join(RAIZ, 'dados2022', 'resumo.json')))
+    r22 = json.load(open(os.path.join(PUBLICO, 'dados2022', 'resumo.json')))
     idx22 = collections.defaultdict(list)
     for e in r22['eleicoes']:
         for x in e['candidatos']:
             idx22[chave_nome(x[3])].append((e['turno'], e['cargo'], x[0]))
-    mun22 = {f[4:-5]: json.load(open(os.path.join(RAIZ, 'dados2022', f))) for f in os.listdir(os.path.join(RAIZ, 'dados2022')) if f.startswith('mun-')}
+    mun22 = {f[4:-5]: json.load(open(os.path.join(PUBLICO, 'dados2022', f))) for f in os.listdir(os.path.join(PUBLICO, 'dados2022')) if f.startswith('mun-')}
     for el in ELS:
         t, c = int(el[1]), int(el.split('-c')[1])
         ele = (6257 if c == 1 else 6259) + (t - 1)
@@ -196,7 +196,7 @@ def main():
         el1 = 't1-' + el2.split('-')[1]
         if el1 in ELS:
             gravar(chave, f'transf-{el2.split("-")[1]}', {'ano': 2026, **de_arquivos(secoes.values(), el1, el2)})
-    s22 = [json.load(open(os.path.join(RAIZ, 'dados2022', 'secoes', f))) for f in os.listdir(os.path.join(RAIZ, 'dados2022', 'secoes'))]
+    s22 = [json.load(open(os.path.join(PUBLICO, 'dados2022', 'secoes', f))) for f in os.listdir(os.path.join(PUBLICO, 'dados2022', 'secoes'))]
     gravar(chave, 'transf22-c3', {'ano': 2022, **de_arquivos(s22, 't1-c3', 't2-c3')})
 
 

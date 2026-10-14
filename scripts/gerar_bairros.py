@@ -5,14 +5,14 @@
 Os votos de outros turnos já gravados nos arquivos de seções são mantidos.
 """
 import argparse, collections, json, os, sys
-from comum import CACHE, RAIZ, TSE, baixar_json, bairros_floripa, chave_nome, ler_bu, ler_locais
+from comum import CACHE, PUBLICO, RAIZ, TSE, baixar_json, bairros_floripa, chave_nome, ler_bu, ler_locais
 
 ap = argparse.ArgumentParser()
 ap.add_argument('--ano', type=int, default=2026)
 ap.add_argument('--turno', type=int, default=1)
 ap.add_argument('--pleito', type=int)
 a = ap.parse_args()
-DIR = os.path.join(RAIZ, f'dados{a.ano}')
+DIR = os.path.join(PUBLICO, f'dados{a.ano}')
 os.makedirs(os.path.join(DIR, 'secoes'), exist_ok=True)
 FLORIPA = bairros_floripa(a.ano)
 L, S, _ = ler_locais(a.ano, a.turno)
@@ -96,7 +96,7 @@ for cd, arq in arquivos.items():
 # 2026: liga cada candidato à participação dele em 2022 (nome completo) e soma os votos de 2022 por bairro
 liga, votos22 = {}, collections.defaultdict(collections.Counter)
 if a.ano == 2026:
-    r22 = json.load(open(os.path.join(RAIZ, 'dados2022', 'resumo.json')))
+    r22 = json.load(open(os.path.join(PUBLICO, 'dados2022', 'resumo.json')))
     idx22 = collections.defaultdict(list)
     for e in r22['eleicoes']:
         for x in e['candidatos']:
@@ -116,7 +116,7 @@ if a.ano == 2026:
                         p = next((q for q in parts if q[1] == t and q[2] == c), None) or next((q for q in parts if q[1] == 1 and q[2] == c), None) or next((q for q in parts if q[1] == 1), parts[0])
                         liga[(el, int(x['n']))] = p
                         pedidos[p[0]].add(p[3])
-    D22 = os.path.join(RAIZ, 'dados2022', 'secoes')
+    D22 = os.path.join(PUBLICO, 'dados2022', 'secoes')
     for f in os.listdir(D22):
         arq = json.load(open(os.path.join(D22, f))); cd = f[:5]
         for el22, nrs in pedidos.items():

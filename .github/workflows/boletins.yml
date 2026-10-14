@@ -1,5 +1,5 @@
-# Baixa os boletins de urna de SC, gera os dados por seção e bairro (dados2026/) e, se houver o
-# segredo PRO_SENHA (ou PRO_CHAVE), refaz a área protegida (pro/). Roda sozinho na noite do 2º turno
+# Baixa os boletins de urna de SC, gera os dados por seção e bairro (public/dados2026/) e, se houver o
+# segredo PRO_SENHA (ou PRO_CHAVE), refaz a área protegida (public/pro/). Roda sozinho na noite do 2º turno
 # (25/10/2026) e pode ser disparado à mão em Actions → "Boletins de urna" → Run workflow.
 name: Boletins de urna
 
@@ -48,7 +48,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add dados2026 pro
+          git add public/dados2026 public/pro
           if git diff --cached --quiet; then echo "Nada novo."; exit 0; fi
           git commit -m "Boletins de urna: dados por seção e bairro (${TURNO}º turno)"
           git pull --rebase origin ${{ github.ref_name }}

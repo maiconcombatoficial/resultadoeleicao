@@ -11,13 +11,13 @@ consulta_cand_<ano> e bem_candidato_<ano>. Grava:
                              estado civil, bens declarados, candidato à reeleição
 """
 import argparse, collections, csv, io, json, os, sys, unicodedata, zipfile
-from comum import CACHE, CDN, RAIZ, baixar
+from comum import CACHE, CDN, PUBLICO, RAIZ, baixar
 
 ap = argparse.ArgumentParser()
 ap.add_argument('--ano', type=int, required=True)
 a = ap.parse_args()
 ANO, UF = a.ano, 'SC'
-DIR = os.path.join(RAIZ, f'dados{ANO}')
+DIR = os.path.join(PUBLICO, f'dados{ANO}')
 log = lambda *x: print(*x, file=sys.stderr, flush=True)
 csv.field_size_limit(1 << 24)
 chave = lambda s: ' '.join(unicodedata.normalize('NFD', s or '').encode('ascii', 'ignore').decode().upper().split())
@@ -106,7 +106,7 @@ log('perfis', len(info), 'com bens', sum(1 for x in info.values() if x[6]))
 
 # eleição municipal anterior: prefeito eleito em cada cidade
 ant = {}
-pa = os.path.join(RAIZ, f'dados{ANO - 4}', 'resumo.json')
+pa = os.path.join(PUBLICO, f'dados{ANO - 4}', 'resumo.json')
 if os.path.exists(pa):
     Ra = json.load(open(pa))
     for e in Ra['eleicoes']:
