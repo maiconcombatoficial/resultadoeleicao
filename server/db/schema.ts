@@ -5,6 +5,7 @@
 // Os votos continuam vindo dos arquivos estáticos do TSE (public/dados<ano>/), somados no navegador.
 import { boolean, customType, index, integer, jsonb, pgTable, primaryKey, serial, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
+import { PERIODOS, PLANO_IDS } from '../planos.ts'
 
 export const PAPEIS = ['admin', 'coordenador', 'cabo'] as const
 export type Papel = (typeof PAPEIS)[number]
@@ -19,6 +20,12 @@ export const comites = pgTable('comites', {
   id: serial('id').primaryKey(),
   nome: text('nome').notNull(),
   candidato: jsonb('candidato').$type<Candidato | null>(),
+  // plano contratado (server/planos.ts) e até quando vale; mp_* = ids no Mercado Pago
+  plano: text('plano', { enum: PLANO_IDS }).notNull().default('gratis'),
+  periodo: text('periodo', { enum: PERIODOS }),
+  planoAte: timestamp('plano_ate', { withTimezone: true }),
+  mpPreapprovalId: text('mp_preapproval_id'),
+  mpUltimoPagamentoId: text('mp_ultimo_pagamento_id'),
   criadoEm: timestamp('criado_em', { withTimezone: true }).defaultNow().notNull(),
 })
 
@@ -31,14 +38,22 @@ export const usuarios = pgTable(
       .references(() => comites.id, { onDelete: 'cascade' }),
     nome: text('nome').notNull(),
     usuario: text('usuario').notNull(), // login (minúsculas, sem espaços)
-    senhaHash: text('senha_hash').notNull(), // scrypt: "scrypt$<salt hex>$<hash hex>"
+    senhaHash: text('senha_hash'), // scrypt: "scrypt$<salt hex>$<hash hex>"; null = conta que só entra com o Google
+    email: text('email'), // minúsculas; recuperação de senha, vínculo com o Google e cobrança
+    googleId: text('google_id'), // "sub" da conta Google
+    aceiteTermosEm: timestamp('aceite_termos_em', { withTimezone: true }),
     papel: text('papel', { enum: PAPEIS }).notNull().default('cabo'),
     coordenadorId: integer('coordenador_id'), // a quem o cabo eleitoral responde (usuário do mesmo comitê)
     telefone: text('telefone'),
     ativo: boolean('ativo').notNull().default(true),
     criadoEm: timestamp('criado_em', { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [uniqueIndex('usuarios_usuario_idx').on(t.usuario), index('usuarios_comite_idx').on(t.comiteId)],
+  (t) => [
+    uniqueIndex('usuarios_usuario_idx').on(t.usuario),
+    index('usuarios_comite_idx').on(t.comiteId),
+    uniqueIndex('usuarios_email_idx').on(t.email).where(sql`${t.email} is not null`),
+    uniqueIndex('usuarios_google_idx').on(t.googleId).where(sql`${t.googleId} is not null`),
+  ],
 )
 
 export const sessoes = pgTable(
@@ -153,3 +168,72 @@ export const iaUsos = pgTable('ia_usos', {
   dia: text('dia').notNull(), // AAAA-MM-DD
   n: integer('n').notNull().default(0),
 }, (t) => [primaryKey({ columns: [t.usuarioId, t.dia] })])
+
+/* ---------------- cobrança, login com Google, recuperação de senha e limites ---------------- */
+
+// pagamentos e assinaturas no Mercado Pago (um registro por id do MP; o webhook atualiza o status)
+export const pagamentos = pgTable(
+  'pagamentos',
+  {
+    id: serial('id').primaryKey(),
+    comiteId: integer('comite_id')
+      .notNull()
+      .references(() => comites.id, { onDelete: 'cascade' }),
+    plano: text('plano', { enum: PLANO_IDS }).notNull(),
+    periodo: text('periodo', { enum: PERIODOS }).notNull(),
+    valorCentavos: integer('valor_centavos').notNull(),
+    tipo: text('tipo', { enum: ['pagamento', 'assinatura', 'cobranca'] }).notNull(), // pagamento avulso · assinatura (preapproval) · cobrança mensal da assinatura
+    mpId: text('mp_id').notNull(), // id do pagamento/preapproval no MP (ou da preferência enquanto pendente)
+    status: text('status').notNull().default('pendente'), // pendente · aprovado · recusado · cancelado · estornado · autorizado · pausado
+    raw: jsonb('raw').$type<unknown>(),
+    criadoEm: timestamp('criado_em', { withTimezone: true }).defaultNow().notNull(),
+    atualizadoEm: timestamp('atualizado_em', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex('pagamentos_mp_idx').on(t.mpId), index('pagamentos_comite_idx').on(t.comiteId)],
+)
+
+// estado do login com o Google (CSRF): criado em /auth/google/iniciar, consumido no retorno
+export const oauthEstados = pgTable('oauth_estados', {
+  estado: text('estado').primaryKey(),
+  convite: text('convite'),
+  vis: text('vis'),
+  aceite: boolean('aceite').notNull().default(false),
+  criadoEm: timestamp('criado_em', { withTimezone: true }).defaultNow().notNull(),
+  expiraEm: timestamp('expira_em', { withTimezone: true }).notNull(),
+})
+
+// código de uso único que o retorno do Google põe no link; o app troca por um token de sessão
+export const codigosLogin = pgTable('codigos_login', {
+  codigoHash: text('codigo_hash').primaryKey(),
+  usuarioId: integer('usuario_id')
+    .notNull()
+    .references(() => usuarios.id, { onDelete: 'cascade' }),
+  expiraEm: timestamp('expira_em', { withTimezone: true }).notNull(),
+  usadoEm: timestamp('usado_em', { withTimezone: true }),
+})
+
+// recuperação de senha por e-mail
+export const recuperacoes = pgTable('recuperacoes', {
+  tokenHash: text('token_hash').primaryKey(),
+  usuarioId: integer('usuario_id')
+    .notNull()
+    .references(() => usuarios.id, { onDelete: 'cascade' }),
+  expiraEm: timestamp('expira_em', { withTimezone: true }).notNull(),
+  usadaEm: timestamp('usada_em', { withTimezone: true }),
+})
+
+// limite de tentativas por chave (ip, usuário, e-mail), janela fixa
+export const limites = pgTable('limites', {
+  chave: text('chave').primaryKey(),
+  n: integer('n').notNull().default(0),
+  janelaAte: timestamp('janela_ate', { withTimezone: true }).notNull(),
+})
+
+// uso diário da IA somado no comitê (o limite do plano é do comitê)
+export const iaUsosComite = pgTable('ia_usos_comite', {
+  comiteId: integer('comite_id')
+    .notNull()
+    .references(() => comites.id, { onDelete: 'cascade' }),
+  dia: text('dia').notNull(),
+  n: integer('n').notNull().default(0),
+}, (t) => [primaryKey({ columns: [t.comiteId, t.dia] })])

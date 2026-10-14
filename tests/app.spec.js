@@ -951,3 +951,63 @@ test('anos anteriores nas abas de cargo: 2022 (gerais) e 2024 (municipais) com o
   await expect(page.locator('[data-aba="vereador"]')).toHaveCount(0)
   await expect(page.locator('[data-aba="inicio"][aria-selected="true"]')).toBeVisible()
 })
+
+test('Campanha: login mostra Google, planos e recuperação de senha', async ({ page }) => {
+  await page.goto('/#campanha')
+  await expect(page.locator('.camp-login .botao-google')).toHaveAttribute('href', /\/api\/auth\/google\/iniciar/)
+  await expect(page.locator('.camp-precos .preco')).toHaveCount(7)
+  await expect(page.locator('.camp-precos')).toContainText('R$ 247,00')
+  await page.locator('.camp-precos [data-camp-periodo="mensal"]').click()
+  await expect(page.locator('.camp-precos')).toContainText('R$ 25,00')
+  // cadastro pede e-mail e aceite
+  await page.locator('[data-camp-modo="criar"]').click()
+  await expect(page.locator('#camp-email')).toBeVisible()
+  await expect(page.locator('#camp-aceite')).toHaveAttribute('required', '')
+  // esqueci a senha
+  await page.locator('[data-camp-modo="entrar"]').click()
+  await page.locator('[data-camp-modo="recuperar"]').click()
+  await expect(page.locator('#camp-email')).toBeVisible()
+  await page.locator('#camp-email').fill('alguem@exemplo.com')
+  await page.locator('.camp-login button[type="submit"]').click()
+  await expect(page.locator('.camp-erro')).toBeVisible() // sem servidor nos testes
+})
+
+test('Campanha: links do Google e da redefinição de senha', async ({ page }) => {
+  await page.goto('/#campanha?erro=google&motivo=convite')
+  await expect(page.locator('.camp-erro')).toContainText('Convite')
+  await page.goto('about:blank')
+  await page.goto('/#campanha?redefinir=token-de-teste')
+  await expect(page.locator('.camp-login')).toContainText('senha nova')
+  await expect(page.locator('#camp-senha')).toBeVisible()
+})
+
+test('termos, privacidade e planos no Sobre', async ({ page }) => {
+  await page.goto('/termos.html')
+  await expect(page.getByRole('heading', { name: 'Termos de uso' })).toBeVisible()
+  await page.goto('/privacidade.html')
+  await expect(page.getByRole('heading', { name: 'Política de privacidade' })).toBeVisible()
+  await page.goto('/#sobre')
+  await expect(page.locator('.camp-precos')).toBeVisible()
+  await expect(page.locator('.rodape a[href="termos.html"]')).toBeVisible()
+})
+
+test('Campanha com sessão: onboarding, seção Plano e aviso de limite do plano', async ({ page }) => {
+  const sessao = { usuario: { id: 1, nome: 'Admin', usuario: 'admin', email: 'a@b.com', papel: 'admin', ativo: true, temSenha: true }, comite: { id: 1, nome: 'Comitê de Admin', candidato: null }, territorio: { itens: {}, nome: 'Meu território', meta: 0 }, plano: { id: 'gratis', nome: 'Grátis', contratado: 'gratis', limites: { pessoas: 1, iaDia: 0, analises: false, notas: false, relatorioEquipe: false, municipios: 1 } } }
+  const json = (r, corpo, status = 200) => r.fulfill({ status, contentType: 'application/json', body: JSON.stringify(corpo) })
+  await page.route('**/api/me', (r) => json(r, sessao))
+  await page.route('**/api/equipe', (r) => json(r, { comite: sessao.comite, plano: sessao.plano, membros: [sessao.usuario] }))
+  await page.route('**/api/convites', (r) => (r.request().method() === 'POST' ? json(r, { erro: 'O plano Grátis permite 1 pessoa no comitê.', codigo: 'plano' }, 403) : json(r, [])))
+  await page.route('**/api/plano', (r) => json(r, { ...sessao.plano, uso: { pessoas: 1, iaHoje: 0, municipios: 0 }, pagamentos: [], pagamento: 'mercadopago', garantiaDias: 7 }))
+  await page.goto('/')
+  await page.evaluate(() => localStorage.setItem('campanha:token', 'x'))
+  await page.goto('about:blank') // o token é lido quando o app carrega
+  await page.goto('/#campanha')
+  await expect(page.locator('.camp-onb')).toContainText('Primeiros passos')
+  await expect(page.locator('.camp-vis [data-camp-vis="plano"]')).toBeVisible()
+  await page.locator('[data-camp-cv-criar]').click()
+  await expect(page.locator('.camp-nudge')).toContainText('Limite do plano')
+  await page.locator('.camp-nudge [data-camp-vis="plano"]').click()
+  await expect(page.locator('.camp-plano')).toContainText('Plano do comitê')
+  await expect(page.locator('.camp-precos .preco.atual')).toContainText('Grátis')
+  await expect(page.locator('.camp-precos [data-camp-checkout="completo|anual"]')).toBeVisible()
+})

@@ -14,16 +14,19 @@ import { Hono } from 'hono'
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, schema } from './db/index.ts'
-import { Invalido, corpo, hojeISO, type Vars } from './comum.ts'
+import { Invalido, corpo, hojeISO, ipDe, type Vars } from './comum.ts'
+import { limitar } from './limites.ts'
+import { planoDoComite } from './sessao.ts'
 
-const { conversas, iaUsos, notas, relatorios } = schema
+const { conversas, iaUsos, iaUsosComite, notas, relatorios } = schema
 
 export const MODELO = process.env.IA_MODELO || 'claude-opus-5-5'
-const LIMITE_DIA = Number(process.env.IA_LIMITE_DIA) || 80
 const MAX_RODADAS_SERVIDOR = 6
 
 let _client: Anthropic | null = null
 const client = () => (_client ??= new Anthropic({ timeout: 55_000, maxRetries: 1 }))
+// testes: cliente falso no lugar da API
+export const definirClienteIA = (c: Anthropic | null) => (_client = c)
 export const temIA = () => !!process.env.ANTHROPIC_API_KEY
 
 /* ---------------- ferramentas ---------------- */
@@ -139,20 +142,31 @@ type Contexto = { hoje: string; comite?: string | null; candidato?: z.infer<type
 
 export const ia = new Hono<{ Variables: Vars }>()
 
-ia.get('/estado', (c) => c.json({ disponivel: temIA(), modelo: MODELO, limiteDia: LIMITE_DIA }))
+ia.get('/estado', async (c) => {
+  const u = c.get('usuario')
+  const P = await planoDoComite(u.comiteId)
+  const [uso] = await db().select({ n: iaUsosComite.n }).from(iaUsosComite).where(and(eq(iaUsosComite.comiteId, u.comiteId), eq(iaUsosComite.dia, hojeISO())))
+  return c.json({ disponivel: temIA() && P.limites.iaDia > 0, configurada: temIA(), modelo: MODELO, limiteDia: P.limites.iaDia, usadosHoje: uso?.n || 0, plano: P.id, planoNome: P.nome })
+})
 
 ia.post('/chat', async (c) => {
-  if (!temIA()) return c.json({ erro: 'A IA não está configurada neste servidor (ANTHROPIC_API_KEY).' }, 503)
   const u = c.get('usuario')
+  // o plano do comitê define se há IA e quantas consultas por dia (somadas no comitê)
+  const P = await planoDoComite(u.comiteId)
+  if (P.limites.iaDia <= 0) return c.json({ erro: `O plano ${P.nome} não inclui a 🧠 IA. Veja os planos em 💳 Plano.`, codigo: 'plano' }, 403)
+  await limitar(`ia:${u.id}`, 20, 60, 'Muitas perguntas seguidas. Aguarde um minuto.')
+  await limitar(`ia-ip:${ipDe(c)}`, 60, 60)
   const d = await corpo(c, z.object({ mensagens: z.array(z.any()).min(1).max(400), contexto: zContexto.optional() }))
-  // limite diário por pessoa
   const dia = hojeISO()
-  const [uso] = await db()
-    .insert(iaUsos)
-    .values({ usuarioId: u.id, dia, n: 1 })
-    .onConflictDoUpdate({ target: [iaUsos.usuarioId, iaUsos.dia], set: { n: sql`${iaUsos.n} + 1` } })
-    .returning({ n: iaUsos.n })
-  if (uso.n > LIMITE_DIA) return c.json({ erro: `Limite diário da IA atingido (${LIMITE_DIA} consultas). Tente amanhã.` }, 429)
+  const [usoC] = await db()
+    .insert(iaUsosComite)
+    .values({ comiteId: u.comiteId, dia, n: 1 })
+    .onConflictDoUpdate({ target: [iaUsosComite.comiteId, iaUsosComite.dia], set: { n: sql`${iaUsosComite.n} + 1` } })
+    .returning({ n: iaUsosComite.n })
+  if (usoC.n > P.limites.iaDia) return c.json({ erro: `O comitê já usou as ${P.limites.iaDia} consultas de hoje do plano ${P.nome}. Amanhã libera de novo, ou faça upgrade em 💳 Plano.`, codigo: 'plano' }, 429)
+  // estatística por pessoa
+  await db().insert(iaUsos).values({ usuarioId: u.id, dia, n: 1 }).onConflictDoUpdate({ target: [iaUsos.usuarioId, iaUsos.dia], set: { n: sql`${iaUsos.n} + 1` } })
+  if (!temIA()) return c.json({ erro: 'A IA não está configurada neste servidor (ANTHROPIC_API_KEY).' }, 503)
 
   const contexto: Contexto = { hoje: new Date().toLocaleDateString('pt-BR', { dateStyle: 'long' }), comite: d.contexto?.comite ?? null, candidato: d.contexto?.candidato ?? null, usuario: u.nome, papel: u.papel, turno2: d.contexto?.turno2 }
   const mensagens = d.mensagens as Anthropic.Beta.BetaMessageParam[]

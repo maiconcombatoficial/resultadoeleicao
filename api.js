@@ -23,12 +23,16 @@ export function apiToken(novo) {
 }
 
 export class ErroApi extends Error {
-  constructor(msg, status, indisponivel = false) {
+  constructor(msg, status, indisponivel = false, codigo = null) {
     super(msg)
     this.status = status
     this.indisponivel = indisponivel
+    this.codigo = codigo // 'plano' (limite do plano) · 'limite' (muitas tentativas)
   }
 }
+
+// endereço da API (para links que o navegador abre direto, como o login com Google)
+export const apiBase = () => `${BASE}/api`
 
 async function chamar(metodo, rota, corpo, opcoes = {}) {
   const cab = { Accept: 'application/json' }
@@ -48,8 +52,8 @@ async function chamar(metodo, rota, corpo, opcoes = {}) {
   } catch {}
   if (!r.ok) {
     if (r.status === 401 && token && !rota.startsWith('/auth/')) apiToken(null) // sessão vencida
-    const indisponivel = r.status === 503 || r.status === 404 || (r.status >= 500 && !j?.erro)
-    throw new ErroApi(j?.erro || (indisponivel ? 'O servidor da campanha está indisponível neste site.' : `Erro ${r.status}`), r.status, indisponivel)
+    const indisponivel = r.status === 503 || (r.status === 404 && !j?.erro) || (r.status >= 500 && !j?.erro)
+    throw new ErroApi(j?.erro || (indisponivel ? 'O servidor da campanha está indisponível neste site.' : `Erro ${r.status}`), r.status, indisponivel, j?.codigo || null)
   }
   return j
 }

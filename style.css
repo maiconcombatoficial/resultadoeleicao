@@ -1378,3 +1378,36 @@ h1::before { content: "🗳️ "; }
   .hero { padding: 24px; }
   .hero-anos { gap: 8px; }
 }
+
+/* ---------- Campanha: login com Google, planos, onboarding ---------- */
+.botao-google { display: flex; align-items: center; justify-content: center; gap: 10px; background: #fff; color: #1f1f1f; border: 1px solid #dadce0; text-decoration: none; margin: 8px 0 4px; }
+.botao-google:hover { background: #f5f7f6; }
+.botao-google.desligado { opacity: 0.5; pointer-events: none; }
+@media (prefers-color-scheme: dark) { .botao-google { background: #1f2a24; color: #e7ece9; border-color: #3a4740; } .botao-google:hover { background: #26332c; } }
+.camp-ou { display: flex; align-items: center; gap: 10px; color: var(--mudo); font-size: 0.85rem; margin: 6px 0; }
+.camp-ou::before, .camp-ou::after { content: ""; flex: 1; border-top: 1px solid var(--linha); }
+.camp-aceite { display: flex; gap: 8px; align-items: flex-start; font-weight: 500 !important; font-size: 0.88rem !important; }
+.camp-aceite input { margin-top: 3px; }
+.camp-aviso.ok { background: var(--eleito-fundo); color: var(--eleito); }
+.camp-nudge { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; border-color: #e08600; background: var(--turno2-fundo); }
+.camp-nudge p { margin: 4px 0 0; }
+.camp-nudge .botao { width: auto; margin: 0; padding: 8px 14px; }
+.precos { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin: 8px 0 14px; }
+.preco { position: relative; border: 1px solid var(--linha); border-radius: 12px; padding: 14px; background: var(--fundo); display: grid; gap: 6px; align-content: start; }
+.preco.destaque { border-color: var(--primaria); box-shadow: 0 0 0 2px var(--primaria-clara); }
+.preco.atual { border-color: var(--eleito); }
+.preco h4 { margin: 0; font-size: 1rem; }
+.preco-selo { position: absolute; top: -10px; right: 12px; background: var(--primaria); color: #fff; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+.preco-valor strong { font-size: 1.35rem; } .preco-valor small { color: var(--mudo); margin-left: 2px; }
+.preco ul { margin: 4px 0; padding-left: 18px; font-size: 0.88rem; }
+.preco li { margin: 2px 0; }
+.preco .botao { margin-top: 6px; }
+.preco-atual { font-size: 0.85rem; font-weight: 700; color: var(--eleito); }
+.precos.compacto .preco ul { display: none; }
+.precos.compacto { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.preco-grupo { margin-top: 10px; }
+.camp-uso { margin: 8px 0; }
+.camp-uso .barra.fina { height: 6px; margin-top: 4px; }
+.camp-passos { margin: 6px 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.camp-passos li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.camp-passos li.ok { color: var(--mudo); text-decoration: line-through; }

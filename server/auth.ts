@@ -10,7 +10,9 @@ export async function gerarHash(senha: string) {
   return `scrypt$${salt.toString('hex')}$${h.toString('hex')}`
 }
 
-export async function conferirSenha(senha: string, guardado: string) {
+// guardado pode ser null (conta que só entra com o Google): nunca confere
+export async function conferirSenha(senha: string, guardado: string | null | undefined) {
+  if (!guardado) return false
   const [alg, saltHex, hashHex] = guardado.split('$')
   if (alg !== 'scrypt' || !saltHex || !hashHex) return false
   const h = await scrypt(senha.normalize('NFKC'), Buffer.from(saltHex, 'hex'), TAM)
@@ -34,3 +36,4 @@ export function novoCodigo(n = 8) {
 export const DIAS_SESSAO = 60
 export const DIAS_CONVITE = 30
 export const daquiA = (dias: number) => new Date(Date.now() + dias * 86_400_000)
+export const daquiAMin = (minutos: number) => new Date(Date.now() + minutos * 60_000)

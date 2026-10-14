@@ -10,7 +10,7 @@ import { chanceDe, NIVEIS } from './chances.js'
 import { MESORREGIOES, MICRORREGIOES, MUNICIPIOS_SC, ASSOCIACOES, ASSOCIACAO_MUN } from './regioes.js'
 import { FLORIPA } from './floripa.js'
 import { corPartido, corTexto } from './cores.js'
-import { configurarCampanha, renderCampanha, tratarCampanha, inputCampanha, submitCampanha, prepararCampanha, aoSalvarTerritorio, CAMPOS_CAMPANHA, paramsCampanha, aplicarParamsCampanha } from './campanha.js'
+import { configurarCampanha, renderCampanha, tratarCampanha, inputCampanha, submitCampanha, prepararCampanha, aoSalvarTerritorio, CAMPOS_CAMPANHA, paramsCampanha, aplicarParamsCampanha, renderPrecos } from './campanha.js'
 
 const params = new URLSearchParams(location.search)
 const DEMO = params.has('demo')
@@ -4912,12 +4912,13 @@ function renderSobre() {
     </section>
     <section class="cartao"><h3>🔐 Privacidade</h3>
       <ul class="det-lista">
-        <li><strong>Sem cadastro e sem rastreamento:</strong> o app não usa cookies de publicidade nem ferramentas de análise de visitas.</li>
+        <li><strong>Sem rastreamento:</strong> o app não usa cookies de publicidade nem ferramentas de análise de visitas. Consultar resultados não pede cadastro; a aba 🧭 Campanha pede nome, e-mail e senha (ou conta Google) e guarda só o que a equipe cria. <a href="termos.html" target="_blank" rel="noopener">Termos de uso</a> · <a href="privacidade.html" target="_blank" rel="noopener">Política de privacidade</a>.</li>
         <li><strong>Tudo fica no seu aparelho:</strong> candidatos acompanhados (❤️), preferências e a última aba aberta são salvos só no navegador deste aparelho.</li>
         <li><strong>Dados públicos:</strong> os resultados e as fotos dos candidatos são baixados direto dos servidores do TSE e deste site (no mapa da área 🔒, também do OpenStreetMap/Esri); nenhum dado pessoal é enviado.</li>
         <li><strong>Área 🔒:</strong> os dados exclusivos ficam criptografados (AES-256); a senha é verificada no próprio aparelho e não é enviada a lugar nenhum.</li>
       </ul>
     </section>
+    ${renderPrecos({ compacto: true })}
     <section class="cartao"><h3>ℹ️ Sobre esta versão</h3>
       <p>Versão <strong>${esc(versaoLegivel())}</strong> · Eleições 2026, ${TURNO}º turno.</p>
       <p class="nota">Encontrou algo estranho nos números? Fale com <a href="https://www.instagram.com/maiconcombat/" target="_blank" rel="noopener">@maiconcombat</a>.</p>
@@ -8813,6 +8814,14 @@ async function restaurarPro() {
   for (const g of [localStorage, sessionStorage]) try { s ||= g.getItem('pro:chave') } catch {}
   if (s) PRO.chave = await importarChave(b64bytes(s)).catch(() => null)
 }
+// chave entregue pelo servidor da campanha (plano com 🔒 Análises): mesma guarda do login por senha
+async function definirChavePro(b64) {
+  PRO.chave = await importarChave(b64bytes(b64))
+  try {
+    localStorage.setItem('pro:chave', b64)
+  } catch {}
+  if (estado.aba.tipo === 'pro') carregar()
+}
 const proPronto = restaurarPro()
 // lê e decifra pro/<nome>.bin
 function arquivoPro(nome) {
@@ -9361,6 +9370,7 @@ configurarCampanha({
   },
   achar2022, resumo2022, munAno, somaTerr, secoesAno, erroSecoes, arquivoAno, agregarSecoes, bairroDoLocal, tituloLocal, posicaoNoGrupo, salvarTerr, carregarEleicao,
   carregar, rerender: () => estado.aba.tipo === 'camp' && !estado.detalhe && renderizar(),
+  lerLocal, gravarLocal, trocarAba, definirChavePro, temChavePro: () => !!PRO.chave,
 })
 montarAbas()
 if (lerHash().p.toString() || lerHash().id === 'telao') aplicarLink()

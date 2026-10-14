@@ -1,20 +1,27 @@
 // API da campanha (Hono). Roda no Vercel (api/index.ts) e no desenvolvimento local (server/dev.ts).
 //
 // Papéis: admin (o comitê), coordenador (responde ao comitê, tem cabos) e cabo (cabo eleitoral).
-// Autenticação: "Authorization: Bearer <token>" (token de sessão criado em /api/auth/entrar ou /cadastrar).
-// Respostas de erro: { erro: "mensagem em português" }.
+// Autenticação: "Authorization: Bearer <token>" (token de sessão criado em /api/auth/entrar, /cadastrar,
+// /redefinir ou /google/trocar). Respostas de erro: { erro: "mensagem", codigo?: 'plano' | 'limite' }.
+// Módulos: sessao.ts (sessões, contas, limites do plano), google.ts (login com Google), cobranca.ts
+// (planos e Mercado Pago), ia.ts (🧠 IA), limites.ts (rate limit), email.ts (Resend).
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { cors } from 'hono/cors'
 import { and, desc, eq, gt, inArray, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { bancoLocal, db, prontoBanco, schema, temBanco } from './db/index.ts'
-import { DIAS_CONVITE, DIAS_SESSAO, conferirSenha, daquiA, gerarHash, hashToken, novoCodigo, novoToken } from './auth.ts'
+import { DIAS_CONVITE, conferirSenha, daquiA, daquiAMin, gerarHash, hashToken, novoCodigo, novoToken } from './auth.ts'
 import type { Candidato, Itens, Papel, Usuario } from './db/schema.ts'
-import { Invalido, Proibido, corpo, type Vars } from './comum.ts'
+import { Invalido, LimiteExcedido, Proibido, appUrl, corpo, ipDe, type Vars } from './comum.ts'
+import { limitar } from './limites.ts'
+import { enviarEmail, modeloEmail, temEmail } from './email.ts'
+import { comiteDe, criarConta, criarSessao, exigirMunicipios, exigirRecurso, exigirVagas, publico, resumoPlano, sessaoCompleta, tokenDe, usuarioDoToken, vagasDoComite } from './sessao.ts'
+import { google, temGoogle } from './google.ts'
+import { cobranca, planos, temMP, webhook } from './cobranca.ts'
 import { ia, temIA } from './ia.ts'
 
-const { comites, convites, notas, relatorios, sessoes, territorios, usuarios } = schema
+const { comites, convites, notas, recuperacoes, relatorios, sessoes, territorios, usuarios } = schema
 
 export const app = new Hono<{ Variables: Vars }>().basePath('/api')
 
@@ -27,7 +34,7 @@ app.use('*', async (c, next) => {
   return next()
 })
 
-app.get('/saude', (c) => c.json({ ok: true, banco: temBanco(), bancoLocal: bancoLocal(), ia: temIA(), agora: new Date().toISOString() }))
+app.get('/saude', (c) => c.json({ ok: true, banco: temBanco(), bancoLocal: bancoLocal(), ia: temIA(), google: temGoogle(), pagamento: temMP(), email: temEmail(), agora: new Date().toISOString() }))
 
 // sem banco configurado, tudo (menos /saude) responde 503: o app mostra "indisponível" e segue funcionando
 app.use('*', async (c, next) => {
@@ -43,6 +50,7 @@ const zUsuario = z
   .trim()
   .toLowerCase()
   .regex(/^[a-z0-9._-]{3,40}$/, 'Usuário: 3 a 40 letras minúsculas, números, ponto, traço ou _')
+const zEmail = z.string().trim().toLowerCase().email('E-mail inválido').max(120)
 const zSenha = z.string().min(6, 'Senha com pelo menos 6 caracteres').max(200)
 const zPapel = z.enum(schema.PAPEIS)
 const zItens = z.record(z.string().regex(/^\d+\|\d+-\d+$/), z.array(z.string().regex(/^\d+-\d+$/)).max(2000)).refine((o) => Object.keys(o).length <= 3000, 'Território grande demais')
@@ -50,79 +58,55 @@ const zCandidato = z.object({ sq: z.string().max(20), aba: z.string().max(20), c
 
 app.onError((e, c) => {
   if (e instanceof Invalido) return c.json({ erro: e.message }, 400)
-  if (e instanceof Proibido) return c.json({ erro: e.message || 'Sem permissão' }, 403)
+  if (e instanceof Proibido) return c.json({ erro: e.message || 'Sem permissão', ...(e.codigo ? { codigo: e.codigo } : {}) }, 403)
+  if (e instanceof LimiteExcedido) {
+    c.header('Retry-After', String(e.retryEm))
+    return c.json({ erro: e.message, codigo: 'limite' }, 429)
+  }
   console.error(e)
   return c.json({ erro: 'Erro no servidor. Tente de novo em instantes.' }, 500)
 })
 
 /* ---------------- sessão ---------------- */
 
-async function usuarioDoToken(token: string | undefined) {
-  if (!token) return null
-  const [r] = await db()
-    .select({ u: usuarios })
-    .from(sessoes)
-    .innerJoin(usuarios, eq(usuarios.id, sessoes.usuarioId))
-    .where(and(eq(sessoes.tokenHash, hashToken(token)), gt(sessoes.expiraEm, new Date())))
-    .limit(1)
-  return r?.u && r.u.ativo ? r.u : null
-}
-
-async function criarSessao(usuarioId: number) {
-  const token = novoToken()
-  await db().insert(sessoes).values({ tokenHash: hashToken(token), usuarioId, expiraEm: daquiA(DIAS_SESSAO) })
-  return token
-}
-
-const tokenDe = (c: Context) => c.req.header('authorization')?.replace(/^Bearer\s+/i, '')
-
-// rotas que exigem login (tudo, menos /auth/* e /saude)
+// rotas públicas: /auth/*, /saude, /planos e o webhook do Mercado Pago; o resto exige login
+const PUBLICAS = ['/api/saude', '/api/planos', '/api/cobranca/webhook']
 app.use('*', async (c, next) => {
   const p = c.req.path
-  if (p.startsWith('/api/auth/') || p === '/api/saude') return next()
+  if (p.startsWith('/api/auth/') || PUBLICAS.includes(p)) return next()
   const u = await usuarioDoToken(tokenDe(c))
   if (!u) return c.json({ erro: 'Entre para continuar.' }, 401)
   c.set('usuario', u)
   return next()
 })
 
-const publico = (u: Usuario) => ({ id: u.id, nome: u.nome, usuario: u.usuario, papel: u.papel as Papel, coordenadorId: u.coordenadorId, telefone: u.telefone, ativo: u.ativo, criadoEm: u.criadoEm })
-
-async function sessaoCompleta(u: Usuario) {
-  const [com] = await db().select().from(comites).where(eq(comites.id, u.comiteId))
-  const [t] = await db().select().from(territorios).where(eq(territorios.usuarioId, u.id))
-  return { usuario: publico(u), comite: com ? { id: com.id, nome: com.nome, candidato: com.candidato } : null, territorio: t ?? null }
-}
-
 /* ---------------- auth ---------------- */
 
 // cria conta: com convite entra no comitê do convite; sem convite, cria um comitê novo e vira admin dele
 app.post('/auth/cadastrar', async (c) => {
-  const d = await corpo(c, z.object({ nome: zNome, usuario: zUsuario, senha: zSenha, telefone: z.string().trim().max(30).optional(), convite: z.string().trim().toUpperCase().optional(), comite: z.string().trim().min(2).max(80).optional() }))
+  await limitar(`cadastrar:${ipDe(c)}`, 10, 3600)
+  const d = await corpo(c, z.object({
+    nome: zNome, usuario: zUsuario, email: zEmail, senha: zSenha, telefone: z.string().trim().max(30).optional(),
+    convite: z.string().trim().toUpperCase().optional(), comite: z.string().trim().min(2).max(80).optional(),
+    aceite: z.literal(true, { errorMap: () => ({ message: 'É preciso aceitar os termos de uso e a política de privacidade.' }) }),
+  }))
   const D = db()
   const [existe] = await D.select({ id: usuarios.id }).from(usuarios).where(eq(usuarios.usuario, d.usuario))
   if (existe) throw new Invalido('Esse usuário já existe. Escolha outro ou entre com a sua senha.')
-  let comiteId: number, papel: Papel = 'admin', coordenadorId: number | null = null
-  if (d.convite) {
-    const [cv] = await D.select().from(convites).where(and(eq(convites.codigo, d.convite), gt(convites.expiraEm, new Date())))
-    if (!cv || cv.usos >= cv.maxUsos) throw new Invalido('Convite inválido, vencido ou já usado. Peça outro ao coordenador.')
-    comiteId = cv.comiteId
-    papel = cv.papel as Papel
-    coordenadorId = cv.coordenadorId
-    await D.update(convites).set({ usos: sql`${convites.usos} + 1` }).where(eq(convites.codigo, cv.codigo))
-  } else {
-    if (!d.comite) throw new Invalido('Informe o nome do comitê (ou um código de convite).')
-    const [com] = await D.insert(comites).values({ nome: d.comite }).returning()
-    comiteId = com.id
-  }
-  const [u] = await D.insert(usuarios).values({ comiteId, nome: d.nome, usuario: d.usuario, senhaHash: await gerarHash(d.senha), papel, coordenadorId, telefone: d.telefone ?? null }).returning()
-  await D.insert(territorios).values({ usuarioId: u.id })
+  const [porEmail] = await D.select({ id: usuarios.id }).from(usuarios).where(eq(usuarios.email, d.email))
+  if (porEmail) throw new Invalido('Já existe uma conta com esse e-mail. Entre com ela ou use "Esqueci a senha".')
+  if (!d.convite && !d.comite) throw new Invalido('Informe o nome do comitê (ou um código de convite).')
+  const u = await criarConta({ nome: d.nome, usuario: d.usuario, email: d.email, senhaHash: await gerarHash(d.senha), telefone: d.telefone, aceite: true, convite: d.convite || null, nomeComite: d.comite || null })
   return c.json({ token: await criarSessao(u.id), ...(await sessaoCompleta(u)) }, 201)
 })
 
+// entra com usuário ou e-mail
 app.post('/auth/entrar', async (c) => {
-  const d = await corpo(c, z.object({ usuario: zUsuario, senha: z.string().min(1).max(200) }))
-  const [u] = await db().select().from(usuarios).where(eq(usuarios.usuario, d.usuario))
+  await limitar(`entrar-ip:${ipDe(c)}`, 20, 600)
+  const d = await corpo(c, z.object({ usuario: z.string().trim().toLowerCase().min(3).max(120), senha: z.string().min(1).max(200) }))
+  await limitar(`entrar:${d.usuario}`, 10, 600, 'Muitas tentativas para essa conta. Aguarde 10 minutos ou use "Esqueci a senha".')
+  const [u] = await db().select().from(usuarios).where(d.usuario.includes('@') ? eq(usuarios.email, d.usuario) : eq(usuarios.usuario, d.usuario))
+  if (u && !u.senhaHash && u.googleId) return c.json({ erro: 'Esta conta entra com o Google. Use o botão "Entrar com Google".' }, 401)
   if (!u || !(await conferirSenha(d.senha, u.senhaHash))) return c.json({ erro: 'Usuário ou senha incorretos.' }, 401)
   if (!u.ativo) return c.json({ erro: 'Esta conta foi desativada pelo comitê.' }, 403)
   return c.json({ token: await criarSessao(u.id), ...(await sessaoCompleta(u)) })
@@ -134,18 +118,58 @@ app.post('/auth/sair', async (c) => {
   return c.json({ ok: true })
 })
 
+// recuperação de senha: sempre responde ok (não revela se o e-mail existe)
+app.post('/auth/recuperar', async (c) => {
+  await limitar(`recuperar-ip:${ipDe(c)}`, 5, 900)
+  const d = await corpo(c, z.object({ email: zEmail }))
+  await limitar(`recuperar:${d.email}`, 3, 3600)
+  const [u] = await db().select().from(usuarios).where(eq(usuarios.email, d.email))
+  if (u && u.ativo) {
+    const token = novoToken()
+    await db().insert(recuperacoes).values({ tokenHash: hashToken(token), usuarioId: u.id, expiraEm: daquiAMin(60) })
+    const link = `${appUrl()}/#campanha?redefinir=${token}`
+    const m = modeloEmail({ titulo: 'Redefinir a sua senha', texto: `Olá, ${u.nome}. Recebemos um pedido para trocar a senha da sua conta (${u.usuario}). O link vale por 1 hora. Se não foi você, ignore este e-mail.`, botao: 'Criar senha nova', link })
+    await enviarEmail({ para: u.email!, assunto: 'Apuração SC · redefinir senha', ...m })
+  }
+  return c.json({ ok: true })
+})
+
+app.post('/auth/redefinir', async (c) => {
+  await limitar(`redefinir:${ipDe(c)}`, 10, 3600)
+  const d = await corpo(c, z.object({ token: z.string().min(10).max(200), senha: zSenha }))
+  const [r] = await db()
+    .update(recuperacoes)
+    .set({ usadaEm: new Date() })
+    .where(and(eq(recuperacoes.tokenHash, hashToken(d.token)), sql`${recuperacoes.usadaEm} is null`, gt(recuperacoes.expiraEm, new Date())))
+    .returning({ usuarioId: recuperacoes.usuarioId })
+  if (!r) throw new Invalido('Link inválido ou vencido. Peça um novo em "Esqueci a senha".')
+  const [u] = await db().update(usuarios).set({ senhaHash: await gerarHash(d.senha) }).where(eq(usuarios.id, r.usuarioId)).returning()
+  if (!u || !u.ativo) throw new Invalido('Conta indisponível.')
+  await db().delete(sessoes).where(eq(sessoes.usuarioId, u.id)) // sai dos outros aparelhos
+  return c.json({ token: await criarSessao(u.id), ...(await sessaoCompleta(u)) })
+})
+
+// login com o Google (server/google.ts)
+app.route('/auth/google', google)
+
 /* ---------------- eu e o comitê ---------------- */
 
 app.get('/me', async (c) => c.json(await sessaoCompleta(c.get('usuario'))))
 
 app.patch('/me', async (c) => {
   const u = c.get('usuario')
-  const d = await corpo(c, z.object({ nome: zNome.optional(), telefone: z.string().trim().max(30).nullable().optional(), senha: z.object({ atual: z.string(), nova: zSenha }).optional() }))
+  const d = await corpo(c, z.object({ nome: zNome.optional(), email: zEmail.optional(), telefone: z.string().trim().max(30).nullable().optional(), senha: z.object({ atual: z.string().optional(), nova: zSenha }).optional() }))
   const set: Partial<typeof usuarios.$inferInsert> = {}
   if (d.nome) set.nome = d.nome
   if (d.telefone !== undefined) set.telefone = d.telefone
+  if (d.email && d.email !== u.email) {
+    const [outro] = await db().select({ id: usuarios.id }).from(usuarios).where(eq(usuarios.email, d.email))
+    if (outro && outro.id !== u.id) throw new Invalido('Esse e-mail já está em outra conta.')
+    set.email = d.email
+  }
   if (d.senha) {
-    if (!(await conferirSenha(d.senha.atual, u.senhaHash))) throw new Invalido('A senha atual não confere.')
+    // conta que entra com o Google e ainda não tem senha: pode criar uma sem a "atual"
+    if (u.senhaHash && !(await conferirSenha(d.senha.atual || '', u.senhaHash))) throw new Invalido('A senha atual não confere.')
     set.senhaHash = await gerarHash(d.senha.nova)
   }
   if (Object.keys(set).length) await db().update(usuarios).set(set).where(eq(usuarios.id, u.id))
@@ -178,7 +202,11 @@ app.post('/convites', async (c) => {
     const [co] = await db().select({ id: usuarios.id }).from(usuarios).where(and(eq(usuarios.id, coordenadorId), eq(usuarios.comiteId, u.comiteId)))
     if (!co) throw new Invalido('Coordenador não encontrado neste comitê.')
   }
-  const [cv] = await db().insert(convites).values({ codigo: novoCodigo(), comiteId: u.comiteId, papel: d.papel, coordenadorId, criadoPor: u.id, maxUsos: d.maxUsos, expiraEm: daquiA(DIAS_CONVITE) }).returning()
+  // vagas do plano: o convite não pode ter mais usos do que as vagas que sobram
+  await exigirVagas(u.comiteId)
+  const vagas = await vagasDoComite(u.comiteId)
+  const maxUsos = vagas == null ? d.maxUsos : Math.min(d.maxUsos, vagas)
+  const [cv] = await db().insert(convites).values({ codigo: novoCodigo(), comiteId: u.comiteId, papel: d.papel, coordenadorId, criadoPor: u.id, maxUsos, expiraEm: daquiA(DIAS_CONVITE) }).returning()
   return c.json(cv, 201)
 })
 
@@ -200,7 +228,8 @@ app.delete('/convites/:codigo', async (c) => {
 
 const zTerritorio = z.object({ nome: z.string().trim().min(1).max(40).default('Meu território'), itens: zItens, meta: z.number().int().min(0).max(10_000_000).default(0), ref: z.record(z.unknown()).nullable().optional() })
 
-async function gravarTerritorio(usuarioId: number, d: z.infer<typeof zTerritorio>) {
+async function gravarTerritorio(usuarioId: number, comiteId: number, d: z.infer<typeof zTerritorio>) {
+  await exigirMunicipios(comiteId, usuarioId, d.itens)
   const [t] = await db()
     .insert(territorios)
     .values({ usuarioId, nome: d.nome, itens: d.itens as Itens, meta: d.meta, ref: d.ref ?? null, atualizadoEm: new Date() })
@@ -214,7 +243,10 @@ app.get('/territorio', async (c) => {
   return c.json(t ?? null)
 })
 
-app.put('/territorio', async (c) => c.json(await gravarTerritorio(c.get('usuario').id, await corpo(c, zTerritorio))))
+app.put('/territorio', async (c) => {
+  const u = c.get('usuario')
+  return c.json(await gravarTerritorio(u.id, u.comiteId, await corpo(c, zTerritorio)))
+})
 
 /* ---------------- equipe ---------------- */
 
@@ -230,8 +262,8 @@ async function membrosVisiveis(u: Usuario) {
 
 app.get('/equipe', async (c) => {
   const u = c.get('usuario')
-  const [com] = await db().select().from(comites).where(eq(comites.id, u.comiteId))
-  return c.json({ comite: com ? { id: com.id, nome: com.nome, candidato: com.candidato } : null, membros: await membrosVisiveis(u) })
+  const com = await comiteDe(u.comiteId)
+  return c.json({ comite: com ? { id: com.id, nome: com.nome, candidato: com.candidato } : null, plano: resumoPlano(com), membros: await membrosVisiveis(u) })
 })
 
 async function membroDoComite(c: Context<{ Variables: Vars }>) {
@@ -251,6 +283,7 @@ app.patch('/equipe/:id', async (c) => {
     const [co] = await db().select({ id: usuarios.id }).from(usuarios).where(and(eq(usuarios.id, d.coordenadorId), eq(usuarios.comiteId, u.comiteId)))
     if (!co || d.coordenadorId === m.id) throw new Invalido('Coordenador inválido.')
   }
+  if (d.ativo === true && !m.ativo) await exigirVagas(u.comiteId) // reativar ocupa uma vaga
   await db().update(usuarios).set(d).where(eq(usuarios.id, m.id))
   return c.json({ ok: true })
 })
@@ -268,7 +301,7 @@ app.put('/equipe/:id/territorio', async (c) => {
   const { u, m } = await membroDoComite(c)
   const pode = u.papel === 'admin' || m.id === u.id || (u.papel === 'coordenador' && m.coordenadorId === u.id)
   if (!pode) throw new Proibido('Você só edita o seu território e o dos seus cabos.')
-  return c.json(await gravarTerritorio(m.id, await corpo(c, zTerritorio)))
+  return c.json(await gravarTerritorio(m.id, u.comiteId, await corpo(c, zTerritorio)))
 })
 
 /* ---------------- notas de campanha e relatórios ---------------- */
@@ -286,6 +319,7 @@ app.get('/notas', async (c) => {
 })
 app.post('/notas', async (c) => {
   const u = c.get('usuario')
+  await exigirRecurso(u.comiteId, 'notas')
   const d = await corpo(c, z.object({ texto: z.string().trim().min(3).max(4000), lugar: z.string().trim().max(120).nullable().optional() }))
   const [n] = await db().insert(notas).values({ comiteId: u.comiteId, usuarioId: u.id, texto: d.texto, lugar: d.lugar || null }).returning()
   return c.json(n, 201)
@@ -327,6 +361,11 @@ app.delete('/relatorios/:id', async (c) => {
   await db().delete(relatorios).where(and(eq(relatorios.id, Number(c.req.param('id'))), cond))
   return c.json({ ok: true })
 })
+
+// 💳 planos e cobrança (server/cobranca.ts): /api/planos (público), /api/plano, /api/pro/chave, /api/cobranca/webhook
+app.route('/planos', planos)
+app.route('/', cobranca)
+app.route('/cobranca/webhook', webhook)
 
 // 🧠 IA (server/ia.ts): /api/ia/chat, /api/ia/conversas
 app.route('/ia', ia)

@@ -4,7 +4,8 @@
 // O app.js injeta os helpers (configurarCampanha) e chama renderCampanha/tratarCampanha/inputCampanha.
 // Os votos vêm dos arquivos estáticos do TSE já usados pelo app; o banco guarda só pessoas, territórios,
 // metas, notas, relatórios e conversas.
-import { api, apiLogado, apiToken, ErroApi } from './api.js'
+import { api, apiBase, apiLogado, apiToken, ErroApi } from './api.js'
+import { GARANTIA_DIAS, PLANOS, PLANO_IDS, precoBR } from './server/planos.ts'
 
 let X = null // helpers do app.js
 export function configurarCampanha(ctx) {
@@ -16,13 +17,19 @@ const CARGO_ABA = { presidente: 1, governador: 3, senador: 5, depfed: 6, depest:
 const ABA_CARGO = { 1: 'presidente', 3: 'governador', 5: 'senador', 6: 'depfed', 7: 'depest' }
 
 export const CAMP = {
-  vis: 'equipe', // equipe | ia | notas | conta
-  sessao: undefined, // undefined = ainda não conferida · null = sem login · { usuario, comite, territorio }
+  vis: 'equipe', // equipe | ia | notas | plano | conta
+  sessao: undefined, // undefined = ainda não conferida · null = sem login · { usuario, comite, territorio, plano }
   carregando: false,
   erro: '',
   indisponivel: false,
   convite: '', // código vindo do link (#campanha?convite=…)
-  form: { modo: 'entrar', usuario: '', senha: '', nome: '', telefone: '', comite: '', convite: '', erro: '', ocupado: false },
+  codigoLogin: '', // código de uso único do retorno do Google (#campanha?codigo=…)
+  redefinir: '', // token do link de redefinição de senha (#campanha?redefinir=…)
+  pagamento: '', // retorno do Mercado Pago (#campanha?pagamento=ok|pendente|erro)
+  nudge: '', // aviso de limite do plano (erro com codigo 'plano')
+  periodo: 'anual', // período mostrado na tabela de preços
+  plano: null, // GET /plano (seção 💳 Plano)
+  form: { modo: 'entrar', usuario: '', senha: '', nome: '', email: '', telefone: '', comite: '', convite: '', aceite: false, erro: '', ocupado: false, enviado: false },
   equipe: null, // { comite, membros }
   convites: null,
   novoConvite: { papel: 'cabo', coordenadorId: '', maxUsos: 1 },
@@ -67,6 +74,20 @@ async function verificarSaude() {
 }
 
 async function carregarSessao() {
+  // voltou do Google com um código de uso único: troca por um token de sessão
+  if (CAMP.codigoLogin) {
+    const codigo = CAMP.codigoLogin
+    CAMP.codigoLogin = ''
+    try {
+      const s = await api.post('/auth/google/trocar', { codigo })
+      apiToken(s.token)
+      aplicarSessao(s)
+      CAMP.equipe = null
+      return
+    } catch (e) {
+      CAMP.form.erro = erroTexto(e)
+    }
+  }
   if (!apiLogado()) {
     CAMP.sessao = null
     verificarSaude()
@@ -86,9 +107,10 @@ async function carregarSessao() {
 }
 
 function aplicarSessao(s) {
-  CAMP.sessao = { usuario: s.usuario, comite: s.comite, territorio: s.territorio }
+  CAMP.sessao = { usuario: s.usuario, comite: s.comite, territorio: s.territorio, plano: s.plano || null }
   CAMP.indisponivel = false
   CAMP.erro = ''
+  if (s.plano?.limites?.analises && !X.temChavePro()) pedirChavePro()
   // território salvo no servidor entra no aparelho quando aqui não há nada marcado
   const T = X.TERR
   const t = s.territorio
@@ -99,6 +121,31 @@ function aplicarSessao(s) {
     X.salvarTerr(true)
   } else if (Object.keys(T.itens).length && !Object.keys(t?.itens || {}).length) enviarTerritorio()
 }
+
+// plano com 🔒 Análises: o servidor entrega a chave dos dados e o app abre a área sem a senha antiga
+let pedindoChave = false
+async function pedirChavePro() {
+  if (pedindoChave) return
+  pedindoChave = true
+  try {
+    const r = await api.get('/pro/chave')
+    if (r?.chave) await X.definirChavePro(r.chave)
+  } catch {
+  } finally {
+    pedindoChave = false
+  }
+}
+
+// limite do plano (erro com codigo 'plano'): mostra o aviso com o caminho para os planos
+function avisoPlano(e) {
+  if (e instanceof ErroApi && e.codigo === 'plano') {
+    CAMP.nudge = e.message
+    re()
+    return true
+  }
+  return false
+}
+const limitesDoPlano = () => CAMP.sessao?.plano?.limites || PLANOS.gratis
 
 // chamado pelo app.js sempre que "Meu território" é salvo no aparelho
 let timerTerr = null
@@ -126,7 +173,18 @@ async function entrar() {
   f.ocupado = true
   re()
   try {
-    const s = f.modo === 'entrar' ? await api.post('/auth/entrar', { usuario: f.usuario, senha: f.senha }) : await api.post('/auth/cadastrar', { nome: f.nome, usuario: f.usuario, senha: f.senha, telefone: f.telefone || undefined, convite: f.convite || undefined, comite: f.convite ? undefined : f.comite })
+    if (f.modo === 'recuperar') {
+      await api.post('/auth/recuperar', { email: f.email })
+      Object.assign(f, { ocupado: false, enviado: true })
+      return re()
+    }
+    const s =
+      f.modo === 'entrar'
+        ? await api.post('/auth/entrar', { usuario: f.usuario, senha: f.senha })
+        : f.modo === 'redefinir'
+          ? await api.post('/auth/redefinir', { token: CAMP.redefinir, senha: f.senha })
+          : await api.post('/auth/cadastrar', { nome: f.nome, usuario: f.usuario, email: f.email, senha: f.senha, telefone: f.telefone || undefined, convite: f.convite || undefined, comite: f.convite ? undefined : f.comite, aceite: f.aceite })
+    CAMP.redefinir = ''
     apiToken(s.token)
     aplicarSessao(s)
     CAMP.form = { ...CAMP.form, senha: '', erro: '', ocupado: false }
@@ -159,36 +217,159 @@ export function renderCampanha() {
   }
   const topo = `<section class="cartao camp-topo"><h2>🧭 Campanha</h2>
     <p class="nota">Equipe de coordenadores e cabos eleitorais, relatório de votos por liderança, 🧠 IA para analisar os dados de votação e notas de campanha. Os dados ficam no banco da campanha (Neon); os votos continuam vindo do TSE.</p>
-    ${CAMP.sessao ? `<div class="segmentado camp-vis" role="group" aria-label="Seção">${[['equipe', '👥 Equipe'], ['ia', '🧠 IA'], ['notas', '📝 Notas'], ['conta', '⚙️ Conta']].map(([k, t]) => `<button type="button" data-camp-vis="${k}" aria-pressed="${CAMP.vis === k}">${t}</button>`).join('')}</div>` : ''}
-  </section>`
+    ${CAMP.sessao ? `<div class="segmentado camp-vis" role="group" aria-label="Seção">${[['equipe', '👥 Equipe'], ['ia', '🧠 IA'], ['notas', '📝 Notas'], ...(souAdmin() ? [['plano', '💳 Plano']] : []), ['conta', '⚙️ Conta']].map(([k, t]) => `<button type="button" data-camp-vis="${k}" aria-pressed="${CAMP.vis === k}">${t}</button>`).join('')}</div>` : ''}
+  </section>${CAMP.sessao ? renderNudge() : ''}`
   if (!CAMP.sessao) return topo + renderLogin()
   if (CAMP.vis === 'ia') return topo + renderIA()
   if (CAMP.vis === 'notas') return topo + renderNotas()
+  if (CAMP.vis === 'plano') return topo + renderPlano()
   if (CAMP.vis === 'conta') return topo + renderConta()
   return topo + renderEquipe()
+}
+
+// aviso de limite do plano
+function renderNudge() {
+  if (!CAMP.nudge) return ''
+  const P = CAMP.sessao?.plano
+  return `<section class="cartao camp-nudge"><div><strong>Limite do plano${P ? ` ${esc(P.nome)}` : ''}</strong><p>${esc(CAMP.nudge)}</p></div><div class="camp-acoes">${souAdmin() ? '<button type="button" class="botao" data-camp-vis="plano">💳 Ver planos</button>' : '<span class="nota">Peça ao comitê (admin) para fazer o upgrade.</span>'} <button type="button" class="link-zonas leve" data-camp-nudge-fechar>✕</button></div></section>`
+}
+
+/* ---------------- planos e preços ---------------- */
+
+// tabela de planos (tela de login, Sobre e 💳 Plano); com admin logado, mostra os botões de contratar
+export function renderPrecos({ compacto = false, atual = null, podeContratar = false } = {}) {
+  const periodo = CAMP.periodo
+  const grupos = [['individual', 'Para você'], ['comite', 'Para o comitê']]
+  const cartao = (id) => {
+    const P = PLANOS[id]
+    const preco = P[periodo]
+    const atualEste = atual === id
+    return `<div class="preco ${P.destaque ? 'destaque' : ''} ${atualEste ? 'atual' : ''}">
+      ${P.destaque ? '<span class="preco-selo">Mais escolhido</span>' : ''}
+      <h4>${esc(P.nome)}</h4>
+      <div class="preco-valor">${preco ? `<strong>${esc(precoBR(preco))}</strong><small>/${periodo === 'anual' ? 'ano' : 'mês'}</small>` : '<strong>Grátis</strong>'}</div>
+      ${preco && periodo === 'anual' ? `<div class="mudo">ou 12x de ${esc(precoBR(Math.ceil(preco / 12)))} no cartão</div>` : ''}
+      <ul>${P.descricao.map((d) => `<li>${esc(d)}</li>`).join('')}</ul>
+      ${atualEste ? '<span class="preco-atual">Seu plano atual</span>' : podeContratar && preco ? `<button type="button" class="botao" data-camp-checkout="${id}|${periodo}">Contratar</button>` : ''}
+    </div>`
+  }
+  return `<section class="cartao camp-precos"><h3>💳 Planos</h3>
+    <div class="segmentado" role="group" aria-label="Período"><button type="button" data-camp-periodo="anual" aria-pressed="${periodo === 'anual'}">Anual</button><button type="button" data-camp-periodo="mensal" aria-pressed="${periodo === 'mensal'}">Mensal</button></div>
+    ${grupos.map(([g, t]) => `<div class="preco-grupo"><span class="atalhos-rot">${t}</span><div class="precos ${compacto ? 'compacto' : ''}">${PLANO_IDS.filter((id) => PLANOS[id].grupo === g).map(cartao).join('')}</div></div>`).join('')}
+    <p class="nota">Garantia de ${GARANTIA_DIAS} dias: devolução integral do primeiro pagamento, sem perguntas. Pagamento pelo Mercado Pago (Pix, cartão em até 12x ou boleto). O plano mensal renova sozinho até você cancelar; o anual não renova sozinho. <a href="termos.html" target="_blank" rel="noopener">Termos de uso</a> · <a href="privacidade.html" target="_blank" rel="noopener">Privacidade</a>.</p>
+  </section>`
+}
+
+async function carregarPlano() {
+  try {
+    CAMP.plano = await api.get('/plano')
+    if (CAMP.pagamento === 'ok' && souAdmin()) {
+      CAMP.pagamento = 'sinc'
+      const P = await api.post('/plano/sincronizar').catch(() => null)
+      if (P) CAMP.plano = { ...CAMP.plano, ...P }
+      const s = await api.get('/me').catch(() => null)
+      if (s) aplicarSessao(s)
+      CAMP.pagamento = 'ok'
+    }
+  } catch (e) {
+    CAMP.erro = erroTexto(e)
+    CAMP.plano = { erro: true }
+  }
+  re()
+}
+
+function renderPlano() {
+  if (!CAMP.plano) {
+    carregarPlano()
+    return X.esqueleto('Carregando o plano…')
+  }
+  const P = CAMP.plano
+  const L = P.limites || PLANOS.gratis
+  const uso = P.uso || {}
+  const barra = (rot, v, max) => `<div class="camp-uso"><div class="meta-topo"><span>${rot}</span><strong>${fmt(v)}${max == null ? '' : ` / ${fmt(max)}`}</strong></div>${max == null ? '<div class="mudo">ilimitado</div>' : `<div class="barra fina"><span style="width:${Math.min(100, max ? (100 * v) / max : 0)}%"></span></div>`}</div>`
+  const banner = CAMP.pagamento === 'ok' ? '<div class="aviso camp-aviso ok">✅ Pagamento recebido. Se o plano ainda não aparecer ativo, aguarde alguns instantes e toque em "Atualizar".</div>' : CAMP.pagamento === 'pendente' ? '<div class="aviso camp-aviso">⏳ Pagamento em processamento (Pix ou boleto). O plano é liberado assim que o Mercado Pago confirmar.</div>' : CAMP.pagamento === 'erro' ? '<div class="aviso camp-aviso">⚠️ O pagamento não foi concluído. Você pode tentar de novo abaixo.</div>' : ''
+  return `${banner}<section class="cartao camp-plano"><h3>💳 Plano do comitê</h3>
+    <div class="fav-nums">
+      <div><span class="fav-rot">Plano</span><strong>${esc(P.nome || 'Grátis')}</strong>${P.vencido ? '<span class="camp-erro">vencido</span>' : P.periodo ? `<span class="mudo">${P.periodo}</span>` : ''}</div>
+      <div><span class="fav-rot">Válido até</span><strong>${P.planoAte ? new Date(P.planoAte).toLocaleDateString('pt-BR') : '–'}</strong>${P.assinatura ? '<span class="mudo">renova todo mês</span>' : ''}</div>
+      <div><span class="fav-rot">Pessoas</span><strong>${fmt(uso.pessoas || 0)}${L.pessoas == null ? '' : ` / ${fmt(L.pessoas)}`}</strong></div>
+    </div>
+    ${barra('🧠 IA hoje', uso.iaHoje || 0, L.iaDia)}
+    ${barra('Municípios com território', uso.municipios || 0, L.municipios)}
+    <p class="nota">Inclui: ${[L.analises && '🔒 Análises', L.notas && '📝 Notas', L.relatorioEquipe && '📊 Relatório por liderança', L.iaDia > 0 && `🧠 IA (${L.iaDia}/dia)`].filter(Boolean).join(' · ') || 'resultados públicos'}.</p>
+    <div class="exportar"><button type="button" class="botao secundario" data-camp-plano-atualizar>⟳ Atualizar</button>${P.assinatura ? '<button type="button" class="botao secundario" data-camp-plano-cancelar>Cancelar assinatura mensal</button>' : ''}</div>
+    ${P.pagamento ? '' : '<p class="nota">⚠️ O pagamento ainda não está configurado neste servidor (MP_ACCESS_TOKEN).</p>'}
+    ${(P.pagamentos || []).length ? `<details class="camp-sobre"><summary>Pagamentos</summary><div class="camp-lista">${P.pagamentos.map((p) => `<div class="camp-item"><div>${esc(PLANOS[p.plano]?.nome || p.plano)} · ${esc(p.periodo)} · ${esc(p.valor)}<div class="cand-meta">${esc(p.tipo)} · ${esc(p.status)} · ${quando(p.criadoEm)}</div></div></div>`).join('')}</div></details>` : ''}
+  </section>${renderPrecos({ atual: P.id, podeContratar: souAdmin() && !!P.pagamento })}`
+}
+
+/* ---------------- onboarding do comitê ---------------- */
+
+function cardOnboarding(comite, membros) {
+  if (!souAdmin() || X.lerLocal('campanha:onb', '') === '1') return ''
+  const t = CAMP.sessao.territorio
+  const passos = [
+    { ok: !!comite?.nome && !/^Comitê de /.test(comite.nome), t: 'Dê um nome ao comitê', a: '<a href="#camp-comite-nome" class="link-zonas">nome do comitê ›</a>' },
+    { ok: !!comite?.candidato, t: 'Escolha o candidato do comitê', a: '<a href="#camp-cand-busca" class="link-zonas">escolher ›</a>' },
+    { ok: (CAMP.convites || []).length > 0 || membros.length > 1, t: 'Gere um convite para a equipe', a: '<a href="#camp-cv-usos" class="link-zonas">convites ›</a>' },
+    { ok: membros.length > 1, t: 'Convide coordenadores e cabos', a: '<span class="mudo">mande o link pelo WhatsApp</span>' },
+    { ok: !!t && Object.keys(t.itens || {}).length > 0, t: 'Marque o seu território', a: '<a href="#bairros" class="link-zonas">🏘️ Bairros → 📍 Meu território ›</a>' },
+    { ok: CAMP.ia.mensagens.length > 0 || (CAMP.notas || []).length > 0, t: 'Faça a primeira pergunta à IA ou escreva uma nota', a: '<button type="button" class="link-zonas" data-camp-vis="ia">🧠 IA ›</button>' },
+  ]
+  const feitos = passos.filter((p) => p.ok).length
+  if (feitos === passos.length) return ''
+  return `<section class="cartao camp-onb"><h3>🚀 Primeiros passos <span class="mudo">· ${feitos} de ${passos.length}</span></h3>
+    <ol class="camp-passos">${passos.map((p) => `<li class="${p.ok ? 'ok' : ''}"><span>${p.ok ? '✅' : '⬜'}</span> <span>${esc(p.t)}</span> ${p.ok ? '' : p.a}</li>`).join('')}</ol>
+    <button type="button" class="link-zonas leve" data-camp-onb-fechar>Esconder</button>
+  </section>`
 }
 
 function renderLogin() {
   const f = CAMP.form
   if (CAMP.convite && !f.convite) {
     f.convite = CAMP.convite
-    f.modo = 'criar'
+    if (f.modo === 'entrar') f.modo = 'criar'
   }
+  if (CAMP.redefinir) f.modo = 'redefinir'
   const aviso = CAMP.indisponivel ? `<div class="aviso camp-aviso">⚠️ O servidor da campanha${CAMP.saude && CAMP.saude.ok !== false && !CAMP.saude.banco ? ' está sem banco de dados configurado (DATABASE_URL)' : ' não está disponível neste endereço'}. A versão completa roda no Vercel com o banco Neon (veja o README); no GitHub Pages só o site estático funciona.</div>` : ''
-  return `${aviso}<section class="cartao camp-login">
-    <div class="segmentado" role="group"><button type="button" data-camp-modo="entrar" aria-pressed="${f.modo === 'entrar'}">Entrar</button><button type="button" data-camp-modo="criar" aria-pressed="${f.modo === 'criar'}">Criar conta</button></div>
+  const google = CAMP.saude?.google !== false
+  const linkGoogle = `${apiBase()}/auth/google/iniciar?${new URLSearchParams({ ...(f.convite ? { convite: f.convite } : {}), ...(CAMP.vis !== 'equipe' ? { v: CAMP.vis } : {}), aceite: f.aceite ? '1' : '0' }).toString()}`
+  const botaoGoogle = `<a class="botao botao-google ${google ? '' : 'desligado'}" href="${google ? esc(linkGoogle) : '#campanha'}" ${google ? '' : 'aria-disabled="true" title="Login com Google não configurado neste servidor"'} data-camp-google><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.5l6.7-6.7C35.6 2.6 30.2 0 24 0 14.6 0 6.5 5.4 2.6 13.3l7.8 6C12.3 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-2.8-.4-4H24v7.6h12.7c-.3 2.1-1.7 5.3-4.8 7.5l7.4 5.7c4.4-4.1 7.2-10.1 7.2-16.8z"/><path fill="#FBBC05" d="M10.4 28.7c-.5-1.4-.8-3-.8-4.7s.3-3.3.8-4.7l-7.8-6C1 16.5 0 20.1 0 24s1 7.5 2.6 10.7l7.8-6z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.4-5.7c-2 1.4-4.7 2.4-8.5 2.4-6.3 0-11.7-4.1-13.6-9.9l-7.8 6C6.5 42.6 14.6 48 24 48z"/></svg> Entrar com Google</a>`
+  const aceite = `<label class="camp-aceite"><input id="camp-aceite" type="checkbox" ${f.aceite ? 'checked' : ''} required> Li e aceito os <a href="termos.html" target="_blank" rel="noopener">termos de uso</a> e a <a href="privacidade.html" target="_blank" rel="noopener">política de privacidade</a>.</label>`
+  let corpo = ''
+  if (f.modo === 'recuperar') {
+    corpo = f.enviado
+      ? `<p class="nota">Se existir uma conta com <strong>${esc(f.email)}</strong>, enviamos um link para criar uma senha nova. Vale por 1 hora. Confira também a caixa de spam.</p><button type="button" class="botao secundario" data-camp-modo="entrar">← Voltar</button>`
+      : `<form data-camp-form="entrar" autocomplete="on"><p class="nota">Informe o e-mail da conta: enviamos um link para criar uma senha nova.</p>
+        <label>E-mail <input id="camp-email" type="email" maxlength="120" value="${esc(f.email)}" required autocomplete="email"></label>
+        ${f.erro ? `<p class="camp-erro" role="alert">${esc(f.erro)}</p>` : ''}
+        <button type="submit" class="botao" ${f.ocupado ? 'disabled' : ''}>${f.ocupado ? '⏳ Aguarde…' : 'Enviar link'}</button>
+        <button type="button" class="botao secundario" data-camp-modo="entrar">← Voltar</button></form>`
+  } else if (f.modo === 'redefinir') {
+    corpo = `<form data-camp-form="entrar" autocomplete="on"><p class="nota">Crie a sua senha nova.</p>
+      <label>Senha nova <input id="camp-senha" type="password" minlength="6" value="${esc(f.senha)}" required autocomplete="new-password"></label>
+      ${f.erro ? `<p class="camp-erro" role="alert">${esc(f.erro)}</p>` : ''}
+      <button type="submit" class="botao" ${f.ocupado ? 'disabled' : ''}>${f.ocupado ? '⏳ Aguarde…' : 'Salvar e entrar'}</button></form>`
+  } else {
+    corpo = `<div class="segmentado" role="group"><button type="button" data-camp-modo="entrar" aria-pressed="${f.modo === 'entrar'}">Entrar</button><button type="button" data-camp-modo="criar" aria-pressed="${f.modo === 'criar'}">Criar conta</button></div>
+    ${botaoGoogle}
+    <div class="camp-ou"><span>ou</span></div>
     <form data-camp-form="entrar" autocomplete="on">
       ${f.modo === 'criar' ? `<label>Seu nome <input id="camp-nome" type="text" maxlength="80" value="${esc(f.nome)}" required autocomplete="name"></label>` : ''}
-      <label>Usuário <input id="camp-usuario" type="text" maxlength="40" value="${esc(f.usuario)}" required autocomplete="username" placeholder="ex.: maria.silva" pattern="[a-zA-Z0-9._-]{3,40}"></label>
+      <label>${f.modo === 'criar' ? 'Usuário' : 'Usuário ou e-mail'} <input id="camp-usuario" type="text" maxlength="120" value="${esc(f.usuario)}" required autocomplete="username" placeholder="ex.: maria.silva" ${f.modo === 'criar' ? 'pattern="[a-zA-Z0-9._-]{3,40}"' : ''}></label>
+      ${f.modo === 'criar' ? `<label>E-mail <input id="camp-email" type="email" maxlength="120" value="${esc(f.email)}" required autocomplete="email"></label>` : ''}
       <label>Senha <input id="camp-senha" type="password" minlength="6" value="${esc(f.senha)}" required autocomplete="${f.modo === 'criar' ? 'new-password' : 'current-password'}"></label>
       ${f.modo === 'criar' ? `<label>Telefone (opcional) <input id="camp-telefone" type="tel" maxlength="30" value="${esc(f.telefone)}" autocomplete="tel"></label>
         <label>Código de convite <input id="camp-convite" type="text" maxlength="12" value="${esc(f.convite)}" placeholder="recebido do coordenador" style="text-transform:uppercase"></label>
-        ${!f.convite ? `<label>…ou crie um comitê novo (você será o admin) <input id="camp-comite" type="text" maxlength="80" value="${esc(f.comite)}" placeholder="nome do comitê / candidatura"></label>` : ''}` : ''}
+        ${!f.convite ? `<label>…ou crie um comitê novo (você será o admin) <input id="camp-comite" type="text" maxlength="80" value="${esc(f.comite)}" placeholder="nome do comitê / candidatura"></label>` : ''}
+        ${aceite}` : ''}
       ${f.erro ? `<p class="camp-erro" role="alert">${esc(f.erro)}</p>` : ''}
       <button type="submit" class="botao" ${f.ocupado ? 'disabled' : ''}>${f.ocupado ? '⏳ Aguarde…' : f.modo === 'criar' ? 'Criar conta' : 'Entrar'}</button>
+      ${f.modo === 'entrar' ? '<button type="button" class="link-zonas leve" data-camp-modo="recuperar">Esqueci a senha</button>' : ''}
     </form>
-    <p class="nota">Cabos eleitorais entram com o código de convite do coordenador. O comitê cria a conta sem convite e depois convida os coordenadores. A senha fica só como hash no banco.</p>
-  </section>`
+    ${f.modo === 'criar' ? '<p class="nota">Ao entrar com o Google pela primeira vez, marque o aceite acima. Cabos eleitorais entram com o código de convite do coordenador; o comitê cria a conta sem convite e depois convida os coordenadores. A senha fica só como hash no banco.</p>' : ''}`
+  }
+  return `${aviso}<section class="cartao camp-login">${corpo}</section>${renderPrecos({ compacto: true })}`
 }
 
 /* ---------------- equipe ---------------- */
@@ -214,7 +395,7 @@ function renderEquipe() {
     return X.esqueleto('Carregando a equipe…')
   }
   const { comite, membros } = CAMP.equipe
-  return [cardComite(comite), CAMP.edit ? cardEditorTerritorio() : '', cardConvites(), cardMembros(membros), cardRelatorio(comite, membros)].join('')
+  return [cardOnboarding(comite, membros), cardComite(comite), CAMP.edit ? cardEditorTerritorio() : '', cardConvites(), cardMembros(membros), cardRelatorio(comite, membros)].join('')
 }
 
 function cardComite(comite) {
@@ -409,6 +590,7 @@ export function calcularRelatorio(comite, membros) {
 const COR_META = (p) => (p >= 100 ? '#0b7a45' : p >= 70 ? '#e08600' : '#c62828')
 
 function cardRelatorio(comite, membros) {
+  if (!limitesDoPlano().relatorioEquipe) return `<section class="cartao"><h3>📊 Relatório de votos por liderança</h3><p class="nota">Quantos votos cada coordenador e cabo eleitoral entregou nas escolas e seções que marcou, com meta, 2022 e sobreposições. Disponível a partir do plano <strong>Completo</strong>.</p>${souAdmin() ? '<button type="button" class="botao" data-camp-vis="plano">💳 Ver planos</button>' : ''}</section>`
   const K = candidatoDoComite(comite)
   if (!K) return `<section class="cartao"><h3>📊 Relatório de votos por liderança</h3><p class="nota">Escolha o candidato do comitê para ver quantos votos cada coordenador e cabo eleitoral entregou.</p></section>`
   if (!K.el) {
@@ -578,6 +760,7 @@ async function perguntar(texto) {
     }
   } catch (e) {
     I.erro = erroTexto(e)
+    avisoPlano(e)
     // a última mensagem do usuário fica para a pessoa tentar de novo
     if (I.mensagens.at(-1)?.role === 'user' && typeof I.mensagens.at(-1).content === 'string') I.pergunta = I.mensagens.pop().content
   } finally {
@@ -777,9 +960,10 @@ function renderConta() {
     <form data-camp-form="conta">
       <label>Nome <input id="conta-nome" type="text" maxlength="80" value="${esc(u.nome)}" required></label>
       <label>Usuário <input type="text" value="${esc(u.usuario)}" disabled></label>
+      <label>E-mail <input id="conta-email" type="email" maxlength="120" value="${esc(u.email || '')}" required autocomplete="email"></label>
       <label>Telefone <input id="conta-telefone" type="tel" maxlength="30" value="${esc(u.telefone || '')}"></label>
-      <label>Papel <input type="text" value="${esc(PAPEL[u.papel])}" disabled></label>
-      <details><summary>Trocar a senha</summary><label>Senha atual <input id="conta-senha-atual" type="password" autocomplete="current-password"></label><label>Senha nova <input id="conta-senha-nova" type="password" minlength="6" autocomplete="new-password"></label></details>
+      <label>Papel <input type="text" value="${esc(PAPEL[u.papel])}${u.google ? ' · entra com o Google' : ''}" disabled></label>
+      <details><summary>${u.temSenha ? 'Trocar a senha' : 'Criar uma senha (além do Google)'}</summary>${u.temSenha ? '<label>Senha atual <input id="conta-senha-atual" type="password" autocomplete="current-password"></label>' : ''}<label>Senha nova <input id="conta-senha-nova" type="password" minlength="6" autocomplete="new-password"></label></details>
       ${C.msg ? `<p class="nota">${esc(C.msg)}</p>` : ''}
       <button type="submit" class="botao">Salvar</button>
     </form>
@@ -798,8 +982,34 @@ const numero = (s) => Number(String(s || '').replace(/\D/g, '')) || 0
 
 export function tratarCampanha(h) {
   let x
-  if ((x = h('[data-camp-vis]'))) return ((CAMP.vis = x.dataset.campVis), (CAMP.erro = ''), re(), true)
-  if ((x = h('[data-camp-modo]'))) return ((CAMP.form.modo = x.dataset.campModo), (CAMP.form.erro = ''), re(), true)
+  if ((x = h('[data-camp-vis]'))) return ((CAMP.vis = x.dataset.campVis), (CAMP.erro = ''), (CAMP.nudge = ''), re(), true)
+  if ((x = h('[data-camp-modo]'))) return ((CAMP.form.modo = x.dataset.campModo), (CAMP.form.erro = ''), (CAMP.form.enviado = false), (CAMP.redefinir = ''), re(), true)
+  if (h('[data-camp-nudge-fechar]')) return ((CAMP.nudge = ''), re(), true)
+  if (h('[data-camp-onb-fechar]')) return (X.gravarLocal('campanha:onb', '1'), re(), true)
+  if ((x = h('[data-camp-periodo]'))) return ((CAMP.periodo = x.dataset.campPeriodo), re(), true)
+  if ((x = h('[data-camp-checkout]'))) {
+    const [plano, periodo] = x.dataset.campCheckout.split('|')
+    x.disabled = true
+    x.textContent = '⏳ Abrindo o pagamento…'
+    api.post('/plano/checkout', { plano, periodo }).then((r) => { if (r?.url) location.href = r.url }).catch((e) => { CAMP.erro = erroTexto(e); re() })
+    return true
+  }
+  if (h('[data-camp-plano-atualizar]')) return ((CAMP.plano = null), (CAMP.pagamento = CAMP.pagamento === 'ok' ? 'ok' : ''), re(), true)
+  if ((x = h('[data-camp-plano-cancelar]'))) {
+    if (CAMP.confirmar !== 'cancelar') {
+      CAMP.confirmar = 'cancelar'
+      x.textContent = 'Cancelar mesmo? toque de novo'
+      setTimeout(() => (CAMP.confirmar = null), 4000)
+      return true
+    }
+    api.post('/plano/cancelar').then(() => ((CAMP.plano = null), re())).catch((e) => ((CAMP.erro = erroTexto(e)), re()))
+    return true
+  }
+  if (h('[data-camp-google]') && CAMP.form.modo === 'criar' && !CAMP.form.aceite) {
+    CAMP.form.erro = 'Marque o aceite dos termos antes de entrar com o Google.'
+    re()
+    return true
+  }
   if (h('[data-camp-sair]')) return (sair(), true)
   // comitê
   if ((x = h('[data-camp-cand]'))) {
@@ -818,7 +1028,7 @@ export function tratarCampanha(h) {
   if (h('[data-camp-cv-criar]')) {
     const n = CAMP.novoConvite
     const corpo = souAdmin() ? { papel: n.papel, coordenadorId: n.papel === 'cabo' && n.coordenadorId ? Number(n.coordenadorId) : null, maxUsos: Number(n.maxUsos) || 1 } : { papel: 'cabo', maxUsos: Number(n.maxUsos) || 1 }
-    api.post('/convites', corpo).then((cv) => ((CAMP.convites = [cv, ...(CAMP.convites || [])]), re())).catch((e) => ((CAMP.erro = erroTexto(e)), re()))
+    api.post('/convites', corpo).then((cv) => ((CAMP.convites = [cv, ...(CAMP.convites || [])]), re())).catch((e) => avisoPlano(e) || ((CAMP.erro = erroTexto(e)), re()))
     return true
   }
   if ((x = h('[data-camp-cv-copiar]'))) return (copiar(x.dataset.campCvCopiar, x), true)
@@ -888,7 +1098,7 @@ export function tratarCampanha(h) {
       }
       CAMP.edit = null
       return carregarEquipe()
-    }).catch((e) => ((E.ocupado = false), (E.erro = erroTexto(e)), re()))
+    }).catch((e) => ((E.ocupado = false), avisoPlano(e) || (E.erro = erroTexto(e)), re()))
     return true
   }
   // relatório
@@ -976,7 +1186,7 @@ export function submitCampanha(form) {
   const tipo = form.dataset.campForm
   if (tipo === 'entrar') {
     const f = CAMP.form
-    Object.assign(f, { nome: form.querySelector('#camp-nome')?.value.trim() || f.nome, usuario: form.querySelector('#camp-usuario')?.value.trim() || '', senha: form.querySelector('#camp-senha')?.value || '', telefone: form.querySelector('#camp-telefone')?.value.trim() || '', convite: (form.querySelector('#camp-convite')?.value || '').trim().toUpperCase(), comite: form.querySelector('#camp-comite')?.value.trim() || '' })
+    Object.assign(f, { nome: form.querySelector('#camp-nome')?.value.trim() || f.nome, usuario: form.querySelector('#camp-usuario')?.value.trim() || f.usuario, email: form.querySelector('#camp-email')?.value.trim() || f.email, senha: form.querySelector('#camp-senha')?.value || '', telefone: form.querySelector('#camp-telefone')?.value.trim() || '', convite: (form.querySelector('#camp-convite')?.value || f.convite || '').trim().toUpperCase(), comite: form.querySelector('#camp-comite')?.value.trim() || '', aceite: form.querySelector('#camp-aceite') ? form.querySelector('#camp-aceite').checked : f.aceite })
     entrar()
     return true
   }
@@ -987,11 +1197,11 @@ export function submitCampanha(form) {
   if (tipo === 'nota') {
     const texto = form.querySelector('#nota-texto')?.value.trim(), lugar = form.querySelector('#nota-lugar')?.value.trim()
     if (!texto) return true
-    api.post('/notas', { texto, lugar: lugar || null }).then((n) => { CAMP.notas = [{ ...n, autor: CAMP.sessao.usuario.nome }, ...(CAMP.notas || [])]; CAMP.nota = { texto: '', lugar: '' }; CAMP.erro = ''; re() }).catch((e) => ((CAMP.erro = erroTexto(e)), re()))
+    api.post('/notas', { texto, lugar: lugar || null }).then((n) => { CAMP.notas = [{ ...n, autor: CAMP.sessao.usuario.nome }, ...(CAMP.notas || [])]; CAMP.nota = { texto: '', lugar: '' }; CAMP.erro = ''; re() }).catch((e) => avisoPlano(e) || ((CAMP.erro = erroTexto(e)), re()))
     return true
   }
   if (tipo === 'conta') {
-    const corpo = { nome: form.querySelector('#conta-nome')?.value.trim(), telefone: form.querySelector('#conta-telefone')?.value.trim() || null }
+    const corpo = { nome: form.querySelector('#conta-nome')?.value.trim(), email: form.querySelector('#conta-email')?.value.trim() || undefined, telefone: form.querySelector('#conta-telefone')?.value.trim() || null }
     const atual = form.querySelector('#conta-senha-atual')?.value, nova = form.querySelector('#conta-senha-nova')?.value
     if (nova) corpo.senha = { atual, nova }
     api.patch('/me', corpo).then((s) => { aplicarSessao(s); CAMP.conta = { senhaAtual: '', senhaNova: '', msg: 'Salvo.' }; CAMP.equipe = null; re() }).catch((e) => ((CAMP.conta.msg = erroTexto(e)), re()))
@@ -1021,23 +1231,46 @@ export function inputCampanha(alvo) {
   if (id === 'camp-telefone') return void (CAMP.form.telefone = v)
   if (id === 'camp-convite') return void (CAMP.form.convite = v.toUpperCase())
   if (id === 'camp-comite') return void (CAMP.form.comite = v)
+  if (id === 'camp-email') return void (CAMP.form.email = v)
+  if (id === 'camp-aceite') return void (CAMP.form.aceite = !!alvo.checked)
   if (alvo.dataset?.campPapel) return void api.patch(`/equipe/${alvo.dataset.campPapel}`, { papel: v }).then(carregarEquipe).catch((e) => ((CAMP.erro = erroTexto(e)), re()))
   if (alvo.dataset?.campCoord) return void api.patch(`/equipe/${alvo.dataset.campCoord}`, { coordenadorId: v ? Number(v) : null }).then(carregarEquipe).catch((e) => ((CAMP.erro = erroTexto(e)), re()))
 }
 
 // ids de campos cujo foco deve ser preservado ao redesenhar
-export const CAMPOS_CAMPANHA = ['camp-cand-busca', 'camp-ed-mun', 'camp-ed-nome', 'camp-ed-meta', 'ia-pergunta', 'ia-titulo', 'nota-texto', 'nota-lugar', 'camp-nome', 'camp-usuario', 'camp-senha', 'camp-telefone', 'camp-convite', 'camp-comite', 'camp-comite-nome', 'conta-meta', 'conta-nome', 'conta-telefone']
+export const CAMPOS_CAMPANHA = ['camp-cand-busca', 'camp-ed-mun', 'camp-ed-nome', 'camp-ed-meta', 'ia-pergunta', 'ia-titulo', 'nota-texto', 'nota-lugar', 'camp-nome', 'camp-usuario', 'camp-email', 'camp-senha', 'camp-telefone', 'camp-convite', 'camp-comite', 'camp-aceite', 'camp-comite-nome', 'conta-meta', 'conta-nome', 'conta-email', 'conta-telefone']
 
-// link direto: #campanha?v=ia&convite=ABCD1234
+// link direto: #campanha?v=ia&convite=ABCD1234 · retorno do Google: ?codigo=… ou ?erro=google&motivo=… ·
+// redefinição de senha: ?redefinir=<token> · retorno do pagamento: ?v=plano&pagamento=ok|pendente|erro
+// (os parâmetros de uso único somem do endereço logo depois de lidos)
 export const paramsCampanha = () => ({ v: CAMP.vis !== 'equipe' ? CAMP.vis : null })
+const MOTIVOS = { estado: 'O login com o Google expirou. Tente de novo.', google: 'O Google não confirmou o login. Tente de novo.', email: 'A conta Google precisa ter um e-mail verificado.', convite: 'Convite inválido, vencido ou já usado. Peça outro ao coordenador.', plano: 'O comitê do convite não tem vaga no plano atual.', inativo: 'Esta conta foi desativada pelo comitê.', parametros: 'Não consegui concluir o login com o Google.' }
 export function aplicarParamsCampanha(p) {
   const v = p.get('v')
-  if (['equipe', 'ia', 'notas', 'conta'].includes(v)) CAMP.vis = v
+  if (['equipe', 'ia', 'notas', 'plano', 'conta'].includes(v)) CAMP.vis = v
   const cv = p.get('convite')
   if (cv) {
     CAMP.convite = cv.toUpperCase()
     CAMP.form.convite = CAMP.convite
+    if (CAMP.form.modo === 'entrar') CAMP.form.modo = 'criar'
+  }
+  if (p.get('codigo')) {
+    CAMP.codigoLogin = p.get('codigo')
+    CAMP.sessao = undefined
+  }
+  if (p.get('redefinir')) {
+    CAMP.redefinir = p.get('redefinir')
+    CAMP.form.modo = 'redefinir'
+  }
+  if (p.get('pagamento')) {
+    CAMP.pagamento = p.get('pagamento')
+    CAMP.vis = 'plano'
+    CAMP.plano = null
+  }
+  if (p.get('erro') === 'google') CAMP.form.erro = MOTIVOS[p.get('motivo')] || MOTIVOS.parametros
+  if (p.get('erro') === 'aceite') {
     CAMP.form.modo = 'criar'
+    CAMP.form.erro = 'Para criar a conta com o Google, marque o aceite dos termos e toque de novo em "Entrar com Google".'
   }
 }
 
