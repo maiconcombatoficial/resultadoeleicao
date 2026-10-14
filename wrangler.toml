@@ -1,0 +1,36 @@
+# Cloudflare Workers: site estático (dist/, gerado por `npm run build`) + API (/api/*) num só Worker.
+# Deploy: npm run build && npx wrangler deploy   (ou ligue o repositório em Workers Builds)
+# Segredos: npx wrangler secret put DATABASE_URL (ou um binding Hyperdrive), ANTHROPIC_API_KEY,
+#   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, MP_ACCESS_TOKEN, MP_WEBHOOK_SECRET, RESEND_API_KEY, PRO_CHAVE
+name = "apuracao-sc"
+main = "server/worker.ts"
+compatibility_date = "2025-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+# a API passa pelo Worker; o resto é servido direto dos assets (sem custo de requisição)
+run_worker_first = ["/api/*"]
+not_found_handling = "single-page-application"
+
+[vars]
+NODE_ENV = "production"
+# endereço público do site (links de e-mail, retorno do Google e do pagamento); troque pelo seu domínio
+APP_URL = "https://apuracao-sc.workers.dev"
+EMAIL_DE = "Apuração SC <nao-responda@seudominio.com.br>"
+IA_MODELO = "claude-sonnet-5-5"
+
+# a chamada da IA pode levar até 60 s esperando a resposta (a espera de rede não conta como CPU)
+[limits]
+cpu_ms = 30000
+
+# Hyperdrive (recomendado): pool de conexões perto do Worker, ligada ao Supabase
+#   npx wrangler hyperdrive create apuracao-supabase --connection-string="postgresql://…pooler.supabase.com:6543/postgres"
+# e descomente abaixo com o id gerado:
+# [[hyperdrive]]
+# binding = "HYPERDRIVE"
+# id = "<id do hyperdrive>"
+
+[observability]
+enabled = true

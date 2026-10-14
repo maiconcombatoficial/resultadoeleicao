@@ -114,7 +114,7 @@ quantos votos cada candidato ganhou desde a última atualização e marca eleito
 
 ## Como usar
 
-Front-end sem framework (HTML + CSS + módulos ES) empacotado pelo **Vite**; API em **TypeScript** com **Hono**, **Drizzle ORM** e **Postgres no Neon**, publicada como função serverless no **Vercel**. O navegador consulta o TSE diretamente (o TSE libera CORS); os arquivos estáticos (dados por seção, área protegida, bibliotecas, ícones) ficam em `public/`.
+Front-end sem framework (HTML + CSS + módulos ES) empacotado pelo **Vite**; API em **TypeScript** com **Hono** e **Drizzle ORM** sobre **Postgres** (Neon ou Supabase), publicada no **Cloudflare Workers** junto com o site (ou, como alternativa, como função no Vercel). O navegador consulta o TSE diretamente (o TSE libera CORS); os arquivos estáticos (dados por seção, área protegida, bibliotecas, ícones) ficam em `public/`.
 
 ```bash
 npm ci
@@ -130,7 +130,18 @@ npm run db:migrate           # cria/atualiza as tabelas no Neon (migrações em 
 
 Outros comandos: `npm run build` (gera `dist/`), `npm run preview`, `npm run typecheck`, `npm run test:api`, `npm test` (Playwright), `npm run db:generate` (nova migração depois de mudar `server/db/schema.ts`), `npm run db:studio`.
 
-### Publicar no Vercel + Neon
+### Publicar na Cloudflare (Workers) + Neon ou Supabase
+
+O site estático e a API rodam num único Worker ([wrangler.toml](wrangler.toml)): os arquivos de `dist/` são servidos como assets (sem custo de banda) e só `/api/*` passa pelo código ([server/worker.ts](server/worker.ts)).
+
+1. **Banco:** crie o projeto no [Neon](https://neon.com) (região São Paulo) ou no [Supabase](https://supabase.com) e copie a string de conexão (no Supabase, a da *pool*, porta 6543). Crie as tabelas: `DATABASE_URL=… npm run db:migrate` (no Supabase use a conexão direta, porta 5432, para migrar).
+2. **Cloudflare:** `npx wrangler login`; em `wrangler.toml` ajuste `APP_URL` (o domínio do site) e `EMAIL_DE`; cadastre os segredos: `npx wrangler secret put DATABASE_URL` (e `ANTHROPIC_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET`, `RESEND_API_KEY`, `PRO_CHAVE`). Opcional, recomendado em escala: um [Hyperdrive](https://developers.cloudflare.com/hyperdrive/) ligado ao banco (`npx wrangler hyperdrive create …`) e o binding `HYPERDRIVE` descomentado no `wrangler.toml`.
+3. **Publicar:** `npm run deploy` (build do Vite + `wrangler deploy`). Ou ligue o repositório em *Workers → Builds* com o comando de build `npm run build` e o de deploy `npx wrangler deploy`, para publicar a cada push. `npm run cf:check` empacota sem publicar (o CI roda isso) e `npm run cf:dev` sobe o Worker localmente.
+4. Google, Mercado Pago e Resend: os mesmos passos abaixo, trocando o endereço do Vercel pelo do Worker ou do seu domínio.
+
+Senhas: o hash é PBKDF2 (Web Crypto), que roda nos Workers; contas criadas antes com scrypt continuam entrando e são regravadas no formato novo na primeira entrada.
+
+### Publicar no Vercel + Neon (alternativa)
 
 1. **Neon:** crie o projeto e copie a string de conexão (`postgresql://…?sslmode=require`). No Vercel, a [integração Neon](https://vercel.com/marketplace/neon) cria `DATABASE_URL` sozinha.
 2. **Vercel:** importe o repositório (framework Vite; `vercel.json` já define o build, a pasta `dist`, o rewrite de `/api/*` para a função `api/index.ts`, o tempo máximo de 60 s da função e os cabeçalhos de cache). Variáveis de ambiente (Production e Preview): `APP_URL` (ex.: `https://<projeto>.vercel.app`), `DATABASE_URL` (Neon), `ANTHROPIC_API_KEY` (IA; opcional `IA_MODELO`), `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, `MP_ACCESS_TOKEN`/`MP_WEBHOOK_SECRET`, `RESEND_API_KEY`/`EMAIL_DE`, `PRO_CHAVE`.

@@ -11,7 +11,7 @@ import { cors } from 'hono/cors'
 import { and, desc, eq, gt, inArray, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { bancoLocal, db, prontoBanco, schema, temBanco } from './db/index.ts'
-import { DIAS_CONVITE, conferirSenha, daquiA, daquiAMin, gerarHash, hashToken, novoCodigo, novoToken } from './auth.ts'
+import { DIAS_CONVITE, conferirSenha, daquiA, daquiAMin, gerarHash, hashToken, novoCodigo, novoToken, precisaRehash } from './auth.ts'
 import type { Candidato, Itens, Papel, Usuario } from './db/schema.ts'
 import { Invalido, LimiteExcedido, Proibido, appUrl, corpo, ipDe, type Vars } from './comum.ts'
 import { limitar } from './limites.ts'
@@ -109,6 +109,8 @@ app.post('/auth/entrar', async (c) => {
   if (u && !u.senhaHash && u.googleId) return c.json({ erro: 'Esta conta entra com o Google. Use o botão "Entrar com Google".' }, 401)
   if (!u || !(await conferirSenha(d.senha, u.senhaHash))) return c.json({ erro: 'Usuário ou senha incorretos.' }, 401)
   if (!u.ativo) return c.json({ erro: 'Esta conta foi desativada pelo comitê.' }, 403)
+  // hash em formato antigo (scrypt): regrava no formato novo (PBKDF2, Web Crypto)
+  if (precisaRehash(u.senhaHash)) await db().update(usuarios).set({ senhaHash: await gerarHash(d.senha) }).where(eq(usuarios.id, u.id))
   return c.json({ token: await criarSessao(u.id), ...(await sessaoCompleta(u)) })
 })
 

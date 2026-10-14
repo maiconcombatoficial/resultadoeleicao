@@ -32,6 +32,8 @@ jobs:
         run: npm run test:api
       - name: Build do front-end
         run: npm run build
+      - name: Empacotar o Worker (Cloudflare, sem publicar)
+        run: npx wrangler deploy --dry-run --outdir .wrangler/dist
       - name: Instalar o Chromium
         run: npx playwright install --with-deps chromium
       - name: Testes do app
