@@ -15,7 +15,7 @@ test('Início abre por padrão com o resumo de SC', async ({ page }) => {
   expect(img.bytes).toBeGreaterThan(30_000)
 })
 
-for (const aba of ['depfed', 'depest', 'governador', 'senador', 'municipios', 'bairros', 'h2022', 'sobre']) {
+for (const aba of ['depfed', 'depest', 'governador', 'senador', 'municipios', 'bairros', 'campanha', 'h2022', 'sobre']) {
   test(`aba ${aba} abre sem erro`, async ({ page }) => {
     await page.goto(`/#${aba}`)
     await expect(page.locator(`[data-aba="${aba}"][aria-selected="true"]`)).toBeVisible()
@@ -84,7 +84,7 @@ test('Sobre traz metodologia, privacidade e versão', async ({ page }) => {
 test('aviso de versão nova', async ({ page }) => {
   await page.route(/\?checar=/, async (r) => {
     const res = await r.fetch()
-    r.fulfill({ status: 200, body: (await res.text()).replace(/app\.js\?v=\d+/, 'app.js?v=209912312359'), headers: { 'content-type': 'text/html' } })
+    r.fulfill({ status: 200, body: (await res.text()).replace(/<meta name="versao" content="[^"]+"/, '<meta name="versao" content="209912312359-nova"'), headers: { 'content-type': 'text/html' } })
   })
   await page.goto('/#sobre')
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
@@ -784,8 +784,9 @@ test('ficha completa de eleições anteriores: vereador 2024, deputado 2022 e pr
   await page.goto('about:blank')
   await page.goto('/#h2022?ano=2022&e=t1-c7&c=240001614348&ca=h2022-t1-c7')
   await expect(page.locator('.detalhe .det-cabeca h2')).toHaveText('ANA CAMPAGNOLO')
-  await expect(page.locator('.detalhe .cartao.bai')).toContainText('Joinville')
-  await expect(page.locator('.detalhe [data-mapa]')).toBeVisible()
+  // a ficha carrega os 7 anos do histórico e o mapa: com a máquina ocupada passa de 5 s
+  await expect(page.locator('.detalhe .cartao.bai')).toContainText('Joinville', { timeout: 20_000 })
+  await expect(page.locator('.detalhe [data-mapa]')).toBeVisible({ timeout: 20_000 })
   // prefeito: pela ficha da cidade
   await page.goto('about:blank')
   await page.goto('/#h2022?ano=2024&m=81051')
@@ -893,4 +894,120 @@ test('ficha não trava se o resumo de um ano anterior falhar', async ({ page }) 
   await expect(page.locator('.detalhe .det-cabeca h2')).toHaveText('GEMADA')
   await expect(page.locator('.detalhe .cartao.historico')).toContainText('2020')
   await page.goto('about:blank', { timeout: 10_000 })
+})
+
+test('Campanha: sem servidor, mostra o login e o aviso de indisponível', async ({ page }) => {
+  await page.goto('/#campanha')
+  await expect(page.locator('.camp-login')).toBeVisible()
+  await expect(page.locator('.camp-aviso')).toContainText('servidor da campanha')
+  await page.locator('[data-camp-modo="criar"]').click()
+  await expect(page.locator('#camp-nome')).toBeVisible()
+  await expect(page.locator('#camp-comite')).toBeVisible()
+})
+
+test('Campanha: link de convite preenche o código no cadastro', async ({ page }) => {
+  await page.goto('/#campanha?convite=abcd2345')
+  await expect(page.locator('#camp-convite')).toHaveValue('ABCD2345')
+  await expect(page.locator('#camp-comite')).toHaveCount(0)
+})
+
+test('Campanha: tentativa de entrar sem servidor avisa e não trava', async ({ page }) => {
+  await page.goto('/#campanha')
+  await page.locator('#camp-usuario').fill('maria')
+  await page.locator('#camp-senha').fill('segredo1')
+  await page.locator('.camp-login button[type="submit"]').click()
+  await expect(page.locator('.camp-erro')).toBeVisible()
+})
+
+test('anos anteriores nas abas de cargo: 2022 (gerais) e 2024 (municipais) com o mesmo visual', async ({ page }) => {
+  await page.goto('/#depest?ano=2022')
+  await expect(page.locator('#anos [data-ano="2022"][aria-selected="true"]')).toBeVisible()
+  await expect(page.locator('[data-aba="vereador"]')).toHaveCount(0)
+  await expect(page.locator('[data-aba="municipios"]')).toHaveCount(0)
+  await expect(page.locator('.resumo .selo')).toContainText('2022')
+  await expect(page.locator('#conteudo [data-cand]').first()).toBeVisible()
+  await expect(page.locator('#conteudo')).toContainText('Bancada eleita')
+  await page.locator('#conteudo [data-cand]').first().click()
+  await expect(page.locator('.detalhe .det-onde')).toContainText('2022')
+  await expect(page).toHaveURL(/ca=h2022-t1-c7/)
+  // município de 2022 (votos por cidade)
+  await page.goto('/#governador?ano=2022&m=81795')
+  await expect(page.locator('.resumo h2')).toContainText('Joinville')
+  await expect(page.locator('#conteudo [data-cand]').first()).toBeVisible()
+  await expect(page.locator('[data-turno-hist="2"]')).toBeVisible()
+  await page.locator('[data-turno-hist="2"]').click()
+  await expect(page.locator('.resumo h2')).toContainText('2º turno')
+  await expect(page).toHaveURL(/t=2/)
+  // municipais de 2024: sempre dentro de uma cidade (Florianópolis por padrão)
+  await page.goto('/#vereador?ano=2024')
+  await expect(page.locator('[data-aba="depest"]')).toHaveCount(0)
+  await expect(page.locator('[data-aba="prefeito"]')).toBeVisible()
+  await expect(page.locator('#mun-busca')).toHaveValue('Florianópolis')
+  await expect(page.locator('#conteudo [data-cand]').first()).toBeVisible()
+  await expect(page.locator('[data-aba="h2022"]')).toContainText('Bairros e seções')
+  // volta para 2026 pelo seletor do topo
+  await page.locator('#anos [data-ano="2026"]').click()
+  await expect(page.locator('[data-aba="depest"]')).toBeVisible()
+  await expect(page.locator('[data-aba="vereador"]')).toHaveCount(0)
+  await expect(page.locator('[data-aba="inicio"][aria-selected="true"]')).toBeVisible()
+})
+
+test('Campanha: login mostra Google, planos e recuperação de senha', async ({ page }) => {
+  await page.goto('/#campanha')
+  await expect(page.locator('.camp-login .botao-google')).toHaveAttribute('href', /\/api\/auth\/google\/iniciar/)
+  await expect(page.locator('.camp-precos .preco')).toHaveCount(7)
+  await expect(page.locator('.camp-precos')).toContainText('R$ 247,00')
+  await page.locator('.camp-precos [data-camp-periodo="mensal"]').click()
+  await expect(page.locator('.camp-precos')).toContainText('R$ 25,00')
+  // cadastro pede e-mail e aceite
+  await page.locator('[data-camp-modo="criar"]').click()
+  await expect(page.locator('#camp-email')).toBeVisible()
+  await expect(page.locator('#camp-aceite')).toHaveAttribute('required', '')
+  // esqueci a senha
+  await page.locator('[data-camp-modo="entrar"]').click()
+  await page.locator('[data-camp-modo="recuperar"]').click()
+  await expect(page.locator('#camp-email')).toBeVisible()
+  await page.locator('#camp-email').fill('alguem@exemplo.com')
+  await page.locator('.camp-login button[type="submit"]').click()
+  await expect(page.locator('.camp-erro')).toBeVisible() // sem servidor nos testes
+})
+
+test('Campanha: links do Google e da redefinição de senha', async ({ page }) => {
+  await page.goto('/#campanha?erro=google&motivo=convite')
+  await expect(page.locator('.camp-erro')).toContainText('Convite')
+  await page.goto('about:blank')
+  await page.goto('/#campanha?redefinir=token-de-teste')
+  await expect(page.locator('.camp-login')).toContainText('senha nova')
+  await expect(page.locator('#camp-senha')).toBeVisible()
+})
+
+test('termos, privacidade e planos no Sobre', async ({ page }) => {
+  await page.goto('/termos.html')
+  await expect(page.getByRole('heading', { name: 'Termos de uso' })).toBeVisible()
+  await page.goto('/privacidade.html')
+  await expect(page.getByRole('heading', { name: 'Política de privacidade' })).toBeVisible()
+  await page.goto('/#sobre')
+  await expect(page.locator('.camp-precos')).toBeVisible()
+  await expect(page.locator('.rodape a[href="termos.html"]')).toBeVisible()
+})
+
+test('Campanha com sessão: onboarding, seção Plano e aviso de limite do plano', async ({ page }) => {
+  const sessao = { usuario: { id: 1, nome: 'Admin', usuario: 'admin', email: 'a@b.com', papel: 'admin', ativo: true, temSenha: true }, comite: { id: 1, nome: 'Comitê de Admin', candidato: null }, territorio: { itens: {}, nome: 'Meu território', meta: 0 }, plano: { id: 'gratis', nome: 'Grátis', contratado: 'gratis', limites: { pessoas: 1, iaDia: 0, analises: false, notas: false, relatorioEquipe: false, municipios: 1 } } }
+  const json = (r, corpo, status = 200) => r.fulfill({ status, contentType: 'application/json', body: JSON.stringify(corpo) })
+  await page.route('**/api/me', (r) => json(r, sessao))
+  await page.route('**/api/equipe', (r) => json(r, { comite: sessao.comite, plano: sessao.plano, membros: [sessao.usuario] }))
+  await page.route('**/api/convites', (r) => (r.request().method() === 'POST' ? json(r, { erro: 'O plano Grátis permite 1 pessoa no comitê.', codigo: 'plano' }, 403) : json(r, [])))
+  await page.route('**/api/plano', (r) => json(r, { ...sessao.plano, uso: { pessoas: 1, iaHoje: 0, municipios: 0 }, pagamentos: [], pagamento: 'mercadopago', garantiaDias: 7 }))
+  await page.goto('/')
+  await page.evaluate(() => localStorage.setItem('campanha:token', 'x'))
+  await page.goto('about:blank') // o token é lido quando o app carrega
+  await page.goto('/#campanha')
+  await expect(page.locator('.camp-onb')).toContainText('Primeiros passos')
+  await expect(page.locator('.camp-vis [data-camp-vis="plano"]')).toBeVisible()
+  await page.locator('[data-camp-cv-criar]').click()
+  await expect(page.locator('.camp-nudge')).toContainText('Limite do plano')
+  await page.locator('.camp-nudge [data-camp-vis="plano"]').click()
+  await expect(page.locator('.camp-plano')).toContainText('Plano do comitê')
+  await expect(page.locator('.camp-precos .preco.atual')).toContainText('Grátis')
+  await expect(page.locator('.camp-precos [data-camp-checkout="completo|anual"]')).toBeVisible()
 })

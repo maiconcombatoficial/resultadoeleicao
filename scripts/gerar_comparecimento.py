@@ -12,13 +12,13 @@ Aptos e comparecimento da seção: os do cargo com mais eleitores (são os mesmo
 seções com eleitores em trânsito).
 """
 import argparse, collections, csv, io, json, os, sys, zipfile
-from comum import CACHE, CDN, RAIZ, baixar
+from comum import CACHE, CDN, PUBLICO, RAIZ, baixar
 
 ap = argparse.ArgumentParser()
 ap.add_argument('--ano', type=int, required=True)
 a = ap.parse_args()
 ANO, UF = a.ano, 'SC'
-DIR = os.path.join(RAIZ, f'dados{ANO}')
+DIR = os.path.join(PUBLICO, f'dados{ANO}')
 log = lambda *x: print(*x, file=sys.stderr, flush=True)
 csv.field_size_limit(1 << 24)
 inteiro = lambda s: int(s) if (s or '').lstrip('-').isdigit() else 0

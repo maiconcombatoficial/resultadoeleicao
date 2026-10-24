@@ -2,6 +2,7 @@
 import csv, json, os, re, ssl, time, unicodedata, urllib.request, zipfile, io
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PUBLICO = os.path.join(RAIZ, 'public')  # arquivos estáticos publicados (dados<ano>/, pro/, img/, lib/)
 CACHE = os.path.join(RAIZ, '.cache')
 TSE = 'https://resultados.tse.jus.br/oficial'
 CDN = 'https://cdn.tse.jus.br/estatistica/sead/odsele'

@@ -1,6 +1,6 @@
 # Testes automáticos: rodam em cada PR e em cada publicação na main.
-# Conferem a sintaxe dos scripts e abrem o app num Chromium de celular (tests/app.spec.js),
-# com os dados do TSE gravados em tests/fixtures/tse (não dependem da internet).
+# Conferem os tipos da API, o build do Vite, os testes da API (node --test) e abrem o app num
+# Chromium de celular (tests/app.spec.js), com os dados do TSE gravados em tests/fixtures/tse.
 name: Testes
 
 on:
@@ -15,17 +15,25 @@ permissions:
 jobs:
   testes:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - name: Sintaxe dos scripts
-        run: for f in *.js scripts/*.mjs tests/*.js; do node --check "$f" || exit 1; done
-      - name: Instalar dependências de teste
+      - name: Instalar dependências
         run: npm ci
+      - name: Sintaxe dos módulos do app
+        run: npm run lint
+      - name: Tipos da API
+        run: npm run typecheck
+      - name: Testes da API
+        run: npm run test:api
+      - name: Build do front-end
+        run: npm run build
+      - name: Empacotar o Worker (Cloudflare, sem publicar)
+        run: npx wrangler deploy --dry-run --outdir .wrangler/dist
       - name: Instalar o Chromium
         run: npx playwright install --with-deps chromium
       - name: Testes do app

@@ -16,7 +16,7 @@ e pro/idade-secoes-<ano>.bin: eleitores de cada seção por faixa ({'s': {cd: {'
 lista de urnas da ficha mostrar o público de cada seção.
 """
 import argparse, collections, csv, io, json, os, re, sys, zipfile
-from comum import CACHE, CDN, RAIZ, baixar, ler_locais
+from comum import CACHE, CDN, PUBLICO, RAIZ, baixar, ler_locais
 from gerar_pro import gravar, obter_chave
 
 FAIXAS = ['16 e 17 anos', '18 a 24 anos', '25 a 34 anos', '35 a 44 anos', '45 a 59 anos', '60 a 69 anos', '70 anos ou mais']
@@ -69,7 +69,7 @@ def quintos(itens):
 
 
 def gerar(ano, chave, so_secoes=False):
-    D = os.path.join(RAIZ, f'dados{ano}')
+    D = os.path.join(PUBLICO, f'dados{ano}')
     secoes = {f[:5]: json.load(open(os.path.join(D, 'secoes', f))) for f in os.listdir(os.path.join(D, 'secoes'))}
     if ano == 2026:
         els = json.load(open(os.path.join(D, 'indice.json')))['eleicoes']

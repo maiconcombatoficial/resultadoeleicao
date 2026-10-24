@@ -3,3 +3,10 @@ __pycache__/
 node_modules/
 test-results/
 playwright-report/
+dist/
+.vercel/
+.env
+.env.*
+!.env.example
+.dados-local/
+.wrangler/
