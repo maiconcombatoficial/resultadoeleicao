@@ -1411,3 +1411,7 @@ h1::before { content: "🗳️ "; }
 .camp-passos { margin: 6px 0; padding: 0; list-style: none; display: grid; gap: 6px; }
 .camp-passos li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .camp-passos li.ok { color: var(--mudo); text-decoration: line-through; }
+
+/* Início: 2º turno de Presidente (Brasil e SC lado a lado) */
+.pres2 { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin-top: 8px; }
+.pres2-col h4 { margin: 0 0 6px; font-size: 0.95rem; }

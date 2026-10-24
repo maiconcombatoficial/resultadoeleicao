@@ -1011,3 +1011,11 @@ test('Campanha com sessão: onboarding, seção Plano e aviso de limite do plano
   await expect(page.locator('.camp-precos .preco.atual')).toContainText('Grátis')
   await expect(page.locator('.camp-precos [data-camp-checkout="completo|anual"]')).toBeVisible()
 })
+
+test('Início 2026: bloco do 2º turno de Presidente aguarda o TSE', async ({ page }) => {
+  await page.goto('/#inicio')
+  const b = page.locator('.painel-pres2')
+  await expect(b).toBeVisible()
+  await expect(b).toContainText('Presidente · 2º turno')
+  await expect(b).toContainText('25 de outubro')
+})
