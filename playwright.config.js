@@ -9,7 +9,7 @@ export default defineConfig({
   timeout: 90_000,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['github'], ['list']] : 'list',
-  webServer: { command: 'npm run build && npx vite preview --port 8765 --strictPort', url: 'http://localhost:8765/index.html', reuseExistingServer: !process.env.CI, timeout: 180_000 },
+  webServer: { command: `npx vite build${process.env.BUILD_PUBLICO ? '' : ' --mode campanha'} && npx vite preview --port 8765 --strictPort`, url: 'http://localhost:8765/index.html', reuseExistingServer: !process.env.CI, timeout: 180_000 },
   use: {
     baseURL: 'http://localhost:8765/',
     viewport: { width: 390, height: 844 },

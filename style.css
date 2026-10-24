@@ -1415,3 +1415,11 @@ h1::before { content: "🗳️ "; }
 /* Início: 2º turno de Presidente (Brasil e SC lado a lado) */
 .pres2 { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin-top: 8px; }
 .pres2-col h4 { margin: 0 0 6px; font-size: 0.95rem; }
+
+/* Início: o 2º turno de Presidente é o destaque da tela */
+.painel-pres2 { border: 2px solid var(--primaria); background: linear-gradient(180deg, var(--primaria-clara), var(--cartao) 55%); padding: 22px; }
+.painel-pres2 h2 { margin: 0; font-size: 1.5rem; letter-spacing: -0.02em; }
+.painel-pres2 h2 a { color: inherit; text-decoration: none; }
+.painel-pres2 .painel-lista li { padding: 12px 6px; }
+.painel-pres2 .painel-num strong { font-size: 1.6rem; }
+.painel-pres2 .progresso { height: 12px; }

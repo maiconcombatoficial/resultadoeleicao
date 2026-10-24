@@ -21,9 +21,10 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "cf:check": "npm run build && wrangler deploy --dry-run --outdir .wrangler/dist",
-    "cf:dev": "npm run build && wrangler dev",
-    "deploy": "npm run build && wrangler deploy"
+    "cf:check": "npm run build:completo && wrangler deploy --dry-run --outdir .wrangler/dist",
+    "cf:dev": "npm run build:completo && wrangler dev",
+    "deploy": "npm run build:completo && wrangler deploy",
+    "build:completo": "vite build --mode campanha"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",

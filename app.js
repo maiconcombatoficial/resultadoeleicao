@@ -22,12 +22,15 @@ const ELEICOES = {
   estadual: { 1: '6259', 2: '6260' },
 }
 
+// 🧭 Campanha (conta, equipe, IA, planos): só nos builds com a API (modo "campanha" do Vite, dev e testes);
+// o site público do GitHub Pages não a mostra
+export const CAMPANHA_ATIVA = import.meta.env.DEV || import.meta.env.MODE === 'campanha'
 export const ABAS = [
   { id: 'inicio', rotulo: '🏠 Início', tipo: 'painel', abrangencias: ['br'] },
   { id: 'favoritos', rotulo: '❤️ Acompanhados', tipo: 'fav', abrangencias: ['br'] },
   { id: 'municipios', rotulo: '📊 Municípios', tipo: 'mun', abrangencias: ['sc'] },
   { id: 'bairros', rotulo: '🏘️ Bairros', tipo: 'bai', abrangencias: ['sc'] },
-  { id: 'campanha', rotulo: '🧭 Campanha', tipo: 'camp', abrangencias: ['sc'] },
+  ...(CAMPANHA_ATIVA ? [{ id: 'campanha', rotulo: '🧭 Campanha', tipo: 'camp', abrangencias: ['sc'] }] : []),
   { id: 'analises', rotulo: '🔒 Análises', tipo: 'pro', abrangencias: ['sc'] },
   { id: 'h2022', rotulo: '📅 Histórico', tipo: 'h22', abrangencias: ['sc'] },
   { id: 'presidente', rotulo: 'Presidente', cargo: 1, eleicao: 'federal', tipo: 'maj', abrangencias: ['br', UF] },
@@ -1275,7 +1278,7 @@ async function carregarFavoritos(ctrl) {
 const CARGOS_PAINEL = ['governador', 'senador', 'depfed', 'depest']
 
 async function carregarPainel(ctrl) {
-  const grupos = new Map(CARGOS_PAINEL.map((id) => [`${id}|${UF}`, { aba: ABAS.find((a) => a.id === id), abr: UF }]))
+  const grupos = new Map()
   for (const f of favoritos) {
     const aba = ABAS.find((a) => a.id === f.aba)
     if (aba?.cargo) grupos.set(`${f.aba}|${f.abr}`, { aba, abr: f.abr })
@@ -1306,7 +1309,7 @@ async function carregarPainel(ctrl) {
   }
   await juntarFavHist(estado.favDados)
   if (ctrl.signal.aborted) return
-  estado.dados = { painel: true, final: [...estado.favDados.values()].every((d) => d.final) && estado.favDados.size > 0 && !!pres2.br?.final }
+  estado.dados = { painel: true, final: !!pres2.br?.final }
   renderizar()
   statusEl.textContent = !ehAoVivo() ? `Resultado oficial · TSE ${anoAtual()}` : erros ? 'Erro ao atualizar' : estado.dados.final ? 'Apuração encerrada' : `Atualizado ${new Date().toLocaleTimeString('pt-BR')}`
   statusEl.className = erros && ehAoVivo() ? 'status erro' : 'status ok'
@@ -1486,7 +1489,7 @@ function renderPainel2026() {
     const P = estado.pres2 || {}
     const br = P.br, sc = P[UF]
     if (!br && !sc) {
-      return `<section class="cartao painel-pres2"><div class="resumo-titulo"><h3><a href="?turno=2#presidente" class="link-aba">🗳️ Presidente · 2º turno</a></h3><span class="selo">${P.br === false ? 'Sem conexão' : 'Aguardando o TSE'}</span></div>
+      return `<section class="cartao painel-pres2"><div class="resumo-titulo"><h2><a href="?turno=2#presidente" class="link-aba">🗳️ Presidente · 2º turno</a></h2><span class="selo">${P.br === false ? 'Sem conexão' : 'Aguardando o TSE'}</span></div>
         <p class="nota">${P.br === false ? 'Não consegui consultar o TSE agora. Tentando de novo em instantes.' : 'O 2º turno é no domingo, 25 de outubro de 2026. A apuração aparece aqui assim que o TSE começar a divulgar (a partir das 17h de Brasília) e se atualiza sozinha.'}</p></section>`
     }
     const ref = br || sc
@@ -1502,7 +1505,7 @@ function renderPainel2026() {
         })
         .join('')}</ol></div>`
     }
-    return `<section class="cartao painel-pres2"><div class="resumo-titulo"><h3><a href="?turno=2#presidente" class="link-aba">🗳️ Presidente · 2º turno</a></h3><span class="selo ${ref.final ? 'final' : ''}">${ref.final ? 'Totalização final · TSE' : 'Em apuração'}</span></div>
+    return `<section class="cartao painel-pres2"><div class="resumo-titulo"><h2><a href="?turno=2#presidente" class="link-aba">🗳️ Presidente · 2º turno</a></h2><span class="selo ${ref.final ? 'final' : ''}">${ref.final ? 'Totalização final · TSE' : 'Em apuração'}</span></div>
       <div class="progresso"><div class="progresso-barra" style="width:${Math.min(100, ref.secoes.percentual)}%"></div></div>
       <p class="progresso-texto"><strong>${fmtPct.format(ref.secoes.percentual)}%</strong> das seções do ${br ? 'Brasil' : 'estado'} totalizadas${ref.atualizadoEm ? ` <span class="mudo">· dados do TSE de ${esc(ref.atualizadoEm)}</span>` : ''}</p>
       <div class="pres2">${lista(br, 'Brasil')}${lista(sc, 'Santa Catarina')}</div></section>`
@@ -1528,8 +1531,8 @@ function renderPainel2026() {
       <a href="#telao">${icone('tv')}<strong>Modo telão</strong><small>tela cheia para TV ou projetor</small></a>
     </div><p class="nota">Para comparar dois candidatos (inclusive de cargos diferentes), abra a ficha de um deles e toque em <strong>Comparar com outro candidato</strong>.</p></section>`
   const card = cardPainel(D)
-  return topo + blocoPresidente2() + meus + blocoMaj('governador', 'Governador', 3) + blocoMaj('senador', 'Senado', 4) + blocoCadeiras('depfed', 'Dep. Federal') + blocoCadeiras('depest', 'Dep. Estadual') +
-    (card ? `<section class="cartao"><div class="exportar">${botaoCard('painel', card, `${icone('compartilhar')} Compartilhar resumo de SC`)}</div></section>` : '') + atalhos
+  // Início 2026: o destaque é o 2º turno de Presidente; os dados do 1º turno ficam nas abas de cada cargo
+  return blocoPresidente2() + meus + atalhos
 }
 
 // card de compartilhar com o resumo: governador, senado e cadeiras por partido
@@ -4736,7 +4739,7 @@ function renderSobre() {
         <li><strong>Área 🔒:</strong> os dados exclusivos ficam criptografados (AES-256); a senha é verificada no próprio aparelho e não é enviada a lugar nenhum.</li>
       </ul>
     </section>
-    ${renderPrecos({ compacto: true })}
+    ${CAMPANHA_ATIVA ? renderPrecos({ compacto: true }) : ''}
     <section class="cartao"><h3>ℹ️ Sobre esta versão</h3>
       <p>Versão <strong>${esc(versaoLegivel())}</strong> · Eleições 2026, ${TURNO}º turno.</p>
       <p class="nota">Encontrou algo estranho nos números? Fale com <a href="https://www.instagram.com/maiconcombat/" target="_blank" rel="noopener">@maiconcombat</a>.</p>
