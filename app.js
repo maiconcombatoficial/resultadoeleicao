@@ -1281,7 +1281,18 @@ async function carregarPainel(ctrl) {
     if (aba?.cargo) grupos.set(`${f.aba}|${f.abr}`, { aba, abr: f.abr })
   }
   const res = await Promise.allSettled([...grupos.entries()].map(async ([k, g]) => [k, await buscar(g.aba, g.abr, TURNO, ctrl.signal)]))
+  // 2º turno para Presidente (Brasil e SC), em qualquer visão do Início de 2026
+  const abaPres = ABAS.find((a) => a.id === 'presidente')
+  const pres2 = {}
+  await Promise.all(['br', UF].map(async (abr) => {
+    try {
+      pres2[abr] = await buscar(abaPres, abr, 2, ctrl.signal)
+    } catch (e) {
+      pres2[abr] = e instanceof NaoDivulgado ? null : false // null = ainda não divulgado · false = erro
+    }
+  }))
   if (ctrl.signal.aborted) return
+  estado.pres2 = pres2
   estado.favDados = new Map()
   let erros = 0
   for (const r of res) {
@@ -1295,7 +1306,7 @@ async function carregarPainel(ctrl) {
   }
   await juntarFavHist(estado.favDados)
   if (ctrl.signal.aborted) return
-  estado.dados = { painel: true, final: [...estado.favDados.values()].every((d) => d.final) && estado.favDados.size > 0 }
+  estado.dados = { painel: true, final: [...estado.favDados.values()].every((d) => d.final) && estado.favDados.size > 0 && !!pres2.br?.final }
   renderizar()
   statusEl.textContent = !ehAoVivo() ? `Resultado oficial · TSE ${anoAtual()}` : erros ? 'Erro ao atualizar' : estado.dados.final ? 'Apuração encerrada' : `Atualizado ${new Date().toLocaleTimeString('pt-BR')}`
   statusEl.className = erros && ehAoVivo() ? 'status erro' : 'status ok'
@@ -1470,6 +1481,32 @@ function renderPainel2026() {
         })
         .join('')}</ol></section>`
   }
+  // 2º turno de Presidente: Brasil e SC lado a lado (o TSE publica a partir das 17h de Brasília do dia 25/10)
+  const blocoPresidente2 = () => {
+    const P = estado.pres2 || {}
+    const br = P.br, sc = P[UF]
+    if (!br && !sc) {
+      return `<section class="cartao painel-pres2"><div class="resumo-titulo"><h3><a href="?turno=2#presidente" class="link-aba">🗳️ Presidente · 2º turno</a></h3><span class="selo">${P.br === false ? 'Sem conexão' : 'Aguardando o TSE'}</span></div>
+        <p class="nota">${P.br === false ? 'Não consegui consultar o TSE agora. Tentando de novo em instantes.' : 'O 2º turno é no domingo, 25 de outubro de 2026. A apuração aparece aqui assim que o TSE começar a divulgar (a partir das 17h de Brasília) e se atualiza sozinha.'}</p></section>`
+    }
+    const ref = br || sc
+    const lista = (d, rot) => {
+      if (!d) return ''
+      const cs = d.candidatos.filter((c) => c.valido).slice(0, 2)
+      const max = Math.max(1, ...cs.map((c) => c.percentual))
+      return `<div class="pres2-col"><h4>${rot} <span class="mudo">· ${fmtPct.format(d.secoes.percentual)}% apurado</span></h4><ol class="painel-lista">${cs
+        .map((c, i) => {
+          const cor = corPartido(c.partido)
+          return `<li style="${estiloCor(cor)}"><span class="pos">${i + 1}º</span>${foto(c, cor)}<div class="painel-info"><div><strong>${esc(c.nome)}</strong> ${pill(c.partido, cor)} ${c.eleito ? '<span class="tag eleito-tse"><b>✔ Eleito</b></span>' : ''}</div>
+            <div class="barra fina"><span style="width:${(100 * c.percentual) / max}%"></span></div></div><div class="painel-num"><strong>${fmtPct.format(c.percentual)}%</strong><small>${fmt.format(c.votos)} votos</small></div></li>`
+        })
+        .join('')}</ol></div>`
+    }
+    return `<section class="cartao painel-pres2"><div class="resumo-titulo"><h3><a href="?turno=2#presidente" class="link-aba">🗳️ Presidente · 2º turno</a></h3><span class="selo ${ref.final ? 'final' : ''}">${ref.final ? 'Totalização final · TSE' : 'Em apuração'}</span></div>
+      <div class="progresso"><div class="progresso-barra" style="width:${Math.min(100, ref.secoes.percentual)}%"></div></div>
+      <p class="progresso-texto"><strong>${fmtPct.format(ref.secoes.percentual)}%</strong> das seções do ${br ? 'Brasil' : 'estado'} totalizadas${ref.atualizadoEm ? ` <span class="mudo">· dados do TSE de ${esc(ref.atualizadoEm)}</span>` : ''}</p>
+      <div class="pres2">${lista(br, 'Brasil')}${lista(sc, 'Santa Catarina')}</div></section>`
+  }
   const blocoCadeiras = (id, titulo) => {
     const d = D(id)
     if (!d) return ''
@@ -1491,7 +1528,7 @@ function renderPainel2026() {
       <a href="#telao">${icone('tv')}<strong>Modo telão</strong><small>tela cheia para TV ou projetor</small></a>
     </div><p class="nota">Para comparar dois candidatos (inclusive de cargos diferentes), abra a ficha de um deles e toque em <strong>Comparar com outro candidato</strong>.</p></section>`
   const card = cardPainel(D)
-  return topo + meus + blocoMaj('governador', 'Governador', 3) + blocoMaj('senador', 'Senado', 4) + blocoCadeiras('depfed', 'Dep. Federal') + blocoCadeiras('depest', 'Dep. Estadual') +
+  return topo + blocoPresidente2() + meus + blocoMaj('governador', 'Governador', 3) + blocoMaj('senador', 'Senado', 4) + blocoCadeiras('depfed', 'Dep. Federal') + blocoCadeiras('depest', 'Dep. Estadual') +
     (card ? `<section class="cartao"><div class="exportar">${botaoCard('painel', card, `${icone('compartilhar')} Compartilhar resumo de SC`)}</div></section>` : '') + atalhos
 }
 
