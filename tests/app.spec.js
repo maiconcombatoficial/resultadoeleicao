@@ -5,14 +5,13 @@ test.beforeEach(async ({ page }) => {
   await page.evaluate(() => localStorage.clear())
 })
 
-test('Início abre por padrão com o resumo de SC', async ({ page }) => {
+test('Início abre por padrão com o 2º turno de Presidente em destaque', async ({ page }) => {
   await page.goto('/')
   await expect(page.locator('[data-aba="inicio"][aria-selected="true"]')).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Eleições 2026 · Santa Catarina' })).toBeVisible()
-  await expect(page.locator('.painel-cadeiras')).toHaveCount(2)
-  const img = await baixar(page, page.locator('[data-card="painel"]'))
-  expect(img.nome).toMatch(/\.png$/)
-  expect(img.bytes).toBeGreaterThan(30_000)
+  await expect(page.getByRole('heading', { name: /Presidente · 2º turno/ })).toBeVisible()
+  // os dados do 1º turno não aparecem mais no Início
+  await expect(page.locator('.painel-cadeiras')).toHaveCount(0)
+  await expect(page.locator('.painel-maj')).toHaveCount(0)
 })
 
 for (const aba of ['depfed', 'depest', 'governador', 'senador', 'municipios', 'bairros', 'campanha', 'h2022', 'sobre']) {
@@ -726,7 +725,7 @@ test('eleições municipais 2024: perfil dos candidatos', async ({ page }) => {
 test('Início: escolher o ano (2026, gerais e municipais)', async ({ page }) => {
   await page.goto('/#inicio')
   await expect(page.locator('[data-inicio-ano="2026"][aria-selected="true"]')).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Eleições 2026 · Santa Catarina' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /Presidente · 2º turno/ })).toBeVisible()
   // municipal
   await page.locator('[data-inicio-ano="2024"]').click()
   await expect(page.getByRole('heading', { name: 'Eleições municipais 2024 · SC' })).toBeVisible()
@@ -1018,4 +1017,11 @@ test('Início 2026: bloco do 2º turno de Presidente aguarda o TSE', async ({ pa
   await expect(b).toBeVisible()
   await expect(b).toContainText('Presidente · 2º turno')
   await expect(b).toContainText('25 de outubro')
+})
+
+test('build público (sem a Campanha): a aba some e #campanha cai no Início', async ({ page }) => {
+  test.skip(!process.env.BUILD_PUBLICO, 'só roda no build público (BUILD_PUBLICO=1)')
+  await page.goto('/#campanha')
+  await expect(page.locator('[data-aba="campanha"]')).toHaveCount(0)
+  await expect(page.locator('[data-aba="inicio"][aria-selected="true"]')).toBeVisible()
 })
