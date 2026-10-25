@@ -1604,3 +1604,12 @@ h1::before { content: "🗳️ "; }
 .dg-validos dt::before { background: #9bb84a; }
 .dg-brancos dt::before { background: #e8c547; }
 .dg-nulos dt::before { background: #e5636b; }
+
+/* Aba Presidente: explicação dos selos de chance */
+.selos-exp summary { cursor: pointer; font-weight: 700; color: var(--primaria); }
+.selos-exp h4 { margin: 14px 0 6px; font-size: 0.95rem; }
+.selos-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.selos-lista li { display: grid; grid-template-columns: 170px 1fr; gap: 10px; align-items: start; }
+.selos-lista li .tag.chance { justify-self: start; font-size: 0.78rem; }
+.selos-lista li p { margin: 0; font-size: 0.92rem; }
+@media (max-width: 560px) { .selos-lista li { grid-template-columns: 1fr; gap: 4px; } }

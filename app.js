@@ -1182,6 +1182,7 @@ $('#buscar-tudo').innerHTML = icone('busca')
 $('#buscar-tudo').addEventListener('click', () => abrirBusca())
 document.addEventListener('click', (ev) => {
   if (ev.target.closest('[data-abrir-busca]')) return abrirBusca()
+  if (ev.target.closest('[data-selos-exp] > summary')) gravarLocal('pres:selos', ev.target.closest('details').open ? '0' : '1')
   if (ev.target.closest('[data-ext-toggle]')) {
     gravarLocal('inicio:ext', lerLocal('inicio:ext', '1') === '1' ? '0' : '1')
     return renderizar()
@@ -3051,6 +3052,31 @@ function cardLista(d) {
   }
 }
 
+// O que significa cada selo de chance (critérios do chances.js), para o 2º turno de Presidente
+function explicaSelos() {
+  const sel = (k) => `<span class="tag chance ${NIVEIS[k].classe}">${NIVEIS[k].icone} ${esc(NIVEIS[k].rotulo)}</span>`
+  const item = (k, txt) => `<li>${sel(k)}<p>${txt}</p></li>`
+  return `<section class="cartao"><details class="selos-exp" ${lerLocal('pres:selos', '1') === '1' ? 'open' : ''} data-selos-exp>
+    <summary>ℹ️ O que significam os selos (Vaga em risco, Reversão difícil…)</summary>
+    <p>Os selos estimam se o resultado ainda pode mudar com as urnas que faltam apurar. O app calcula quantos votos válidos ainda faltam (pelo % de seções que falta) e compara com a diferença entre os dois candidatos, supondo que cada um mantenha o desempenho que tem até agora.</p>
+    <h4>Para quem está na frente</h4>
+    <ul class="selos-lista">
+      ${item('garantido', '<strong>Certeza matemática.</strong> A vantagem já é maior que todos os votos que faltam apurar: mesmo que todos fossem para o adversário, ele não alcança.')}
+      ${item('segura', 'O adversário não alcança se continuar no ritmo atual, mesmo que o líder não ganhe nem mais um voto nas urnas que faltam.')}
+      ${item('provavel', 'Só perde a liderança se, nas urnas que faltam, o desempenho dele cair para menos de 80% do que tem hoje. Uma queda assim é pouco comum.')}
+      ${item('risco', 'Precisa manter 80% ou mais do desempenho atual nas urnas que faltam (quanto mais apertado, mais perto de 100%) para não ser ultrapassado. Uma variação normal de região para região já pode virar o resultado.')}
+    </ul>
+    <h4>Para quem está atrás</h4>
+    <ul class="selos-lista">
+      ${item('pode', 'Precisa de até 10% a mais de desempenho nas urnas que faltam do que tem até agora. É perfeitamente possível virar.')}
+      ${item('dificil', 'Precisa de 10% a 50% a mais de desempenho nas urnas que faltam. Só vira se as urnas que faltam forem bem mais favoráveis a ele.')}
+      ${item('improvavel', 'Precisaria de mais de 50% a mais de desempenho nas urnas que faltam. Na prática, muito difícil.')}
+      ${item('fora', '<strong>Certeza matemática.</strong> A diferença é maior que todos os votos que faltam apurar: nem com todos eles consegue virar.')}
+    </ul>
+    <p class="nota">Só os selos marcados como certeza matemática são definitivos; os outros são estimativas e mudam a cada atualização. Quem declara o eleito é o TSE: quando ele declarar, aparece o selo <strong>✔ Eleito</strong>. Lembre que as urnas que faltam podem ser de regiões que votam de forma diferente das já apuradas.</p>
+  </details></section>`
+}
+
 // Gráfico da evolução no 2º turno: % dos votos válidos de cada candidato (eixo y) × % das seções apuradas (x)
 function graficoSerie2T(d) {
   const abr = d.abrangencia
@@ -3163,7 +3189,7 @@ function renderMajoritario(d) {
       .join('')}
   </ol></section>`
   // 2º turno: os cards dos candidatos vêm primeiro, antes da divisão dos votos, do gráfico e do mapa
-  return pres2T ? cards + divisao + mapa : divisao + cards
+  return pres2T ? cards + explicaSelos() + divisao + mapa : divisao + cards
 }
 
 // Soma por partido/federação; a cor do grupo é a do seu partido mais votado.
