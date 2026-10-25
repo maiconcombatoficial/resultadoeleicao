@@ -246,8 +246,14 @@ function marcarDefinicaoTSE(d) {
   for (const c of d.candidatos) c.tseDefinido = d.tseDefinido
 }
 
+// Quando o TSE responde 429 (excesso de requisições), o app para de consultá-lo por um tempo que dobra a cada
+// novo 429 (1, 2, 4… até 10 min), para não prolongar o bloqueio; nesse meio-tempo ficam os últimos dados
+export const PAUSA_TSE = { ate: 0, n: 0 }
+const tsePausado = () => Date.now() < PAUSA_TSE.ate
+
 async function buscarBruto(aba, abr, turno, signal, mun = null) {
   if (DEMO) return demo(aba, abr, mun)
+  if (tsePausado()) throw new Error('O TSE pediu para o app esperar um pouco (muitas consultas). Tentando de novo em instantes.')
   let res
   try {
     res = await fetch(urlResultado(aba, abr, turno, mun), { signal, cache: 'no-store' })
@@ -256,6 +262,12 @@ async function buscarBruto(aba, abr, turno, signal, mun = null) {
     throw new Error('Não foi possível conectar ao TSE. Verifique sua internet (o site do TSE pode estar sobrecarregado).')
   }
   if (res.status === 404 || res.status === 403) throw new NaoDivulgado()
+  if (res.status === 429) {
+    PAUSA_TSE.n++
+    PAUSA_TSE.ate = Date.now() + Math.min(600_000, 60_000 * 2 ** (PAUSA_TSE.n - 1))
+    throw new Error('O TSE pediu para o app esperar um pouco (muitas consultas). Tentando de novo em instantes.')
+  }
+  if (res.ok) PAUSA_TSE.n = 0
   if (!res.ok) throw new Error(`O TSE respondeu com erro ${res.status}. Tentando de novo em instantes.`)
   return normalizar(await res.json(), aba, turno, abr)
 }
@@ -1295,7 +1307,7 @@ async function carregarPainel(ctrl) {
   const abaPres = ABAS.find((a) => a.id === 'presidente')
   const ant = estado.pres2 || (DEMO ? null : lerJSON(CHAVE_PRES2, null)?.dados) || {}
   const pres2 = { ...ant }
-  const comUFs = !estado.pres2UfsEm || Date.now() - estado.pres2UfsEm > 120_000
+  const comUFs = (!estado.pres2UfsEm || Date.now() - estado.pres2UfsEm > 120_000) && !tsePausado()
   const abrs = ['br', 'zz', UF, ...(comUFs ? ESTADOS.map(([uf]) => uf).filter((uf) => uf !== UF) : [])]
   let falhas = 0
   await Promise.all(abrs.map(async (abr) => {
@@ -1350,12 +1362,14 @@ const ESTADOS = [
 // 2º turno no exterior: resultado de cada cidade (zona do exterior) no TSE, só depois que ele começa a divulgar
 const EXT = { cidades: new Map() } // código da cidade → dados normalizados | null
 async function carregarExterior(signal) {
-  if (Date.now() < PUBLICACAO_TSE) return
+  // são 186 cidades: consulta no máximo a cada 3 min, com 3 conexões, para não levar a um bloqueio do TSE
+  if (Date.now() < PUBLICACAO_TSE || tsePausado() || Date.now() - (EXT.em || 0) < 180_000) return
+  EXT.em = Date.now()
   const aba = ABAS.find((a) => a.id === 'presidente')
   const pend = EXTERIOR.flatMap(([, , cs]) => cs).filter((cd) => !EXT.cidades.get(cd)?.final)
   let i = 0
   const trabalhador = async () => {
-    while (i < pend.length && !signal?.aborted) {
+    while (i < pend.length && !signal?.aborted && !tsePausado()) {
       const cd = pend[i++]
       try {
         EXT.cidades.set(cd, await buscar(aba, 'zz', 2, signal, { cd: String(cd), nm: '' }))
@@ -1365,7 +1379,7 @@ async function carregarExterior(signal) {
       }
     }
   }
-  await Promise.all(Array.from({ length: 8 }, trabalhador))
+  await Promise.all(Array.from({ length: 3 }, trabalhador))
 }
 
 // boletins de urna do Brasil e do exterior já lidos pelo workflow (public/dados2026/pres2.json), se existir
