@@ -594,7 +594,9 @@ function abasDoAno(ano = anoAtual()) {
   })
 }
 const rotuloAba = (a) => (a.tipo === 'h22' && !ehAoVivo() ? '🏘️ Bairros e seções' : a.rotulo)
-const subtituloAno = (ano = anoAtual()) => (ano === 2026 ? `Eleições Gerais 2026 · ${TURNO}º turno · apuração ao vivo` : `Eleições ${ehAnoMunicipal(ano) ? 'Municipais' : 'Gerais'} ${ano} · resultado oficial do TSE`)
+// no topo, a partir do dia do 2º turno (25/10/2026) o destaque é ele, salvo quando o endereço pede ?turno=1
+const turnoTopo = () => (TURNO === 2 || (new URLSearchParams(location.search).get('turno') !== '1' && Date.now() >= Date.parse('2026-10-25T03:00:00Z')) ? 2 : 1)
+const subtituloAno = (ano = anoAtual()) => (ano === 2026 ? `Eleições Gerais 2026 · ${turnoTopo()}º turno · apuração ao vivo` : `Eleições ${ehAnoMunicipal(ano) ? 'Municipais' : 'Gerais'} ${ano} · resultado oficial do TSE`)
 // troca o ano em consulta: as abas, o Início e o explorador de seções passam a seguir esse ano
 function definirAno(ano, recarregar = true) {
   if (!ANOS_INICIO().includes(ano) || ano === estado.ano) return
