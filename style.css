@@ -1573,3 +1573,8 @@ h1::before { content: "🗳️ "; }
 .g2t-leg .sobe { color: var(--eleito, #0b7a45); font-weight: 700; }
 .g2t-leg .desce { color: var(--erro, #c0392b); font-weight: 700; }
 .g2t-leg small { color: var(--mudo); }
+
+/* Aba Presidente · 2º turno: os dois lado a lado no computador (um embaixo do outro no celular); quem está na frente em dourado */
+@media (min-width: 700px) { .candidatos.cands-2t { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; } }
+.candidatos .cand.cand-lider { background: linear-gradient(160deg, var(--ouro-1), var(--ouro-2)); border-color: var(--ouro-borda); box-shadow: 0 0 0 3px rgb(212 160 23 / 18%), 0 4px 14px rgb(212 160 23 / 30%); }
+.candidatos .cand.cand-lider .pos { color: var(--ouro-texto); font-weight: 800; }

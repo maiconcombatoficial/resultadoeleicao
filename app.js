@@ -3085,6 +3085,8 @@ function renderMajoritario(d) {
         ? '<p class="nota">2º turno: vence quem tem mais votos válidos.</p>'
         : `<p class="nota">A linha tracejada marca 50% dos votos válidos: quem passar dela vence no 1º turno${estado.aba.cargo === 11 ? ' (nas cidades com 2º turno, acima de 200 mil eleitores)' : ''}.</p>`
   const pres2T = estado.aba.id === 'presidente' && turnoAtual() === 2 && ehAoVivo()
+  // 2º turno: quem está na frente (com votos, sem empate) fica dourado e em primeiro (em cima no celular, à esquerda no computador)
+  const liderLista = (i) => pres2T && i === 0 && lista[0]?.votos > 0 && lista[0].votos > (lista[1]?.votos || 0)
   if (pres2T) carregarSerie2T().then((novo) => novo && estado.aba.id === 'presidente' && renderizar())
   const mapa = pres2T ? `<section class="cartao"><h3>📈 Evolução dos votos · ${d.abrangencia === 'br' ? 'Brasil' : 'Santa Catarina'}</h3>${graficoSerie2T(d)}</section>${mapaAbaPres()}` : ''
   return `${mapa}<section class="cartao">
@@ -3093,13 +3095,13 @@ function renderMajoritario(d) {
       ${nota}
       <div class="exportar">${botaoCard('lista', cardLista(d))}</div>
     </section>
-    <section class="cartao"><ol class="candidatos">
+    <section class="cartao"><ol class="candidatos ${pres2T ? 'cands-2t' : ''}">
     ${lista
       .map((c, i) => {
         const cor = corPartido(c.partido)
         return `
-      <li id="c-${esc(c.sqcand)}" ${attrCand(c)} class="cand ${c.eleito ? 'is-eleito' : ''} ${ganho(c) > 0 ? 'subiu' : ''}" style="${estiloCor(cor)}">
-        <span class="pos">${i + 1}º</span>
+      <li id="c-${esc(c.sqcand)}" ${attrCand(c)} class="cand ${c.eleito ? 'is-eleito' : ''} ${ganho(c) > 0 ? 'subiu' : ''} ${liderLista(i) ? 'cand-lider' : ''}" style="${estiloCor(cor)}">
+        <span class="pos">${liderLista(i) ? '🏆 ' : ''}${i + 1}º</span>
         ${foto(c, cor)}
         <div class="cand-info">
           <div class="cand-linha">
