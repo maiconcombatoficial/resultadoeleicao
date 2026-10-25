@@ -1039,6 +1039,7 @@ test('Início 2026: lista de países do exterior com a fase da votação', async
 
 test('Início 2026: países do exterior em ordem de abertura das urnas', async ({ page }) => {
   await page.goto('/#inicio')
+  await expect(page.locator('.painel-ext .ext-pais').first()).toBeVisible()
   const nomes = await page.locator('.painel-ext .ext-pais strong').allInnerTexts()
   // Nova Zelândia e Austrália abrem antes de Portugal, que abre antes dos Estados Unidos
   const i = (n) => nomes.indexOf(n)
