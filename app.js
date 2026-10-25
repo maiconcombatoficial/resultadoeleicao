@@ -1405,6 +1405,24 @@ export function parcialBoletins(cands, r) {
     .sort((a, b) => b.votos - a.votos)
 }
 
+// 2º turno (uma vaga): situação de quem está na frente com as urnas que faltam.
+//  - 'matematica': a vantagem é maior que todos os eleitores aptos das seções que faltam apurar (nem com 100% de
+//    comparecimento e todos os votos para o rival haveria virada): certeza absoluta
+//  - 'garantido' / 'segura' / 'provavel' / 'risco': cálculo do chances.js (votos válidos que faltam, estimados)
+export function vitoria2T(d) {
+  if (!d || d.final || !(d.secoes?.totalizadas > 0) || d.secoes.percentual >= 100) return null
+  const [a, b] = d.candidatos.filter((c) => c.valido)
+  if (!a || !b || a.votos === b.votos) return null
+  const vantagem = a.votos - b.votos
+  const e = d.eleitorado || {}
+  const aptosFaltam = e.total ? Math.max(0, e.total - (e.comparecimento || 0) - (e.abstencao || 0)) : null
+  if (aptosFaltam != null && vantagem > aptosFaltam) return { nivel: 'matematica', lider: a, rival: b, vantagem, aptosFaltam }
+  const ch = chanceDe({ ...d, _chances: null }, a, 'maj', 1) // cópia: o cache do chances.js não vai para o navegador
+  return ch ? { nivel: ch.nivel, lider: a, rival: b, vantagem, aptosFaltam, R: ch.R, f: ch.f } : null
+}
+const ROTULOS_VIT = { matematica: '✅ Vitória matematicamente garantida', garantido: '✅ Virada praticamente impossível', segura: '🛡️ Vantagem segura', provavel: '👍 Vantagem provável', risco: '⚠️ Disputa aberta' }
+const CLASSES_VIT = { matematica: 'ch-garantido', garantido: 'ch-garantido', segura: 'ch-segura', provavel: 'ch-provavel', risco: 'ch-risco' }
+
 // eleitos (TSE) ou, enquanto não definido, os eleitos pela projeção, agrupados por partido
 export function cadeirasPorPartido(d) {
   const eleitos = d.candidatos.filter((c) => c.eleito || (!d.tseDefinido && c.projecao))
@@ -1608,8 +1626,22 @@ function renderPainel2026() {
           return `<li style="${estiloCor(cor)}"><span class="pos">${i + 1}º</span>${foto(c, cor)}<div class="painel-info"><div><strong>${esc(c.nome)}</strong> ${pill(c.partido, cor)} ${c.eleito ? '<span class="tag eleito-tse"><b>✔ Eleito</b></span>' : ''}</div>
             <div class="barra fina"><span style="width:${(100 * c.percentual) / max}%"></span></div></div><div class="painel-num"><strong>${fmtPct.format(c.percentual)}%</strong><small>${fmt.format(c.votos)} votos</small></div></li>`
         })
-        .join('')}</ol></div>`
+        .join('')}</ol>${porBU ? '' : linhaVitoria(d, rot)}</div>`
     }
+    // vitória matemática (ou a chance de virada) de quem está na frente, em cada quadro
+    const linhaVitoria = (d, rot) => {
+      const v = vitoria2T(d)
+      if (!v || cs0(d)) return ''
+      const onde = rot === 'Brasil' ? '' : rot === 'Exterior' ? ' no exterior' : ` em ${rot}`
+      const nome = esc(v.lider.nome)
+      const det = v.nivel === 'matematica'
+        ? `${nome} tem ${fmt.format(v.vantagem)} votos de vantagem, mais que os ${fmt.format(v.aptosFaltam)} eleitores das seções que faltam${onde}. Nem que todos votassem em ${esc(v.rival.nome)} haveria virada.`
+        : v.nivel === 'garantido'
+          ? `A vantagem de ${fmt.format(v.vantagem)} votos é maior que os cerca de ${fmt.format(v.R)} votos válidos que faltam${onde} (estimativa). A certeza absoluta vem quando passar dos ${fmt.format(v.aptosFaltam ?? 0)} eleitores das seções que faltam.`
+          : `${nome} está ${fmt.format(v.vantagem)} votos à frente; faltam cerca de ${fmt.format(v.R)} votos válidos${onde}. ${v.f <= 0 ? `Mantido o ritmo, ${esc(v.rival.nome)} não alcança.` : `${esc(v.rival.nome)} vira se tiver bem mais votos que o ritmo atual nas urnas que faltam.`}`
+      return `<div class="vit2t"><span class="tag chance ${CLASSES_VIT[v.nivel]}">${ROTULOS_VIT[v.nivel]}${rot === 'Brasil' || v.nivel !== 'matematica' ? '' : onde}</span><small>${det}</small></div>`
+    }
+    const cs0 = (d) => d.candidatos.some((c) => c.eleito) // o TSE já marcou o eleito: vale o selo oficial
     return `<section class="cartao painel-pres2"><div class="resumo-titulo"><h2><a href="?turno=2#presidente" class="link-aba">🗳️ Presidente · 2º turno</a></h2><span class="selo ${ref.final ? 'final' : ''}">${ref.final ? 'Totalização final · TSE' : ref.secoes.totalizadas ? 'Em apuração' : 'Aguardando o TSE'}</span></div>
       ${falha}${ref.secoes.totalizadas ? '' : '<p class="nota">A apuração começa a ser divulgada pelo TSE a partir das 17h de Brasília de domingo, 25/10, e se atualiza aqui sozinha.</p>'}
       <div class="progresso"><div class="progresso-barra" style="width:${Math.min(100, ref.secoes.percentual)}%"></div></div>
@@ -1641,8 +1673,12 @@ function renderPainel2026() {
       if (iLider >= 0 && v[iLider]?.votos) lider.set(refCand[iLider].numero, lider.get(refCand[iLider].numero) + 1)
       const soma = p[0] + p[1] || 1
       return `<li class="uf-item" ${iLider >= 0 ? `style="${estiloCor(corPartido(refCand[iLider].partido))}"` : ''}>
-        <div class="uf-topo"><strong>${uf.toUpperCase()}</strong><small>${esc(nome)}</small><span class="uf-ap">${fmtPct.format(d.secoes.percentual)}%</span></div>
+        <div class="uf-topo"><strong>${uf.toUpperCase()}</strong><small>${esc(nome)}</small><span class="uf-ap">${d.final ? 'final' : `${fmtPct.format(d.secoes.percentual)}%`}</span></div>
         <div class="uf-barra" role="img" aria-label="${refCand.map((c, i) => `${esc(c.nome)} ${fmtPct.format(p[i])}%`).join(', ')}">${apurado ? refCand.map((c, i) => `<span style="width:${(100 * p[i]) / soma}%;background:${corPartido(c.partido)}"></span>`).join('') : ''}</div>
+        ${(() => {
+          const vit = !d.final && vitoria2T(d)
+          return vit && (vit.nivel === 'matematica' || vit.nivel === 'garantido') ? `<small class="uf-def" title="${vit.nivel === 'matematica' ? 'Vantagem maior que todos os eleitores das seções que faltam' : 'Vantagem maior que os votos válidos estimados que faltam'}">✅ ${esc(vit.lider.nome.split(' ').slice(-1)[0])} ${vit.nivel === 'matematica' ? 'venceu matematicamente' : 'virada praticamente impossível'}</small>` : ''
+        })()}
         <div class="uf-num">${refCand.map((c, i) => `<span class="${i === iLider ? 'uf-lider' : ''}">${esc(c.nome.split(' ').slice(-1)[0])} <strong>${apurado ? `${fmtPct.format(p[i])}%` : '—'}</strong></span>`).join('')}</div>
       </li>`
     }

@@ -1494,3 +1494,9 @@ h1::before { content: "🗳️ "; }
 .uf-num span:not(.uf-lider) { color: var(--mudo); }
 .uf-sem { opacity: 0.6; }
 @media (max-width: 560px) { .uf-item { padding: 8px; } .uf-topo small { display: none; } .uf-num { flex-direction: column; gap: 0; } }
+
+/* Início · 2º turno: vitória matemática em cada quadro e nos estados */
+.vit2t { display: grid; justify-items: center; gap: 4px; margin: 0 0 10px; }
+.vit2t .tag.chance { font-size: 0.8rem; padding: 4px 10px; }
+.vit2t small { color: var(--mudo); font-size: 0.78rem; max-width: 46ch; }
+.uf-def { font-size: 0.72rem; font-weight: 600; color: var(--eleito, #0b7a45); }
