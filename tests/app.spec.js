@@ -1048,3 +1048,14 @@ test('Início 2026: países do exterior em ordem de abertura das urnas', async (
   expect(i('Japão')).toBeLessThan(i('Portugal'))
   expect(i('Portugal')).toBeLessThan(i('Estados Unidos'))
 })
+
+test('Início 2026: lista do exterior recolhe e abre, e as três colunas ficam separadas', async ({ page }) => {
+  await page.goto('/#inicio')
+  const b = page.locator('.painel-ext')
+  await expect(b.locator('.ext-pais').first()).toBeVisible()
+  await b.locator('[data-ext-toggle]').click()
+  await expect(b.locator('.ext-pais')).toHaveCount(0)
+  await expect(b.locator('[data-ext-toggle]')).toContainText('Mostrar a lista')
+  await b.locator('[data-ext-toggle]').click()
+  await expect(b.locator('.ext-pais').first()).toBeVisible()
+})
