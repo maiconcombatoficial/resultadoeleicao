@@ -1500,3 +1500,10 @@ h1::before { content: "🗳️ "; }
 .vit2t .tag.chance { font-size: 0.8rem; padding: 4px 10px; }
 .vit2t small { color: var(--mudo); font-size: 0.78rem; max-width: 46ch; }
 .uf-def { font-size: 0.72rem; font-weight: 600; color: var(--eleito, #0b7a45); }
+
+/* Início · 2º turno: card de quem está na frente, em dourado */
+:root { --ouro-1: #fff6d6; --ouro-2: #f6d77a; --ouro-borda: #d4a017; --ouro-texto: #6b4e00; }
+@media (prefers-color-scheme: dark) { :root { --ouro-1: #3a2f0e; --ouro-2: #5c4810; --ouro-borda: #c9a227; --ouro-texto: #ffe08a; } }
+.painel-pres2 .pres2-col .painel-lista li.pres2-lider { background: linear-gradient(160deg, var(--ouro-1), var(--ouro-2)); border: 2px solid var(--ouro-borda); box-shadow: 0 0 0 3px rgb(212 160 23 / 18%), 0 4px 14px rgb(212 160 23 / 30%); }
+.painel-pres2 .pres2-col .painel-lista li.pres2-lider:last-child { border-bottom: 2px solid var(--ouro-borda); }
+.painel-pres2 .pres2-col .painel-lista li.pres2-lider .pos { color: var(--ouro-texto); font-weight: 800; }

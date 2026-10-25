@@ -1623,7 +1623,9 @@ function renderPainel2026() {
       return `<div class="pres2-col pres2-${rot === 'Brasil' ? 'br' : rot === 'Exterior' ? 'ext' : 'sc'}"><h4>${BANDEIRAS[rot] || ''} ${rot} ${andamento}</h4><ol class="painel-lista">${cs
         .map((c, i) => {
           const cor = corPartido(c.partido)
-          return `<li style="${estiloCor(cor)}"><span class="pos">${i + 1}º</span>${foto(c, cor)}<div class="painel-info"><div><strong>${esc(c.nome)}</strong> ${pill(c.partido, cor)} ${c.eleito ? '<span class="tag eleito-tse"><b>✔ Eleito</b></span>' : ''}</div>
+          // quem está na frente (com votos e sem empate) ganha o fundo dourado
+          const lider = i === 0 && c.votos > 0 && c.votos > (cs[1]?.votos || 0)
+          return `<li class="${lider ? 'pres2-lider' : ''}" style="${estiloCor(cor)}"><span class="pos">${lider ? '🏆 ' : ''}${i + 1}º</span>${foto(c, cor)}<div class="painel-info"><div><strong>${esc(c.nome)}</strong> ${pill(c.partido, cor)} ${c.eleito ? '<span class="tag eleito-tse"><b>✔ Eleito</b></span>' : ''}</div>
             <div class="barra fina"><span style="width:${(100 * c.percentual) / max}%"></span></div></div><div class="painel-num"><strong>${fmtPct.format(c.percentual)}%</strong><small>${fmt.format(c.votos)} votos</small></div></li>`
         })
         .join('')}</ol>${porBU ? '' : linhaVitoria(d, rot)}</div>`
