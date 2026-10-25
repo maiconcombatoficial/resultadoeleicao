@@ -1521,8 +1521,7 @@ function renderPainel2026() {
   // 2º turno de Presidente: Brasil e SC lado a lado (o TSE publica a partir das 17h de Brasília do dia 25/10)
   const blocoPresidente2 = () => {
     const P = estado.pres2 || {}
-    const apurado = (d) => (d && d.secoes.totalizadas > 0 ? d : null) // antes das 17h o TSE publica o arquivo zerado
-    const br = apurado(P.br), sc = apurado(P[UF]), zz = apurado(P.zz)
+    const br = P.br || null, sc = P[UF] || null, zz = P.zz || null // antes das 17h o TSE publica os arquivos zerados: o painel já aparece, com 0%
     if (!br && !sc && !zz) {
       return `<section class="cartao painel-pres2"><div class="resumo-titulo"><h2><a href="?turno=2#presidente" class="link-aba">🗳️ Presidente · 2º turno</a></h2><span class="selo">${P.br === false ? 'Sem conexão' : 'Aguardando o TSE'}</span></div>
         <p class="nota">${P.br === false ? 'Não consegui consultar o TSE agora. Tentando de novo em instantes.' : 'O 2º turno é no domingo, 25 de outubro de 2026. A apuração aparece aqui assim que o TSE começar a divulgar (a partir das 17h de Brasília) e se atualiza sozinha.'}</p></section>`
@@ -1540,7 +1539,8 @@ function renderPainel2026() {
         })
         .join('')}</ol></div>`
     }
-    return `<section class="cartao painel-pres2"><div class="resumo-titulo"><h2><a href="?turno=2#presidente" class="link-aba">🗳️ Presidente · 2º turno</a></h2><span class="selo ${ref.final ? 'final' : ''}">${ref.final ? 'Totalização final · TSE' : 'Em apuração'}</span></div>
+    return `<section class="cartao painel-pres2"><div class="resumo-titulo"><h2><a href="?turno=2#presidente" class="link-aba">🗳️ Presidente · 2º turno</a></h2><span class="selo ${ref.final ? 'final' : ''}">${ref.final ? 'Totalização final · TSE' : ref.secoes.totalizadas ? 'Em apuração' : 'Aguardando o TSE'}</span></div>
+      ${ref.secoes.totalizadas ? '' : '<p class="nota">A apuração começa a ser divulgada pelo TSE a partir das 17h de Brasília de domingo, 25/10, e se atualiza aqui sozinha.</p>'}
       <div class="progresso"><div class="progresso-barra" style="width:${Math.min(100, ref.secoes.percentual)}%"></div></div>
       <p class="progresso-texto"><strong>${fmtPct.format(ref.secoes.percentual)}%</strong> das seções do ${br ? 'Brasil' : 'estado'} totalizadas${ref.atualizadoEm ? ` <span class="mudo">· dados do TSE de ${esc(ref.atualizadoEm)}</span>` : ''}</p>
       <div class="pres2">${lista(br, 'Brasil')}${lista(sc, 'Santa Catarina')}${lista(zz, 'Exterior')}</div>${linhaBoletins()}</section>`
