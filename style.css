@@ -1525,3 +1525,17 @@ h1::before { content: "🗳️ "; }
 .eleito-num strong { font-size: clamp(2rem, 5vw, 3rem); line-height: 1; }
 .eleito-num small { color: var(--mudo); }
 .painel-eleito .nota { margin: 14px 0 0; }
+
+/* Mapa do Brasil no 2º turno (Início e aba Presidente) */
+.mapa-pres2 { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 18px; align-items: center; margin: 10px 0 14px; }
+@media (max-width: 700px) { .mapa-pres2 { grid-template-columns: 1fr; } }
+.mapa-br { width: 100%; max-width: 560px; height: auto; display: block; margin: 0 auto; }
+.mapa-br path { stroke: var(--cartao); stroke-width: 1; stroke-linejoin: round; transition: opacity 0.15s; cursor: default; }
+.mapa-br path:hover { opacity: 0.8; stroke: var(--texto); }
+.mapa-br text { font-size: 11px; font-weight: 700; fill: var(--texto); text-anchor: middle; dominant-baseline: middle; pointer-events: none; }
+.mapa-br text.mapa-uf-p { font-size: 8px; }
+.mapa-br text.mapa-uf-claro { fill: #fff; }
+.mapa-leg ul { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 8px; }
+.mapa-leg li { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.mapa-leg i { width: 16px; height: 16px; border-radius: 4px; flex: none; }
+.mapa-leg .mapa-conta { color: var(--mudo); font-size: 0.9rem; }

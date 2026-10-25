@@ -15,6 +15,7 @@ import { $, BASE, CICLO, COR_VAR, DEMO, INTERVALO_MS, PREFIXO, ROTULO_ELEICAO, T
 import { CARDS, baixarArquivo, baixarCSV, baixarExcel, botaoCard, carregarScript, compartilharCarrossel, gerarPDF, legendaShare, legendaVar, linhasBairroCard, listaComparada, totalCard, variacao } from './exportar.js'
 import { TELAO, abrirTelao, fecharTelao } from './telao.js'
 import { EXTERIOR, PUBLICACAO_TSE, faseVotacao, instante } from './exterior.js'
+import { CENTRO as CENTRO_UF, UFS as CONTORNO_UF, VIEWBOX as VIEWBOX_BR } from './mapa-brasil.js'
 import { PRO, abrirAnalises, arquivoPro, carregarLeaflet, carregarPro, definirChavePro, garantirEleicao26, montarMapaPro, renderPro } from './pro.js'
 import { lerFotoQR, renderApuracaoQR, tratarQR } from './qr.js'
 
@@ -1305,32 +1306,19 @@ async function carregarPainel(ctrl) {
     if (aba?.cargo) grupos.set(`${f.aba}|${f.abr}`, { aba, abr: f.abr })
   }
   const res = await Promise.allSettled([...grupos.entries()].map(async ([k, g]) => [k, await buscar(g.aba, g.abr, TURNO, ctrl.signal)]))
-  // 2º turno para Presidente (Brasil, SC e exterior a cada atualização; os outros estados a cada 2 min, para
-  // não sobrecarregar o TSE). Se o TSE falhar, fica com os últimos dados bons (também guardados no navegador)
-  const abaPres = ABAS.find((a) => a.id === 'presidente')
-  const ant = estado.pres2 || (DEMO ? null : lerJSON(CHAVE_PRES2, null)?.dados) || {}
-  const pres2 = { ...ant }
-  const comUFs = (!estado.pres2UfsEm || Date.now() - estado.pres2UfsEm > 120_000) && !tsePausado()
-  const abrs = ['br', 'zz', UF, ...(comUFs ? ESTADOS.map(([uf]) => uf).filter((uf) => uf !== UF) : [])]
-  let falhas = 0
-  await Promise.all(abrs.map(async (abr) => {
-    try {
-      pres2[abr] = await buscar(abaPres, abr, 2, ctrl.signal)
-    } catch (e) {
-      if (e instanceof NaoDivulgado) pres2[abr] = ant[abr] || null // null = ainda não divulgado
-      else if (e?.name !== 'AbortError') (falhas++, (pres2[abr] = ant[abr] || false)) // false = erro, sem dado anterior
-    }
-  }))
+  await atualizarPres2(ctrl.signal)
   if (ctrl.signal.aborted) return
-  if (comUFs && falhas < abrs.length) estado.pres2UfsEm = Date.now()
-  estado.pres2 = pres2
-  estado.pres2Falha = falhas >= 3 ? new Date() : null // o TSE não respondeu: o painel avisa que mostra os últimos dados
-  if (!DEMO && falhas < abrs.length) {
-    const bons = Object.fromEntries(Object.entries(pres2).filter(([, d]) => d))
-    if (Object.keys(bons).length) gravarLocal(CHAVE_PRES2, JSON.stringify({ em: Date.now(), dados: bons }))
+  await carregarBoletins().catch(() => {})
+  // as 186 cidades do exterior vêm em segundo plano (demoram): o Início aparece antes e é redesenhado no fim
+  if (!EXT.buscando) {
+    // sem o sinal da atualização: a próxima (30 s) não interrompe a rodada das cidades no meio
+    EXT.buscando = carregarExterior(null)
+      .then((novo) => novo && estado.aba.tipo === 'painel' && renderizar())
+      .catch(() => {})
+      .finally(() => (EXT.buscando = null))
   }
-  await Promise.all([carregarExterior(ctrl.signal).catch(() => {}), carregarBoletins().catch(() => {})])
   if (ctrl.signal.aborted) return
+  const pres2 = estado.pres2
   estado.favDados = new Map()
   let erros = 0
   for (const r of res) {
@@ -1344,7 +1332,7 @@ async function carregarPainel(ctrl) {
   }
   await juntarFavHist(estado.favDados)
   if (ctrl.signal.aborted) return
-  estado.dados = { painel: true, final: !!pres2.br?.final }
+  estado.dados = { painel: true, final: !!pres2?.br?.final }
   renderizar()
   statusEl.textContent = !ehAoVivo() ? `Resultado oficial · TSE ${anoAtual()}` : erros ? 'Erro ao atualizar' : estado.dados.final ? 'Apuração encerrada' : `Atualizado ${new Date().toLocaleTimeString('pt-BR')}`
   statusEl.className = erros && ehAoVivo() ? 'status erro' : 'status ok'
@@ -1352,6 +1340,37 @@ async function carregarPainel(ctrl) {
 }
 
 const CHAVE_PRES2 = 'inicio:pres2' // últimos dados bons do 2º turno de Presidente (para quando o TSE não responde)
+
+// 2º turno para Presidente (Brasil, SC e exterior a cada atualização; os outros estados a cada 2 min, para
+// não sobrecarregar o TSE). Se o TSE falhar, fica com os últimos dados bons (também guardados no navegador).
+// Usado pelo Início e pelo mapa por estado da aba Presidente.
+async function atualizarPres2(signal, { soUFs = false } = {}) {
+  const abaPres = ABAS.find((a) => a.id === 'presidente')
+  const ant = estado.pres2 || (DEMO ? null : lerJSON(CHAVE_PRES2, null)?.dados) || {}
+  const pres2 = { ...ant }
+  const comUFs = (!estado.pres2UfsEm || Date.now() - estado.pres2UfsEm > 120_000) && !tsePausado()
+  if (soUFs && !comUFs) return false // aba Presidente: só os estados, e no máximo a cada 2 min
+  const outras = comUFs ? ESTADOS.map(([uf]) => uf).filter((uf) => uf !== UF) : []
+  const abrs = soUFs ? [UF, ...outras] : ['br', 'zz', UF, ...outras]
+  let falhas = 0
+  await Promise.all(abrs.map(async (abr) => {
+    try {
+      pres2[abr] = await buscar(abaPres, abr, 2, signal)
+    } catch (e) {
+      if (e instanceof NaoDivulgado) pres2[abr] = ant[abr] || null // null = ainda não divulgado
+      else if (e?.name !== 'AbortError') (falhas++, (pres2[abr] = ant[abr] || false)) // false = erro, sem dado anterior
+    }
+  }))
+  if (signal?.aborted) return
+  if (comUFs && falhas < abrs.length) estado.pres2UfsEm = Date.now()
+  estado.pres2 = pres2
+  if (!soUFs) estado.pres2Falha = falhas >= 3 ? new Date() : null // o TSE não respondeu: o painel avisa que mostra os últimos dados
+  if (!DEMO && falhas < abrs.length) {
+    const bons = Object.fromEntries(Object.entries(pres2).filter(([, d]) => d))
+    if (Object.keys(bons).length) gravarLocal(CHAVE_PRES2, JSON.stringify({ em: Date.now(), dados: bons }))
+  }
+  return true
+}
 
 // os 27 estados (sigla do TSE, nome, região), para acompanhar a apuração de Presidente em cada um
 const ESTADOS = [
@@ -1362,11 +1381,42 @@ const ESTADOS = [
   ['pr', 'Paraná', 'Sul'], ['rs', 'Rio Grande do Sul', 'Sul'], ['sc', 'Santa Catarina', 'Sul'],
 ]
 
+// Mapa do Brasil no 2º turno: cada estado na cor do partido de quem está na frente; quanto maior a vantagem,
+// mais forte a cor (até 3 pontos, de 3 a 10 e acima de 10). Estados sem votos apurados ficam em cinza.
+export function mapaPres2(P = estado.pres2 || {}) {
+  const ref = (P.br || P[UF])?.candidatos?.filter((c) => c.valido).slice(0, 2) || []
+  if (ref.length < 2) return ''
+  const conta = new Map(ref.map((c) => [String(c.numero), 0]))
+  const pcts = (d) => ref.map((c) => d.candidatos.find((x) => String(x.numero) === String(c.numero))?.percentual || 0)
+  const estados = ESTADOS.map(([uf, nome]) => {
+    const d = P[uf]
+    if (!d || !(d.secoes?.totalizadas > 0)) return { uf, nome, d }
+    const p = pcts(d)
+    if (p[0] === p[1]) return { uf, nome, d, p }
+    const i = p[0] > p[1] ? 0 : 1
+    conta.set(String(ref[i].numero), conta.get(String(ref[i].numero)) + 1)
+    const dif = Math.abs(p[0] - p[1])
+    return { uf, nome, d, p, lider: ref[i], forca: dif >= 10 ? 100 : dif >= 3 ? 70 : 42 }
+  })
+  const cor = (e) => (e.lider ? `color-mix(in srgb, ${corPartido(e.lider.partido)} ${e.forca}%, var(--cartao))` : 'var(--linha)')
+  const titulo = (e) => `${e.nome}: ${e.p ? ref.map((c, i) => `${c.nome} ${fmtPct.format(e.p[i])}%`).join(' × ') + ` · ${fmtPct.format(e.d.secoes.percentual)}% apurado` : 'sem votos apurados'}`
+  const pequenos = new Set(['df', 'se', 'al', 'pb', 'rn', 'es', 'rj'])
+  const svg = `<svg class="mapa-br" viewBox="${VIEWBOX_BR}" role="img" aria-label="Mapa do Brasil com o candidato à frente em cada estado">
+    ${estados.map((e) => `<path d="${CONTORNO_UF[e.uf]}" fill="${cor(e)}" data-uf="${e.uf}"><title>${esc(titulo(e))}</title></path>`).join('')}
+    ${estados.map((e) => { const [x, y] = CENTRO_UF[e.uf]; return `<text x="${x}" y="${y}" class="${pequenos.has(e.uf) ? 'mapa-uf-p' : ''} ${e.lider && e.forca === 100 ? 'mapa-uf-claro' : ''}">${e.uf.toUpperCase()}</text>` }).join('')}
+  </svg>`
+  const leg = ref.map((c) => `<li style="${estiloCor(corPartido(c.partido))}"><i style="background:${corPartido(c.partido)}"></i><strong>${esc(c.nome)}</strong> ${pill(c.partido, corPartido(c.partido))} <span class="mapa-conta">à frente em <b>${conta.get(String(c.numero))}</b> ${conta.get(String(c.numero)) === 1 ? 'estado' : 'estados'}</span></li>`).join('')
+  const sem = estados.filter((e) => !e.lider).length
+  return `<div class="mapa-pres2">${svg}<div class="mapa-leg"><ul>${leg}</ul>
+    ${sem ? `<p class="nota">${sem} ${sem === 1 ? 'estado' : 'estados'} em cinza: ainda sem votos apurados${estados.some((e) => e.p && !e.lider) ? ' ou empate' : ''}.</p>` : ''}
+    <p class="nota">Cor mais forte = vantagem maior (até 3 pontos, de 3 a 10, acima de 10). Toque ou passe o mouse num estado para ver os números.</p></div></div>`
+}
+
 // 2º turno no exterior: resultado de cada cidade (zona do exterior) no TSE, só depois que ele começa a divulgar
 const EXT = { cidades: new Map() } // código da cidade → dados normalizados | null
 async function carregarExterior(signal) {
   // são 186 cidades: consulta no máximo a cada 3 min, com 3 conexões, para não levar a um bloqueio do TSE
-  if (Date.now() < PUBLICACAO_TSE || tsePausado() || Date.now() - (EXT.em || 0) < 180_000) return
+  if (Date.now() < PUBLICACAO_TSE || tsePausado() || Date.now() - (EXT.em || 0) < 180_000) return false
   EXT.em = Date.now()
   const aba = ABAS.find((a) => a.id === 'presidente')
   const pend = EXTERIOR.flatMap(([, , cs]) => cs).filter((cd) => !EXT.cidades.get(cd)?.final)
@@ -1383,6 +1433,7 @@ async function carregarExterior(signal) {
     }
   }
   await Promise.all(Array.from({ length: 3 }, trabalhador))
+  return true
 }
 
 // boletins de urna do Brasil e do exterior já lidos pelo workflow (public/dados2026/pres2.json), se existir
@@ -1713,7 +1764,7 @@ function renderPainel2026() {
     const corpo = regioes.map((r) => `<h4 class="uf-reg">${r}</h4><ul class="uf-grade">${dados.filter((e) => e.reg === r).map(tile).join('')}</ul>`).join('')
     const placar = refCand.map((c) => `<span class="tag" style="${estiloCor(corPartido(c.partido))}">${esc(c.nome)} ${pill(c.partido, corPartido(c.partido))} lidera em <strong>${lider.get(c.numero)}</strong> ${lider.get(c.numero) === 1 ? 'estado' : 'estados'}</span>`).join(' ')
     return `<section class="cartao painel-ufs"><h3>🗺️ Presidente · apuração por estado</h3>
-      <p class="uf-placar">${placar}</p>
+      ${mapaPres2(P) || `<p class="uf-placar">${placar}</p>`}
       <p class="nota">Percentual dos votos válidos em cada estado e quanto das seções já foi totalizado pelo TSE. Atualiza sozinho junto com o restante do Início.</p>
       ${corpo}</section>`
   }
@@ -2898,6 +2949,21 @@ function cardLista(d) {
   }
 }
 
+// aba Presidente (2º turno): mapa por estado; os estados são buscados à parte (no máximo a cada 2 min)
+function mapaAbaPres() {
+  if (!estado.mapaPres2Busca) {
+    estado.mapaPres2Busca = atualizarPres2(null, { soUFs: true })
+      .catch(() => false)
+      .then((novo) => {
+        estado.mapaPres2Busca = null
+        // redesenha só quando chegaram dados novos (sem isso, cada desenho pediria outra busca)
+        if (novo && estado.aba.id === 'presidente' && document.querySelector('[data-mapa-pres2]')) renderizar()
+      })
+  }
+  const m = mapaPres2()
+  return `<section class="cartao" data-mapa-pres2><h3>🗺️ Quem está na frente em cada estado</h3>${m || '<p class="nota">Carregando os estados…</p>'}</section>`
+}
+
 function renderMajoritario(d) {
   const lista = d.candidatos.filter((c) => c.valido || c.votos > 0)
   const validos = lista.filter((c) => c.valido)
@@ -2914,7 +2980,8 @@ function renderMajoritario(d) {
       : turnoAtual() === 2
         ? '<p class="nota">2º turno: vence quem tem mais votos válidos.</p>'
         : `<p class="nota">A linha tracejada marca 50% dos votos válidos: quem passar dela vence no 1º turno${estado.aba.cargo === 11 ? ' (nas cidades com 2º turno, acima de 200 mil eleitores)' : ''}.</p>`
-  return `<section class="cartao">
+  const mapa = estado.aba.id === 'presidente' && turnoAtual() === 2 && ehAoVivo() ? mapaAbaPres() : ''
+  return `${mapa}<section class="cartao">
       <h3>Divisão dos votos válidos</h3>
       ${barraEmpilhada(fatias, { marco50: estado.aba.cargo !== 5 && turnoAtual() === 1, total: d.votos.validos })}
       ${nota}
