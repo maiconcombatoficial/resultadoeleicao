@@ -1527,11 +1527,17 @@ function renderPainel2026() {
         <p class="nota">${P.br === false ? 'Não consegui consultar o TSE agora. Tentando de novo em instantes.' : 'O 2º turno é no domingo, 25 de outubro de 2026. A apuração aparece aqui assim que o TSE começar a divulgar (a partir das 17h de Brasília) e se atualiza sozinha.'}</p></section>`
     }
     const ref = br || sc || zz
+    // bandeiras do Brasil e de Santa Catarina e um globo para o exterior (SVG simples, sem arquivos externos)
+    const BANDEIRAS = {
+      Brasil: '<svg class="bandeira" viewBox="0 0 28 20" role="img" aria-label="Bandeira do Brasil"><rect width="28" height="20" rx="2" fill="#009c3b"/><path d="M14 2.2 25.2 10 14 17.8 2.8 10z" fill="#ffdf00"/><circle cx="14" cy="10" r="4.6" fill="#002776"/><path d="M9.6 9.1c3.1-.9 6.2-.5 8.9 1.5" stroke="#fff" stroke-width=".9" fill="none"/></svg>',
+      'Santa Catarina': '<svg class="bandeira" viewBox="0 0 28 20" role="img" aria-label="Bandeira de Santa Catarina"><rect width="28" height="20" rx="2" fill="#fff"/><rect width="28" height="6.4" fill="#d52b1e"/><rect y="13.6" width="28" height="6.4" fill="#d52b1e"/><path d="M10.3 5.8h7.4v5.2c0 2.6-3.7 4.2-3.7 4.2s-3.7-1.6-3.7-4.2z" fill="#fff" stroke="#c9a227" stroke-width=".9"/><path d="M11.4 7h5.2v3.4c0 1.7-2.6 2.9-2.6 2.9s-2.6-1.2-2.6-2.9z" fill="#1f5fa8"/><path d="m14 7.9.5 1.1 1.2.1-.9.8.3 1.2-1.1-.6-1.1.6.3-1.2-.9-.8 1.2-.1z" fill="#ffdf00"/></svg>',
+      Exterior: '<svg class="bandeira bandeira-globo" viewBox="0 0 28 20" role="img" aria-label="Exterior"><rect width="28" height="20" rx="2" fill="#0a5ea8"/><circle cx="14" cy="10" r="7" fill="none" stroke="#fff" stroke-width="1.2"/><ellipse cx="14" cy="10" rx="3" ry="7" fill="none" stroke="#fff" stroke-width="1"/><path d="M7 10h14M8.2 6.6h11.6M8.2 13.4h11.6" stroke="#fff" stroke-width="1" fill="none"/></svg>',
+    }
     const lista = (d, rot) => {
       if (!d) return ''
       const cs = d.candidatos.filter((c) => c.valido).slice(0, 2)
       const max = Math.max(1, ...cs.map((c) => c.percentual))
-      return `<div class="pres2-col"><h4>${rot} <span class="mudo">· ${fmtPct.format(d.secoes.percentual)}% apurado</span></h4><ol class="painel-lista">${cs
+      return `<div class="pres2-col"><h4>${BANDEIRAS[rot] || ''} ${rot} <span class="mudo">· ${fmtPct.format(d.secoes.percentual)}% apurado</span></h4><ol class="painel-lista">${cs
         .map((c, i) => {
           const cor = corPartido(c.partido)
           return `<li style="${estiloCor(cor)}"><span class="pos">${i + 1}º</span>${foto(c, cor)}<div class="painel-info"><div><strong>${esc(c.nome)}</strong> ${pill(c.partido, cor)} ${c.eleito ? '<span class="tag eleito-tse"><b>✔ Eleito</b></span>' : ''}</div>
