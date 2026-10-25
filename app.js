@@ -1292,7 +1292,7 @@ async function carregarPainel(ctrl) {
   // 2º turno para Presidente (Brasil e SC), em qualquer visão do Início de 2026
   const abaPres = ABAS.find((a) => a.id === 'presidente')
   const pres2 = {}
-  await Promise.all(['br', UF, 'zz'].map(async (abr) => {
+  await Promise.all(['br', 'zz', ...ESTADOS.map(([uf]) => uf)].map(async (abr) => {
     try {
       pres2[abr] = await buscar(abaPres, abr, 2, ctrl.signal)
     } catch (e) {
@@ -1322,6 +1322,15 @@ async function carregarPainel(ctrl) {
   statusEl.className = erros && ehAoVivo() ? 'status erro' : 'status ok'
   if (estado.controlador === ctrl && !estado.dados.final && ehAoVivo()) agendar()
 }
+
+// os 27 estados (sigla do TSE, nome, região), para acompanhar a apuração de Presidente em cada um
+const ESTADOS = [
+  ['ac', 'Acre', 'Norte'], ['am', 'Amazonas', 'Norte'], ['ap', 'Amapá', 'Norte'], ['pa', 'Pará', 'Norte'], ['ro', 'Rondônia', 'Norte'], ['rr', 'Roraima', 'Norte'], ['to', 'Tocantins', 'Norte'],
+  ['al', 'Alagoas', 'Nordeste'], ['ba', 'Bahia', 'Nordeste'], ['ce', 'Ceará', 'Nordeste'], ['ma', 'Maranhão', 'Nordeste'], ['pb', 'Paraíba', 'Nordeste'], ['pe', 'Pernambuco', 'Nordeste'], ['pi', 'Piauí', 'Nordeste'], ['rn', 'Rio Grande do Norte', 'Nordeste'], ['se', 'Sergipe', 'Nordeste'],
+  ['df', 'Distrito Federal', 'Centro-Oeste'], ['go', 'Goiás', 'Centro-Oeste'], ['ms', 'Mato Grosso do Sul', 'Centro-Oeste'], ['mt', 'Mato Grosso', 'Centro-Oeste'],
+  ['es', 'Espírito Santo', 'Sudeste'], ['mg', 'Minas Gerais', 'Sudeste'], ['rj', 'Rio de Janeiro', 'Sudeste'], ['sp', 'São Paulo', 'Sudeste'],
+  ['pr', 'Paraná', 'Sul'], ['rs', 'Rio Grande do Sul', 'Sul'], ['sc', 'Santa Catarina', 'Sul'],
+]
 
 // 2º turno no exterior: resultado de cada cidade (zona do exterior) no TSE, só depois que ele começa a divulgar
 const EXT = { cidades: new Map() } // código da cidade → dados normalizados | null
@@ -1562,6 +1571,35 @@ function renderPainel2026() {
     const [tot, lidas] = B.br.s
     return `<p class="nota">📄 Boletins de urna lidos: <strong>${fmt.format(lidas)}</strong> de ${fmt.format(tot)} seções (${fmtPct.format(pctDe(lidas, tot))}%) · Brasil e exterior · atualizado ${new Date(B.atualizado).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</p>`
   }
+  // apuração de Presidente em cada um dos 27 estados, agrupados por região
+  const blocoEstados = () => {
+    const P = estado.pres2 || {}
+    const refCand = (P.br || P[UF])?.candidatos?.filter((c) => c.valido).slice(0, 2) || []
+    const dados = ESTADOS.map(([uf, nome, reg]) => ({ uf, nome, reg, d: P[uf] || null }))
+    if (!refCand.length || !dados.some((e) => e.d)) return ''
+    const lider = new Map(refCand.map((c) => [c.numero, 0]))
+    const tile = ({ uf, nome, d }) => {
+      if (!d) return `<li class="uf-item uf-sem"><div class="uf-topo"><strong>${uf.toUpperCase()}</strong><small>${esc(nome)}</small></div><small class="mudo">sem dados do TSE</small></li>`
+      const v = refCand.map((c) => d.candidatos.find((x) => x.numero === c.numero))
+      const p = v.map((x) => x?.percentual || 0)
+      const apurado = d.secoes.totalizadas > 0
+      const iLider = apurado && p[0] !== p[1] ? (p[0] > p[1] ? 0 : 1) : -1
+      if (iLider >= 0 && v[iLider]?.votos) lider.set(refCand[iLider].numero, lider.get(refCand[iLider].numero) + 1)
+      const soma = p[0] + p[1] || 1
+      return `<li class="uf-item" ${iLider >= 0 ? `style="${estiloCor(corPartido(refCand[iLider].partido))}"` : ''}>
+        <div class="uf-topo"><strong>${uf.toUpperCase()}</strong><small>${esc(nome)}</small><span class="uf-ap">${fmtPct.format(d.secoes.percentual)}%</span></div>
+        <div class="uf-barra" role="img" aria-label="${refCand.map((c, i) => `${esc(c.nome)} ${fmtPct.format(p[i])}%`).join(', ')}">${apurado ? refCand.map((c, i) => `<span style="width:${(100 * p[i]) / soma}%;background:${corPartido(c.partido)}"></span>`).join('') : ''}</div>
+        <div class="uf-num">${refCand.map((c, i) => `<span class="${i === iLider ? 'uf-lider' : ''}">${esc(c.nome.split(' ').slice(-1)[0])} <strong>${apurado ? `${fmtPct.format(p[i])}%` : '—'}</strong></span>`).join('')}</div>
+      </li>`
+    }
+    const regioes = [...new Set(ESTADOS.map(([, , r]) => r))]
+    const corpo = regioes.map((r) => `<h4 class="uf-reg">${r}</h4><ul class="uf-grade">${dados.filter((e) => e.reg === r).map(tile).join('')}</ul>`).join('')
+    const placar = refCand.map((c) => `<span class="tag" style="${estiloCor(corPartido(c.partido))}">${esc(c.nome)} ${pill(c.partido, corPartido(c.partido))} lidera em <strong>${lider.get(c.numero)}</strong> ${lider.get(c.numero) === 1 ? 'estado' : 'estados'}</span>`).join(' ')
+    return `<section class="cartao painel-ufs"><h3>🗺️ Presidente · apuração por estado</h3>
+      <p class="uf-placar">${placar}</p>
+      <p class="nota">Percentual dos votos válidos em cada estado e quanto das seções já foi totalizado pelo TSE. Atualiza sozinho junto com o restante do Início.</p>
+      ${corpo}</section>`
+  }
   // países onde a votação já está acontecendo (o brasileiro no exterior vota no horário local, 8h às 17h)
   const blocoExterior = () => {
     const agora = Date.now()
@@ -1631,7 +1669,7 @@ function renderPainel2026() {
     </div><p class="nota">Para comparar dois candidatos (inclusive de cargos diferentes), abra a ficha de um deles e toque em <strong>Comparar com outro candidato</strong>.</p></section>`
   const card = cardPainel(D)
   // Início 2026: o destaque é o 2º turno de Presidente; os dados do 1º turno ficam nas abas de cada cargo
-  return blocoPresidente2() + blocoExterior() + meus + atalhos
+  return blocoPresidente2() + blocoEstados() + blocoExterior() + meus + atalhos
 }
 
 // card de compartilhar com o resumo: governador, senado e cadeiras por partido

@@ -1478,3 +1478,19 @@ h1::before { content: "🗳️ "; }
 .painel-pres2 .pres2-col .painel-num strong { font-size: 1.35rem; }
 .painel-pres2 .pres2-col .barra { max-width: 100%; }
 @media (max-width: 560px) { .painel-pres2 .pres2-col .painel-num strong { font-size: 1.15rem; } .painel-pres2 .pres2-col .painel-lista li { padding: 10px 4px; } }
+
+/* Início · 2º turno: apuração de Presidente por estado */
+.uf-placar { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
+.uf-reg { margin: 14px 0 6px; font-size: 0.9rem; color: var(--mudo); text-transform: uppercase; letter-spacing: 0.04em; }
+.uf-grade { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(min(150px, 45%), 1fr)); }
+.uf-item { padding: 10px; border-radius: 10px; background: var(--fundo); border: 1px solid var(--linha); border-left: 4px solid var(--cor, var(--linha)); display: grid; gap: 6px; }
+.uf-topo { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.uf-topo strong { font-size: 1.05rem; }
+.uf-topo small { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mudo); }
+.uf-ap { font-size: 0.78rem; color: var(--mudo); }
+.uf-barra { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--linha); }
+.uf-num { display: flex; justify-content: space-between; gap: 6px; font-size: 0.8rem; }
+.uf-lider strong { color: var(--texto, inherit); }
+.uf-num span:not(.uf-lider) { color: var(--mudo); }
+.uf-sem { opacity: 0.6; }
+@media (max-width: 560px) { .uf-item { padding: 8px; } .uf-topo small { display: none; } .uf-num { flex-direction: column; gap: 0; } }
