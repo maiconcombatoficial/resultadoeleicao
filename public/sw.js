@@ -12,8 +12,10 @@ self.addEventListener('fetch', (ev) => {
   const req = ev.request
   const url = new URL(req.url)
   if (req.method !== 'GET' || url.origin !== self.location.origin) return
+  // a página (index.html) sempre confere com o servidor, para uma versão nova aparecer logo; os arquivos em
+  // assets/ têm o hash no nome e podem vir do cache do navegador
   ev.respondWith(
-    fetch(req)
+    fetch(req, req.mode === 'navigate' ? { cache: 'no-cache' } : undefined)
       .then((r) => {
         if (r.ok && r.type === 'basic') {
           const copia = r.clone()
