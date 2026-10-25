@@ -1036,3 +1036,14 @@ test('Início 2026: lista de países do exterior com a fase da votação', async
   await expect(b.locator('.ext-pais', { hasText: 'Austrália' })).toHaveCount(1)
   await expect(b.locator('.ext-pais .ext-st').first()).toContainText(/Votando agora|Votação encerrada|Abre às 8h/)
 })
+
+test('Início 2026: países do exterior em ordem de abertura das urnas', async ({ page }) => {
+  await page.goto('/#inicio')
+  const nomes = await page.locator('.painel-ext .ext-pais strong').allInnerTexts()
+  // Nova Zelândia e Austrália abrem antes de Portugal, que abre antes dos Estados Unidos
+  const i = (n) => nomes.indexOf(n)
+  expect(i('Nova Zelândia')).toBeLessThan(i('Austrália'))
+  expect(i('Austrália')).toBeLessThan(i('Japão'))
+  expect(i('Japão')).toBeLessThan(i('Portugal'))
+  expect(i('Portugal')).toBeLessThan(i('Estados Unidos'))
+})

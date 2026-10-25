@@ -1594,10 +1594,8 @@ function renderPainel2026() {
         <div class="ext-st">${p.fase === 'votando' ? `Votando agora · fecha às 17h local (${hora(p.fecha)} em Brasília)` : p.fase === 'encerrada' ? 'Votação encerrada' : `Abre às 8h local (${hora(p.abre, true)} em Brasília)`}</div></div>
       <div class="ext-num">${resultado(p)}</div></li>`
     return `<section class="cartao painel-ext"><h3>🌎 Exterior · onde a votação está acontecendo</h3>
-      <p class="nota"><strong>${votando.length}</strong> ${votando.length === 1 ? 'país votando' : 'países votando'} agora · <strong>${encerrados.length}</strong> com a votação encerrada · ${antes.length} ainda não ${antes.length === 1 ? 'começou' : 'começaram'}. O brasileiro no exterior vota no horário local, das 8h às 17h do dia 25/10; a apuração só é divulgada pelo TSE depois das 17h de Brasília.</p>
-      ${votando.length ? `<ul class="ext-lista">${votando.map(linha).join('')}</ul>` : ''}
-      ${encerrados.length ? `<h4 class="ext-sub">Votação encerrada</h4><ul class="ext-lista">${encerrados.map(linha).join('')}</ul>` : ''}
-      ${antes.length ? `<details class="ext-antes"><summary>Ainda não começaram (${antes.length})</summary><ul class="ext-lista">${antes.map(linha).join('')}</ul></details>` : ''}</section>`
+      <p class="nota"><strong>${votando.length}</strong> ${votando.length === 1 ? 'país votando' : 'países votando'} agora · <strong>${encerrados.length}</strong> com a votação encerrada · ${antes.length} ainda não ${antes.length === 1 ? 'começou' : 'começaram'}. Em ordem de abertura das urnas: quem abre mais cedo vem primeiro. O brasileiro no exterior vota no horário local, das 8h às 17h do dia 25/10; a apuração só é divulgada pelo TSE depois das 17h de Brasília.</p>
+      <ul class="ext-lista">${[...paises].sort((x, y) => x.abre - y.abre || x.nome.localeCompare(y.nome, 'pt-BR')).map(linha).join('')}</ul></section>`
   }
   const blocoCadeiras = (id, titulo) => {
     const d = D(id)
