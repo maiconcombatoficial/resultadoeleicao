@@ -1747,7 +1747,7 @@ function renderPainel2026() {
           const i = rank.indexOf(c)
           // quem está na frente (com votos e sem empate) ganha o fundo dourado
           const lider = i === 0 && c.votos > 0 && c.votos > (rank[1]?.votos || 0)
-          return `<li class="${lider ? 'pres2-lider' : ''}" style="${estiloCor(cor)}"><span class="pos">${lider ? '🏆 ' : ''}${i + 1}º</span>${foto(c, cor)}<div class="painel-info"><div><strong>${esc(c.nome)}</strong> ${pill(c.partido, cor)} ${c.eleito ? '<span class="tag eleito-tse"><b>✔ Eleito</b></span>' : ''}</div>
+          return `<li class="${lider ? 'pres2-lider' : ''}" style="${estiloCor(cor)}"><span class="pos">${lider ? '🏆 ' : ''}${i + 1}º</span>${anelFoto(c, cor)}<div class="painel-info"><div><strong>${esc(c.nome)}</strong> ${pill(c.partido, cor)} ${c.eleito ? '<span class="tag eleito-tse"><b>✔ Eleito</b></span>' : ''}</div>
             <div class="barra fina"><span style="width:${(100 * c.percentual) / max}%"></span></div></div><div class="painel-num"><strong>${fmtPct.format(c.percentual)}%</strong><small>${fmt.format(c.votos)} votos</small></div></li>`
         })
         .join('')}</ol>${porBU ? '' : linhaVitoria(d, rot)}</div>`
@@ -1766,16 +1766,21 @@ function renderPainel2026() {
       return `<div class="vit2t"><span class="tag chance ${CLASSES_VIT[v.nivel]}">${ROTULOS_VIT[v.nivel]}${rot === 'Brasil' || v.nivel !== 'matematica' ? '' : onde}</span><small>${det}</small></div>`
     }
     const cs0 = (d) => d.candidatos.some((c) => c.eleito) // o TSE já marcou o eleito: vale o selo oficial
+    // anel em volta da foto que se completa com o % do candidato (como no site do TSE)
+    const anelFoto = (c, cor) => `<span class="anel-foto" style="--p:${Math.min(100, Math.max(0, c.percentual || 0)).toFixed(2)};--cor-anel:${cor}" title="${fmtPct.format(c.percentual || 0)}% dos votos válidos">${foto(c, cor)}</span>`
     return `<section class="cartao painel-pres2"><div class="resumo-titulo"><h2><a href="?turno=2#presidente" class="link-aba">🗳️ Presidente · 2º turno</a></h2><span class="selo ${ref.final ? 'final' : ''}">${ref.final ? 'Totalização final · TSE' : ref.secoes.totalizadas ? 'Em apuração' : 'Aguardando o TSE'}</span></div>
       ${falha}${ref.secoes.totalizadas ? '' : '<p class="nota">A apuração começa a ser divulgada pelo TSE a partir das 17h de Brasília de domingo, 25/10, e se atualiza aqui sozinha.</p>'}
       <div class="progresso"><div class="progresso-barra" style="width:${Math.min(100, ref.secoes.percentual)}%"></div></div>
-      <p class="progresso-texto"><strong>${fmtPct.format(ref.secoes.percentual)}%</strong> das seções do ${br ? 'Brasil' : 'estado'} totalizadas${ref.atualizadoEm ? ` <span class="mudo">· dados do TSE de ${esc(ref.atualizadoEm)}</span>` : ''}</p>
+      <p class="progresso-texto"><strong>${fmtPct.format(ref.secoes.percentual)}%</strong> das seções do ${br ? 'Brasil' : 'estado'} totalizadas${ref.secoes.total ? ` <span class="mudo">(${fmt.format(ref.secoes.totalizadas)} de ${fmt.format(ref.secoes.total)})</span>` : ''}</p>
+      ${ref.atualizadoEm ? `<p class="hora-tse">🕒 Última atualização do TSE: <strong>${esc(ref.atualizadoEm)}</strong> <span class="mudo">(horário de Brasília)</span></p>` : ''}
       <div class="pres2">${lista(br, 'Brasil')}${lista(sc, 'Santa Catarina')}${lista(zz, 'Exterior')}</div>${linhaBoletins()}</section>`
   }
   // linha com o andamento da leitura dos boletins de urna (Brasil e exterior)
   const linhaBoletins = () => {
     const B = estado.boletins
     if (!B?.br?.s?.[1]) return ''
+    // só os boletins do exterior foram lidos e o TSE já totaliza o exterior: a parcial não é mais usada
+    if (Object.keys(B.uf || {}).join() === 'zz' && estado.pres2?.zz?.secoes?.totalizadas > 0) return ''
     const [tot, lidas] = B.br.s
     const ufs = Object.keys(B.uf || {})
     const onde = ufs.length === 1 && ufs[0] === 'zz' ? 'exterior (o TSE já publica os boletins das seções do exterior antes da totalização)' : 'Brasil e exterior'
@@ -1798,6 +1803,31 @@ function renderPainel2026() {
       </div>
       <p class="nota">${rival ? `${fmt.format(dif)} votos à frente de ${esc(rival.nome)} (${fmtPct.format(rival.percentual)}%). ` : ''}${br.final ? 'Totalização final do TSE.' : `${fmtPct.format(br.secoes.percentual)}% das seções totalizadas; o TSE já declarou o resultado e a apuração segue até o fim.`}</p>
     </section>`
+  }
+  // dados gerais da apuração (como no site do TSE), Brasil e SC lado a lado
+  const blocoDadosGerais = () => {
+    const P = estado.pres2 || {}
+    const lugares = [['Brasil', P.br], ['Santa Catarina', P[UF]]].filter(([, d]) => d?.secoes?.total)
+    if (!lugares.length) return ''
+    const linha = (rot, n, pct, cls = '') => `<div class="dg-l ${cls}"><dt>${rot}</dt><dd><strong>${fmt.format(n || 0)}</strong>${pct != null ? ` <small>${fmtPct.format(pct)}%</small>` : ''}</dd></div>`
+    const col = ([nome, d]) => {
+      const v = d.votos || {}, e = d.eleitorado || {}
+      return `<div class="dg-col"><h4>${nome}</h4>
+        <div class="progresso fina"><div class="progresso-barra" style="width:${Math.min(100, d.secoes.percentual)}%"></div></div>
+        <dl>
+          ${linha('Seções totalizadas', d.secoes.totalizadas, d.secoes.percentual)}
+          <div class="dg-l dg-sub"><dt>de um total de</dt><dd>${fmt.format(d.secoes.total)} seções</dd></div>
+          ${linha('Total de votos', v.total)}
+          ${linha('Válidos', v.validos, pctDe(v.validos, v.total), 'dg-validos')}
+          ${linha('Brancos', v.brancos, pctDe(v.brancos, v.total), 'dg-brancos')}
+          ${linha('Nulos', v.nulos, pctDe(v.nulos, v.total), 'dg-nulos')}
+          ${linha('Comparecimento', e.comparecimento, e.pComparecimento)}
+          ${linha('Abstenção', e.abstencao, e.pAbstencao)}
+          <div class="dg-l dg-sub"><dt>Eleitores aptos</dt><dd>${fmt.format(e.total || 0)}</dd></div>
+        </dl></div>`
+    }
+    return `<section class="cartao painel-dg"><h3>📋 Dados gerais da apuração</h3><div class="dg">${lugares.map(col).join('')}</div>
+      <p class="nota">Válidos, brancos e nulos em % do total de votos; comparecimento e abstenção com os percentuais informados pelo TSE. Atualiza sozinho.</p></section>`
   }
   // apuração de Presidente em cada um dos 27 estados, agrupados por região
   const blocoEstados = () => {
@@ -1912,7 +1942,7 @@ function renderPainel2026() {
     </div><p class="nota">Para comparar dois candidatos (inclusive de cargos diferentes), abra a ficha de um deles e toque em <strong>Comparar com outro candidato</strong>.</p></section>`
   const card = cardPainel(D)
   // Início 2026: o destaque é o 2º turno de Presidente; os dados do 1º turno ficam nas abas de cada cargo
-  return blocoEleito() + blocoPresidente2() + blocoEstados() + blocoExterior() + meus + atalhos
+  return blocoEleito() + blocoPresidente2() + blocoDadosGerais() + blocoEstados() + blocoExterior() + meus + atalhos
 }
 
 // card de compartilhar com o resumo: governador, senado e cadeiras por partido

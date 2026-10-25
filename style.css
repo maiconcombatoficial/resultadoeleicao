@@ -1578,3 +1578,29 @@ h1::before { content: "🗳️ "; }
 @media (min-width: 700px) { .candidatos.cands-2t { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; } }
 .candidatos .cand.cand-lider { background: linear-gradient(160deg, var(--ouro-1), var(--ouro-2)); border-color: var(--ouro-borda); box-shadow: 0 0 0 3px rgb(212 160 23 / 18%), 0 4px 14px rgb(212 160 23 / 30%); }
 .candidatos .cand.cand-lider .pos { color: var(--ouro-texto); font-weight: 800; }
+
+/* Início · 2º turno: anel em volta da foto (completa com o % do candidato) */
+.anel-foto { --anel: 5px; display: inline-grid; place-items: center; padding: var(--anel); border-radius: 50%; background: conic-gradient(var(--cor-anel, var(--primaria)) calc(var(--p, 0) * 1%), var(--linha) 0); }
+.anel-foto .foto { margin: 0; box-shadow: 0 0 0 3px var(--cartao); }
+
+/* Início · 2º turno: data e hora oficiais do TSE em destaque */
+.hora-tse { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: baseline; margin: 2px 0 6px; padding: 6px 12px; border-radius: 999px; background: var(--cartao); border: 1px solid var(--linha); font-size: 0.95rem; }
+.hora-tse strong { font-size: 1.05rem; }
+
+/* Início · dados gerais da apuração (Brasil e SC) */
+.dg { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.dg-col { background: var(--fundo); border: 1px solid var(--linha); border-radius: 12px; padding: 12px 14px; }
+.dg-col h4 { margin: 0 0 8px; font-size: 1.05rem; }
+.dg-col .progresso.fina { height: 8px; margin-bottom: 6px; }
+.dg-col dl { margin: 0; display: grid; }
+.dg-l { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--linha); }
+.dg-l:last-child { border-bottom: 0; }
+.dg-l dt { color: var(--mudo); }
+.dg-l dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.dg-l dd small { color: var(--mudo); margin-left: 4px; }
+.dg-sub { padding-top: 0; font-size: 0.85rem; }
+.dg-sub dt, .dg-sub dd { color: var(--mudo); }
+.dg-validos dt::before, .dg-brancos dt::before, .dg-nulos dt::before { content: ''; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.dg-validos dt::before { background: #9bb84a; }
+.dg-brancos dt::before { background: #e8c547; }
+.dg-nulos dt::before { background: #e5636b; }
