@@ -1468,3 +1468,13 @@ h1::before { content: "🗳️ "; }
 .ext-topo h3 { margin: 0; }
 .ext-botao { width: auto; padding: 6px 12px; margin: 0; font-size: 0.85rem; }
 .painel-ext.recolhido .nota { margin-bottom: 0; }
+
+/* Início · 2º turno: os dois candidatos lado a lado dentro de cada quadro */
+.painel-pres2 .pres2-col .painel-lista { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
+.painel-pres2 .pres2-col .painel-lista li { border: 1px solid var(--linha); border-radius: 12px; padding: 12px 6px; background: var(--fundo); align-content: start; }
+.painel-pres2 .pres2-col .painel-lista li:last-child { border-bottom: 1px solid var(--linha); }
+.painel-pres2 .pres2-col .painel-info > div:first-child { flex-direction: column; gap: 4px; line-height: 1.2; }
+.painel-pres2 .pres2-col .painel-info strong { font-size: 0.88rem; }
+.painel-pres2 .pres2-col .painel-num strong { font-size: 1.35rem; }
+.painel-pres2 .pres2-col .barra { max-width: 100%; }
+@media (max-width: 560px) { .painel-pres2 .pres2-col .painel-num strong { font-size: 1.15rem; } .painel-pres2 .pres2-col .painel-lista li { padding: 10px 4px; } }
