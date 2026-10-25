@@ -15,7 +15,7 @@ self.addEventListener('fetch', (ev) => {
   // a página (index.html) sempre confere com o servidor, para uma versão nova aparecer logo; os arquivos em
   // assets/ têm o hash no nome e podem vir do cache do navegador
   ev.respondWith(
-    fetch(req, req.mode === 'navigate' ? { cache: 'no-cache' } : undefined)
+    (req.mode === 'navigate' ? fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' }) : fetch(req))
       .then((r) => {
         if (r.ok && r.type === 'basic') {
           const copia = r.clone()
