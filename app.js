@@ -1611,20 +1611,26 @@ function renderPainel2026() {
     }
     // exterior antes da totalização do TSE: parcial pelos boletins de urna já publicados
     const buZZ = estado.boletins?.uf?.zz
+    // mesma ordem de candidatos nos três quadros (a do Brasil), para os cards ficarem alinhados lado a lado;
+    // a posição (1º, 2º) e o dourado continuam sendo os de cada lugar
+    const ordem = (br || sc || zz).candidatos.filter((c) => c.valido).slice(0, 2).map((c) => String(c.numero))
     const lista = (d, rot) => {
       if (!d) return ''
       let cs = d.candidatos.filter((c) => c.valido).slice(0, 2)
       const porBU = rot === 'Exterior' && !d.secoes.totalizadas && buZZ?.s?.[1] > 0
       if (porBU) cs = parcialBoletins(cs, buZZ)
       const max = Math.max(1, ...cs.map((c) => c.percentual))
+      const rank = [...cs].sort((a, b) => b.votos - a.votos)
+      cs = [...cs].sort((a, b) => ordem.indexOf(String(a.numero)) - ordem.indexOf(String(b.numero)))
       const andamento = porBU
         ? `<span class="mudo">· 📄 parcial pelos boletins de urna: ${fmt.format(buZZ.s[1])} de ${fmt.format(buZZ.s[0])} seções (${fmtPct.format(pctDe(buZZ.s[1], buZZ.s[0]))}%)</span>`
         : `<span class="mudo">· ${fmtPct.format(d.secoes.percentual)}% apurado</span>`
       return `<div class="pres2-col pres2-${rot === 'Brasil' ? 'br' : rot === 'Exterior' ? 'ext' : 'sc'}"><h4>${BANDEIRAS[rot] || ''} ${rot} ${andamento}</h4><ol class="painel-lista">${cs
-        .map((c, i) => {
+        .map((c) => {
           const cor = corPartido(c.partido)
+          const i = rank.indexOf(c)
           // quem está na frente (com votos e sem empate) ganha o fundo dourado
-          const lider = i === 0 && c.votos > 0 && c.votos > (cs[1]?.votos || 0)
+          const lider = i === 0 && c.votos > 0 && c.votos > (rank[1]?.votos || 0)
           return `<li class="${lider ? 'pres2-lider' : ''}" style="${estiloCor(cor)}"><span class="pos">${lider ? '🏆 ' : ''}${i + 1}º</span>${foto(c, cor)}<div class="painel-info"><div><strong>${esc(c.nome)}</strong> ${pill(c.partido, cor)} ${c.eleito ? '<span class="tag eleito-tse"><b>✔ Eleito</b></span>' : ''}</div>
             <div class="barra fina"><span style="width:${(100 * c.percentual) / max}%"></span></div></div><div class="painel-num"><strong>${fmtPct.format(c.percentual)}%</strong><small>${fmt.format(c.votos)} votos</small></div></li>`
         })

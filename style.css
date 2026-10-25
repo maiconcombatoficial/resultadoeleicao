@@ -1507,3 +1507,9 @@ h1::before { content: "🗳️ "; }
 .painel-pres2 .pres2-col .painel-lista li.pres2-lider { background: linear-gradient(160deg, var(--ouro-1), var(--ouro-2)); border: 2px solid var(--ouro-borda); box-shadow: 0 0 0 3px rgb(212 160 23 / 18%), 0 4px 14px rgb(212 160 23 / 30%); }
 .painel-pres2 .pres2-col .painel-lista li.pres2-lider:last-child { border-bottom: 2px solid var(--ouro-borda); }
 .painel-pres2 .pres2-col .painel-lista li.pres2-lider .pos { color: var(--ouro-texto); font-weight: 800; }
+
+/* Início · 2º turno: Brasil, SC e Exterior lado a lado, com cabeçalhos e cards na mesma altura */
+@media (min-width: 900px) {
+  .painel-pres2 .pres2 { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 0; }
+  .painel-pres2 .pres2-col { display: grid; grid-template-rows: subgrid; grid-row: span 3; align-content: start; }
+}
