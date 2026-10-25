@@ -1025,3 +1025,14 @@ test('build público (sem a Campanha): a aba some e #campanha cai no Início', a
   await expect(page.locator('[data-aba="campanha"]')).toHaveCount(0)
   await expect(page.locator('[data-aba="inicio"][aria-selected="true"]')).toBeVisible()
 })
+
+test('Início 2026: lista de países do exterior com a fase da votação', async ({ page }) => {
+  await page.goto('/#inicio')
+  const b = page.locator('.painel-ext')
+  await expect(b).toBeVisible()
+  await expect(b).toContainText('Exterior')
+  expect(await b.locator('.ext-pais').count()).toBe(133) // 186 cidades em 133 países (Canadá e EUA reúnem vários fusos)
+  // a Austrália está na lista e cada país mostra a fase (votando, encerrada ou ainda não começou)
+  await expect(b.locator('.ext-pais', { hasText: 'Austrália' })).toHaveCount(1)
+  await expect(b.locator('.ext-pais .ext-st').first()).toContainText(/Votando agora|Votação encerrada|Abre às 8h/)
+})

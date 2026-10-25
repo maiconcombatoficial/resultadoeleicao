@@ -1,6 +1,13 @@
-# Baixa os boletins de urna de SC, gera os dados por seção e bairro (public/dados2026/) e, se houver o
-# segredo PRO_SENHA (ou PRO_CHAVE), refaz a área protegida (public/pro/). Roda sozinho na noite do 2º turno
-# (25/10/2026) e pode ser disparado à mão em Actions → "Boletins de urna" → Run workflow.
+# Boletins de urna do 2º turno (25/10/2026), buscados conforme o TSE os disponibiliza (a cada 20 minutos).
+#
+# Dois trabalhos independentes:
+#  - santa-catarina: boletins de SC → dados por seção, local e bairro (public/dados2026/secoes, bairros…) e,
+#    com o segredo PRO_SENHA/PRO_CHAVE, a área protegida (public/pro/).
+#  - brasil-exterior: boletins de Presidente de TODAS as UFs e do exterior (ZZ) → public/dados2026/pres2.json
+#    (totais por UF, município/cidade e, no exterior, seção a seção). É incremental: o estado fica em cache e
+#    cada execução só busca o que o TSE recebeu desde a anterior.
+# Quando algo novo é gravado, o site é publicado de novo (pages.yml é disparado aqui, porque um push feito com
+# o GITHUB_TOKEN não aciona outros workflows). Também roda à mão em Actions → "Boletins de urna" → Run workflow.
 name: Boletins de urna
 
 on:
@@ -11,20 +18,37 @@ on:
         required: true
         default: '2'
   schedule:
-    - cron: '30 22,23 25 10 *'   # 25/10, 19h30 e 20h30 em Brasília
-    - cron: '30 1,3,5,9 26 10 *' # madrugada e manhã de 26/10
+    - cron: '*/20 20-23 25 10 *'  # 25/10, a cada 20 min a partir das 17h de Brasília (o TSE só divulga depois)
+    - cron: '*/20 0-14 26 10 *'   # madrugada e manhã de 26/10 (até 11h de Brasília)
+    - cron: '0 15,18,21 26 10 *'  # tarde e noite de 26/10, para fechar a totalização
+    - cron: '0 12 27 10 *'        # 27/10: conferência final
 
 permissions:
   contents: write
+  actions: write
 
-concurrency:
-  group: boletins
-  cancel-in-progress: false
+env:
+  TURNO: ${{ github.event.inputs.turno || '2' }}
 
 jobs:
-  atualizar:
+  # o cron não tem ano: só deixa rodar em 2026 (ou quando disparado à mão)
+  ano:
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    outputs:
+      ok: ${{ steps.d.outputs.ok }}
+    steps:
+      - id: d
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$(date -u +%Y)" = "2026" ]; then echo "ok=1" >> "$GITHUB_OUTPUT"; else echo "ok=0" >> "$GITHUB_OUTPUT"; fi
+
+  santa-catarina:
+    needs: ano
+    if: needs.ano.outputs.ok == '1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    concurrency:
+      group: boletins-sc
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -34,22 +58,54 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: .cache
-          key: boletins-${{ github.run_id }}
-          restore-keys: boletins-
-      - name: Baixar boletins e gerar dados
+          key: boletins-sc-${{ github.run_id }}
+          restore-keys: boletins-sc-
+      - name: Baixar boletins de SC e gerar dados
         env:
           PRO_SENHA: ${{ secrets.PRO_SENHA }}
           PRO_CHAVE: ${{ secrets.PRO_CHAVE }}
-          TURNO: ${{ github.event.inputs.turno || '2' }}
         run: python3 scripts/atualizar.py --turno "$TURNO"
       - name: Publicar
-        env:
-          TURNO: ${{ github.event.inputs.turno || '2' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add public/dados2026 public/pro
           if git diff --cached --quiet; then echo "Nada novo."; exit 0; fi
-          git commit -m "Boletins de urna: dados por seção e bairro (${TURNO}º turno)"
-          git pull --rebase origin ${{ github.ref_name }}
-          git push
+          git commit -m "Boletins de urna de SC: dados por seção e bairro (${TURNO}º turno)"
+          for i in 1 2 3 4 5; do git pull --rebase origin main && git push origin HEAD:main && break || sleep $((i * 5)); done
+          gh workflow run pages.yml --ref main
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  brasil-exterior:
+    needs: ano
+    if: needs.ano.outputs.ok == '1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    concurrency:
+      group: boletins-brasil
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install asn1tools cryptography
+      - uses: actions/cache@v4
+        with:
+          path: .cache
+          key: boletins-brasil-${{ github.run_id }}
+          restore-keys: boletins-brasil-
+      - name: Boletins de Presidente de todo o Brasil e do exterior
+        run: python3 scripts/gerar_pres.py --turno "$TURNO" --workers 96 --max-min 100
+      - name: Publicar
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/dados2026/pres${TURNO}.json
+          if git diff --cached --quiet; then echo "Nada novo."; exit 0; fi
+          git commit -m "Boletins de urna do Brasil e do exterior: Presidente (${TURNO}º turno)"
+          for i in 1 2 3 4 5; do git pull --rebase origin main && git push origin HEAD:main && break || sleep $((i * 5)); done
+          gh workflow run pages.yml --ref main
+        env:
+          GH_TOKEN: ${{ github.token }}

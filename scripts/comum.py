@@ -122,9 +122,14 @@ def decodificador():
 
 
 def ler_bu(caminho, turno):
-    """Decodifica um boletim de urna: seção, local, aptos, comparecimento e votos por cargo ('t<turno>-c<cargo>')."""
+    """Decodifica um boletim de urna (arquivo): seção, local, aptos, comparecimento e votos por cargo ('t<turno>-c<cargo>')."""
+    return ler_bu_bytes(open(caminho, 'rb').read(), turno)
+
+
+def ler_bu_bytes(dados, turno):
+    """Decodifica um boletim de urna já em memória (mesmo retorno de ler_bu)."""
     C = decodificador()
-    env = C.decode('EntidadeEnvelopeGenerico', open(caminho, 'rb').read())
+    env = C.decode('EntidadeEnvelopeGenerico', dados)
     bu = C.decode('EntidadeBoletimUrna', env['conteudo'])
     ids = bu['identificacaoSecao']
     out = {'mun': str(ids['municipioZona']['municipio']).zfill(5), 'zona': ids['municipioZona']['zona'], 'local': ids['local'], 'secao': ids['secao'],
