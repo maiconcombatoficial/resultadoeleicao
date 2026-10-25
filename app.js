@@ -1611,17 +1611,15 @@ function renderPainel2026() {
     }
     // exterior antes da totalização do TSE: parcial pelos boletins de urna já publicados
     const buZZ = estado.boletins?.uf?.zz
-    // mesma ordem de candidatos nos três quadros (a do Brasil), para os cards ficarem alinhados lado a lado;
-    // a posição (1º, 2º) e o dourado continuam sendo os de cada lugar
-    const ordem = (br || sc || zz).candidatos.filter((c) => c.valido).slice(0, 2).map((c) => String(c.numero))
     const lista = (d, rot) => {
       if (!d) return ''
       let cs = d.candidatos.filter((c) => c.valido).slice(0, 2)
       const porBU = rot === 'Exterior' && !d.secoes.totalizadas && buZZ?.s?.[1] > 0
       if (porBU) cs = parcialBoletins(cs, buZZ)
       const max = Math.max(1, ...cs.map((c) => c.percentual))
+      // em cada quadro, quem está na frente fica à esquerda (empate: a ordem do TSE)
       const rank = [...cs].sort((a, b) => b.votos - a.votos)
-      cs = [...cs].sort((a, b) => ordem.indexOf(String(a.numero)) - ordem.indexOf(String(b.numero)))
+      cs = rank
       const andamento = porBU
         ? `<span class="mudo">· 📄 parcial pelos boletins de urna: ${fmt.format(buZZ.s[1])} de ${fmt.format(buZZ.s[0])} seções (${fmtPct.format(pctDe(buZZ.s[1], buZZ.s[0]))}%)</span>`
         : `<span class="mudo">· ${fmtPct.format(d.secoes.percentual)}% apurado</span>`
