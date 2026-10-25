@@ -1130,6 +1130,10 @@ $('#buscar-tudo').innerHTML = icone('busca')
 $('#buscar-tudo').addEventListener('click', () => abrirBusca())
 document.addEventListener('click', (ev) => {
   if (ev.target.closest('[data-abrir-busca]')) return abrirBusca()
+  if (ev.target.closest('[data-ext-toggle]')) {
+    gravarLocal('inicio:ext', lerLocal('inicio:ext', '1') === '1' ? '0' : '1')
+    return renderizar()
+  }
   const t = ev.target.closest('[data-turno-hist]')
   if (t) {
     estado.turnoHist = Number(t.dataset.turnoHist) === 2 ? 2 : 1
@@ -1537,7 +1541,7 @@ function renderPainel2026() {
       if (!d) return ''
       const cs = d.candidatos.filter((c) => c.valido).slice(0, 2)
       const max = Math.max(1, ...cs.map((c) => c.percentual))
-      return `<div class="pres2-col"><h4>${BANDEIRAS[rot] || ''} ${rot} <span class="mudo">· ${fmtPct.format(d.secoes.percentual)}% apurado</span></h4><ol class="painel-lista">${cs
+      return `<div class="pres2-col pres2-${rot === 'Brasil' ? 'br' : rot === 'Exterior' ? 'ext' : 'sc'}"><h4>${BANDEIRAS[rot] || ''} ${rot} <span class="mudo">· ${fmtPct.format(d.secoes.percentual)}% apurado</span></h4><ol class="painel-lista">${cs
         .map((c, i) => {
           const cor = corPartido(c.partido)
           return `<li style="${estiloCor(cor)}"><span class="pos">${i + 1}º</span>${foto(c, cor)}<div class="painel-info"><div><strong>${esc(c.nome)}</strong> ${pill(c.partido, cor)} ${c.eleito ? '<span class="tag eleito-tse"><b>✔ Eleito</b></span>' : ''}</div>
@@ -1599,9 +1603,11 @@ function renderPainel2026() {
       <div class="ext-info"><strong>${esc(p.nome)}</strong> <small class="mudo">${p.cds.length} ${p.cds.length === 1 ? 'cidade' : 'cidades'}</small>
         <div class="ext-st">${p.fase === 'votando' ? `Votando agora · fecha às 17h local (${hora(p.fecha)} em Brasília)` : p.fase === 'encerrada' ? 'Votação encerrada' : `Abre às 8h local (${hora(p.abre, true)} em Brasília)`}</div></div>
       <div class="ext-num">${resultado(p)}</div></li>`
-    return `<section class="cartao painel-ext"><h3>🌎 Exterior · onde a votação está acontecendo</h3>
+    const aberto = lerLocal('inicio:ext', '1') === '1'
+    return `<section class="cartao painel-ext ${aberto ? '' : 'recolhido'}"><div class="ext-topo"><h3>🌎 Exterior · onde a votação está acontecendo</h3>
+      <button type="button" class="botao secundario ext-botao" data-ext-toggle aria-expanded="${aberto}">${aberto ? 'Recolher ▴' : `Mostrar a lista (${paises.length} países) ▾`}</button></div>
       <p class="nota"><strong>${votando.length}</strong> ${votando.length === 1 ? 'país votando' : 'países votando'} agora · <strong>${encerrados.length}</strong> com a votação encerrada · ${antes.length} ainda não ${antes.length === 1 ? 'começou' : 'começaram'}. Em ordem de abertura das urnas: quem abre mais cedo vem primeiro. O brasileiro no exterior vota no horário local, das 8h às 17h do dia 25/10; a apuração só é divulgada pelo TSE depois das 17h de Brasília.</p>
-      <ul class="ext-lista">${[...paises].sort((x, y) => x.abre - y.abre || x.nome.localeCompare(y.nome, 'pt-BR')).map(linha).join('')}</ul></section>`
+      ${aberto ? `<ul class="ext-lista">${[...paises].sort((x, y) => x.abre - y.abre || x.nome.localeCompare(y.nome, 'pt-BR')).map(linha).join('')}</ul>` : ''}</section>`
   }
   const blocoCadeiras = (id, titulo) => {
     const d = D(id)
