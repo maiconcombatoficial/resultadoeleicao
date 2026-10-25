@@ -234,6 +234,7 @@ export async function buscar(aba, abr, turno, signal, mun = null) {
       c.situacao = c.projecao ? (c.projecao.forma === 'QP' ? 'Eleito por QP' : 'Eleito por média') : c.votos > 0 ? 'Suplente' : 'Não eleito'
     }
   }
+  if (DEMO && out.final && aba.tipo === 'maj' && aba.cargo === 1 && !mun) out.candidatos[0].eleito = true // demonstração: o TSE marca o eleito no fim
   marcarDefinicaoTSE(out)
   return out
 }
@@ -1663,6 +1664,24 @@ function renderPainel2026() {
     const onde = ufs.length === 1 && ufs[0] === 'zz' ? 'exterior (o TSE já publica os boletins das seções do exterior antes da totalização)' : 'Brasil e exterior'
     return `<p class="nota">📄 Boletins de urna lidos: <strong>${fmt.format(lidas)}</strong> de ${fmt.format(tot)} seções (${fmtPct.format(pctDe(lidas, tot))}%) · ${onde} · atualizado ${new Date(B.atualizado).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</p>`
   }
+  // destaque do presidente eleito: aparece sozinho quando o TSE marca o eleito no resultado do Brasil
+  const blocoEleito = () => {
+    const br = estado.pres2?.br
+    const cs = br?.candidatos?.filter((c) => c.valido) || []
+    const c = cs.find((x) => x.eleito)
+    if (!c) return ''
+    const rival = cs.find((x) => x !== c)
+    const cor = corPartido(c.partido)
+    const dif = rival ? c.votos - rival.votos : 0
+    return `<section class="cartao painel-eleito" style="${estiloCor(cor)}" aria-live="polite">
+      <p class="eleito-chapeu">🏆 Presidente eleito · 2º turno 2026</p>
+      <div class="eleito-corpo">${foto(c, cor)}
+        <div class="eleito-info"><h2>${esc(c.nome)}</h2><p>${pill(c.partido, cor)} <span class="tag eleito-tse"><b>✔ Eleito · conforme o TSE</b></span></p></div>
+        <div class="eleito-num"><strong>${fmtPct.format(c.percentual)}%</strong><small>dos votos válidos</small><small>${fmt.format(c.votos)} votos</small></div>
+      </div>
+      <p class="nota">${rival ? `${fmt.format(dif)} votos à frente de ${esc(rival.nome)} (${fmtPct.format(rival.percentual)}%). ` : ''}${br.final ? 'Totalização final do TSE.' : `${fmtPct.format(br.secoes.percentual)}% das seções totalizadas; o TSE já declarou o resultado e a apuração segue até o fim.`}</p>
+    </section>`
+  }
   // apuração de Presidente em cada um dos 27 estados, agrupados por região
   const blocoEstados = () => {
     const P = estado.pres2 || {}
@@ -1776,7 +1795,7 @@ function renderPainel2026() {
     </div><p class="nota">Para comparar dois candidatos (inclusive de cargos diferentes), abra a ficha de um deles e toque em <strong>Comparar com outro candidato</strong>.</p></section>`
   const card = cardPainel(D)
   // Início 2026: o destaque é o 2º turno de Presidente; os dados do 1º turno ficam nas abas de cada cargo
-  return blocoPresidente2() + blocoEstados() + blocoExterior() + meus + atalhos
+  return blocoEleito() + blocoPresidente2() + blocoEstados() + blocoExterior() + meus + atalhos
 }
 
 // card de compartilhar com o resumo: governador, senado e cadeiras por partido
