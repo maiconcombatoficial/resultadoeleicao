@@ -67,8 +67,9 @@ function urlMunicipios(ele) {
   return `${BASE}/${CICLO}/${ele}/config/mun-e${ele.padStart(6, '0')}-cm.json`
 }
 
+// Presidente: o TSE só publica a foto na pasta do Brasil (fotos/br), não na de cada UF nem na do exterior
 function urlFoto(aba, abr, sqcand, turno) {
-  return `${BASE}/${CICLO}/${codigoEleicao(aba, turno)}/fotos/${abr}/${sqcand}.jpeg`
+  return `${BASE}/${CICLO}/${codigoEleicao(aba, turno)}/fotos/${aba.cargo === 1 ? 'br' : abr}/${sqcand}.jpeg`
 }
 
 class NaoDivulgado extends Error {}
