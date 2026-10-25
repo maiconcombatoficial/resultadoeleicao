@@ -1423,3 +1423,19 @@ h1::before { content: "🗳️ "; }
 .painel-pres2 .painel-lista li { padding: 12px 6px; }
 .painel-pres2 .painel-num strong { font-size: 1.6rem; }
 .painel-pres2 .progresso { height: 12px; }
+
+/* Início: exterior (países onde a votação está acontecendo) */
+.ext-lista { list-style: none; margin: 6px 0; padding: 0; display: grid; gap: 4px; }
+.ext-pais { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 10px; background: var(--fundo); border: 1px solid var(--linha); }
+.ext-ponto { width: 10px; height: 10px; border-radius: 50%; background: #9aa5a0; }
+.ext-votando .ext-ponto { background: #1fb561; box-shadow: 0 0 0 4px rgb(31 181 97 / 25%); animation: pulso 2s infinite; }
+.ext-encerrada .ext-ponto { background: var(--primaria); }
+.ext-st { font-size: 0.82rem; color: var(--mudo); }
+.ext-votando .ext-st { color: var(--eleito); font-weight: 600; }
+.ext-num { text-align: right; font-size: 0.85rem; }
+.ext-res { display: grid; gap: 2px; justify-items: end; }
+.ext-res i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; background: var(--cor, #888); margin-right: 4px; }
+.ext-sub { margin: 12px 0 4px; font-size: 0.9rem; }
+.ext-antes { margin-top: 10px; }
+.ext-antes summary { cursor: pointer; font-weight: 600; color: var(--primaria); }
+@media (max-width: 560px) { .ext-pais { grid-template-columns: auto 1fr; } .ext-num { grid-column: 2; text-align: left; } .ext-res { justify-items: start; } }

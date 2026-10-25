@@ -14,6 +14,7 @@ import { configurarCampanha, renderCampanha, tratarCampanha, inputCampanha, subm
 import { $, BASE, CICLO, COR_VAR, DEMO, INTERVALO_MS, PREFIXO, ROTULO_ELEICAO, TURNO, UF, VERSAO, conteudo, ehMunicipal, ehProp, esc, esqueleto, fmt, fmtDec, fmtPct, gravarLocal, iniciais, lerJSON, lerLocal, nomeArquivo, num, pct, pctDe, semAcento, statusEl } from './nucleo.js'
 import { CARDS, baixarArquivo, baixarCSV, baixarExcel, botaoCard, carregarScript, compartilharCarrossel, gerarPDF, legendaShare, legendaVar, linhasBairroCard, listaComparada, totalCard, variacao } from './exportar.js'
 import { TELAO, abrirTelao, fecharTelao } from './telao.js'
+import { EXTERIOR, PUBLICACAO_TSE, faseVotacao, instante } from './exterior.js'
 import { PRO, abrirAnalises, arquivoPro, carregarLeaflet, carregarPro, definirChavePro, garantirEleicao26, montarMapaPro, renderPro } from './pro.js'
 import { lerFotoQR, renderApuracaoQR, tratarQR } from './qr.js'
 
@@ -1287,7 +1288,7 @@ async function carregarPainel(ctrl) {
   // 2º turno para Presidente (Brasil e SC), em qualquer visão do Início de 2026
   const abaPres = ABAS.find((a) => a.id === 'presidente')
   const pres2 = {}
-  await Promise.all(['br', UF].map(async (abr) => {
+  await Promise.all(['br', UF, 'zz'].map(async (abr) => {
     try {
       pres2[abr] = await buscar(abaPres, abr, 2, ctrl.signal)
     } catch (e) {
@@ -1296,6 +1297,8 @@ async function carregarPainel(ctrl) {
   }))
   if (ctrl.signal.aborted) return
   estado.pres2 = pres2
+  await Promise.all([carregarExterior(ctrl.signal).catch(() => {}), carregarBoletins().catch(() => {})])
+  if (ctrl.signal.aborted) return
   estado.favDados = new Map()
   let erros = 0
   for (const r of res) {
@@ -1314,6 +1317,37 @@ async function carregarPainel(ctrl) {
   statusEl.textContent = !ehAoVivo() ? `Resultado oficial · TSE ${anoAtual()}` : erros ? 'Erro ao atualizar' : estado.dados.final ? 'Apuração encerrada' : `Atualizado ${new Date().toLocaleTimeString('pt-BR')}`
   statusEl.className = erros && ehAoVivo() ? 'status erro' : 'status ok'
   if (estado.controlador === ctrl && !estado.dados.final && ehAoVivo()) agendar()
+}
+
+// 2º turno no exterior: resultado de cada cidade (zona do exterior) no TSE, só depois que ele começa a divulgar
+const EXT = { cidades: new Map() } // código da cidade → dados normalizados | null
+async function carregarExterior(signal) {
+  if (Date.now() < PUBLICACAO_TSE) return
+  const aba = ABAS.find((a) => a.id === 'presidente')
+  const pend = EXTERIOR.flatMap(([, , cs]) => cs).filter((cd) => !EXT.cidades.get(cd)?.final)
+  let i = 0
+  const trabalhador = async () => {
+    while (i < pend.length && !signal?.aborted) {
+      const cd = pend[i++]
+      try {
+        EXT.cidades.set(cd, await buscar(aba, 'zz', 2, signal, { cd: String(cd), nm: '' }))
+      } catch (e) {
+        if (e?.name === 'AbortError') throw e
+        if (!EXT.cidades.has(cd)) EXT.cidades.set(cd, null)
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: 8 }, trabalhador))
+}
+
+// boletins de urna do Brasil e do exterior já lidos pelo workflow (public/dados2026/pres2.json), se existir
+async function carregarBoletins() {
+  try {
+    const r = await fetch(`dados2026/pres2.json?t=${Math.floor(Date.now() / 60_000)}`)
+    estado.boletins = r.ok ? await r.json() : null
+  } catch {
+    estado.boletins = null
+  }
 }
 
 // eleitos (TSE) ou, enquanto não definido, os eleitos pela projeção, agrupados por partido
@@ -1487,12 +1521,13 @@ function renderPainel2026() {
   // 2º turno de Presidente: Brasil e SC lado a lado (o TSE publica a partir das 17h de Brasília do dia 25/10)
   const blocoPresidente2 = () => {
     const P = estado.pres2 || {}
-    const br = P.br, sc = P[UF]
-    if (!br && !sc) {
+    const apurado = (d) => (d && d.secoes.totalizadas > 0 ? d : null) // antes das 17h o TSE publica o arquivo zerado
+    const br = apurado(P.br), sc = apurado(P[UF]), zz = apurado(P.zz)
+    if (!br && !sc && !zz) {
       return `<section class="cartao painel-pres2"><div class="resumo-titulo"><h2><a href="?turno=2#presidente" class="link-aba">🗳️ Presidente · 2º turno</a></h2><span class="selo">${P.br === false ? 'Sem conexão' : 'Aguardando o TSE'}</span></div>
         <p class="nota">${P.br === false ? 'Não consegui consultar o TSE agora. Tentando de novo em instantes.' : 'O 2º turno é no domingo, 25 de outubro de 2026. A apuração aparece aqui assim que o TSE começar a divulgar (a partir das 17h de Brasília) e se atualiza sozinha.'}</p></section>`
     }
-    const ref = br || sc
+    const ref = br || sc || zz
     const lista = (d, rot) => {
       if (!d) return ''
       const cs = d.candidatos.filter((c) => c.valido).slice(0, 2)
@@ -1508,7 +1543,61 @@ function renderPainel2026() {
     return `<section class="cartao painel-pres2"><div class="resumo-titulo"><h2><a href="?turno=2#presidente" class="link-aba">🗳️ Presidente · 2º turno</a></h2><span class="selo ${ref.final ? 'final' : ''}">${ref.final ? 'Totalização final · TSE' : 'Em apuração'}</span></div>
       <div class="progresso"><div class="progresso-barra" style="width:${Math.min(100, ref.secoes.percentual)}%"></div></div>
       <p class="progresso-texto"><strong>${fmtPct.format(ref.secoes.percentual)}%</strong> das seções do ${br ? 'Brasil' : 'estado'} totalizadas${ref.atualizadoEm ? ` <span class="mudo">· dados do TSE de ${esc(ref.atualizadoEm)}</span>` : ''}</p>
-      <div class="pres2">${lista(br, 'Brasil')}${lista(sc, 'Santa Catarina')}</div></section>`
+      <div class="pres2">${lista(br, 'Brasil')}${lista(sc, 'Santa Catarina')}${lista(zz, 'Exterior')}</div>${linhaBoletins()}</section>`
+  }
+  // linha com o andamento da leitura dos boletins de urna (Brasil e exterior)
+  const linhaBoletins = () => {
+    const B = estado.boletins
+    if (!B?.br?.s?.[1]) return ''
+    const [tot, lidas] = B.br.s
+    return `<p class="nota">📄 Boletins de urna lidos: <strong>${fmt.format(lidas)}</strong> de ${fmt.format(tot)} seções (${fmtPct.format(pctDe(lidas, tot))}%) · Brasil e exterior · atualizado ${new Date(B.atualizado).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</p>`
+  }
+  // países onde a votação já está acontecendo (o brasileiro no exterior vota no horário local, 8h às 17h)
+  const blocoExterior = () => {
+    const agora = Date.now()
+    const grupos = new Map()
+    for (const [nome, tz, cds] of EXTERIOR) {
+      const base = nome.replace(/ \(.*\)$/, '')
+      const g = grupos.get(base) || { nome: base, fases: [], tzs: [], cds: [] }
+      g.fases.push(faseVotacao(tz, agora))
+      g.tzs.push(tz)
+      g.cds.push(...cds)
+      grupos.set(base, g)
+    }
+    const P = estado.pres2 || {}
+    const refCand = (P.zz || P.br)?.candidatos?.filter((c) => c.valido).slice(0, 2) || []
+    const hora = (ms, comDia) => new Date(ms).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', ...(comDia ? { weekday: 'short', day: '2-digit', month: '2-digit' } : {}), hour: '2-digit', minute: '2-digit' })
+    const paises = [...grupos.values()].map((g) => {
+      const fase = g.fases.includes('votando') ? 'votando' : g.fases.every((f) => f === 'encerrada') ? 'encerrada' : g.fases.every((f) => f === 'antes') ? 'antes' : 'votando'
+      const fecha = Math.min(...g.tzs.map((tz) => instante(tz, 17, agora) ?? Infinity))
+      const abre = Math.min(...g.tzs.map((tz) => instante(tz, 8, agora) ?? Infinity))
+      const ds = g.cds.map((cd) => EXT.cidades.get(cd)).filter((d) => d && d.secoes.totalizadas > 0)
+      const votos = new Map()
+      let tot = 0, tots = 0, ts = 0
+      for (const d of ds) {
+        tots += d.secoes.totalizadas
+        for (const c of d.candidatos) if (c.valido) (votos.set(c.numero, (votos.get(c.numero) || 0) + c.votos), (tot += c.votos))
+      }
+      for (const cd of g.cds) ts += EXT.cidades.get(cd)?.secoes?.total || 0
+      return { ...g, fase, fecha, abre, votos, tot, tots, ts }
+    })
+    const por = (f) => paises.filter((p) => p.fase === f)
+    const votando = por('votando').sort((a, b) => a.fecha - b.fecha || a.nome.localeCompare(b.nome, 'pt-BR'))
+    const encerrados = por('encerrada').sort((a, b) => b.tot - a.tot || a.nome.localeCompare(b.nome, 'pt-BR'))
+    const antes = por('antes').sort((a, b) => a.abre - b.abre || a.nome.localeCompare(b.nome, 'pt-BR'))
+    const resultado = (p) => {
+      if (!p.tot || !refCand.length) return p.fase === 'encerrada' ? '<span class="mudo">apuração aguardando o TSE</span>' : ''
+      return `<span class="ext-res">${refCand.map((c) => `<span style="${estiloCor(corPartido(c.partido))}"><i></i>${esc(c.nome.split(' ').slice(-1)[0])} <strong>${fmtPct.format(pctDe(p.votos.get(c.numero) || 0, p.tot))}%</strong></span>`).join(' ')} <small class="mudo">${fmt.format(p.tots)} de ${fmt.format(p.ts)} seções</small></span>`
+    }
+    const linha = (p) => `<li class="ext-pais ext-${p.fase}"><span class="ext-ponto" aria-hidden="true"></span>
+      <div class="ext-info"><strong>${esc(p.nome)}</strong> <small class="mudo">${p.cds.length} ${p.cds.length === 1 ? 'cidade' : 'cidades'}</small>
+        <div class="ext-st">${p.fase === 'votando' ? `Votando agora · fecha às 17h local (${hora(p.fecha)} em Brasília)` : p.fase === 'encerrada' ? 'Votação encerrada' : `Abre às 8h local (${hora(p.abre, true)} em Brasília)`}</div></div>
+      <div class="ext-num">${resultado(p)}</div></li>`
+    return `<section class="cartao painel-ext"><h3>🌎 Exterior · onde a votação está acontecendo</h3>
+      <p class="nota"><strong>${votando.length}</strong> ${votando.length === 1 ? 'país votando' : 'países votando'} agora · <strong>${encerrados.length}</strong> com a votação encerrada · ${antes.length} ainda não ${antes.length === 1 ? 'começou' : 'começaram'}. O brasileiro no exterior vota no horário local, das 8h às 17h do dia 25/10; a apuração só é divulgada pelo TSE depois das 17h de Brasília.</p>
+      ${votando.length ? `<ul class="ext-lista">${votando.map(linha).join('')}</ul>` : ''}
+      ${encerrados.length ? `<h4 class="ext-sub">Votação encerrada</h4><ul class="ext-lista">${encerrados.map(linha).join('')}</ul>` : ''}
+      ${antes.length ? `<details class="ext-antes"><summary>Ainda não começaram (${antes.length})</summary><ul class="ext-lista">${antes.map(linha).join('')}</ul></details>` : ''}</section>`
   }
   const blocoCadeiras = (id, titulo) => {
     const d = D(id)
@@ -1532,7 +1621,7 @@ function renderPainel2026() {
     </div><p class="nota">Para comparar dois candidatos (inclusive de cargos diferentes), abra a ficha de um deles e toque em <strong>Comparar com outro candidato</strong>.</p></section>`
   const card = cardPainel(D)
   // Início 2026: o destaque é o 2º turno de Presidente; os dados do 1º turno ficam nas abas de cada cargo
-  return blocoPresidente2() + meus + atalhos
+  return blocoPresidente2() + blocoExterior() + meus + atalhos
 }
 
 // card de compartilhar com o resumo: governador, senado e cadeiras por partido
