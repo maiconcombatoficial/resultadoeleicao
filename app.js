@@ -1530,7 +1530,7 @@ function renderPainel2026() {
     // bandeiras do Brasil e de Santa Catarina e um globo para o exterior (SVG simples, sem arquivos externos)
     const BANDEIRAS = {
       Brasil: '<svg class="bandeira" viewBox="0 0 28 20" role="img" aria-label="Bandeira do Brasil"><rect width="28" height="20" rx="2" fill="#009c3b"/><path d="M14 2.2 25.2 10 14 17.8 2.8 10z" fill="#ffdf00"/><circle cx="14" cy="10" r="4.6" fill="#002776"/><path d="M9.6 9.1c3.1-.9 6.2-.5 8.9 1.5" stroke="#fff" stroke-width=".9" fill="none"/></svg>',
-      'Santa Catarina': '<svg class="bandeira" viewBox="0 0 28 20" role="img" aria-label="Bandeira de Santa Catarina"><rect width="28" height="20" rx="2" fill="#fff"/><rect width="28" height="6.4" fill="#d52b1e"/><rect y="13.6" width="28" height="6.4" fill="#d52b1e"/><path d="M10.3 5.8h7.4v5.2c0 2.6-3.7 4.2-3.7 4.2s-3.7-1.6-3.7-4.2z" fill="#fff" stroke="#c9a227" stroke-width=".9"/><path d="M11.4 7h5.2v3.4c0 1.7-2.6 2.9-2.6 2.9s-2.6-1.2-2.6-2.9z" fill="#1f5fa8"/><path d="m14 7.9.5 1.1 1.2.1-.9.8.3 1.2-1.1-.6-1.1.6.3-1.2-.9-.8 1.2-.1z" fill="#ffdf00"/></svg>',
+      'Santa Catarina': '<img class="bandeira" src="img/bandeira-sc.png" width="34" height="25" alt="Bandeira de Santa Catarina">',
       Exterior: '<svg class="bandeira bandeira-globo" viewBox="0 0 28 20" role="img" aria-label="Exterior"><rect width="28" height="20" rx="2" fill="#0a5ea8"/><circle cx="14" cy="10" r="7" fill="none" stroke="#fff" stroke-width="1.2"/><ellipse cx="14" cy="10" rx="3" ry="7" fill="none" stroke="#fff" stroke-width="1"/><path d="M7 10h14M8.2 6.6h11.6M8.2 13.4h11.6" stroke="#fff" stroke-width="1" fill="none"/></svg>',
     }
     const lista = (d, rot) => {
