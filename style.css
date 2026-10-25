@@ -1443,3 +1443,13 @@ h1::before { content: "🗳️ "; }
 /* Início: bandeiras no painel do 2º turno */
 .pres2-col h4 { display: flex; align-items: center; gap: 8px; }
 .bandeira { width: 34px; height: 24px; flex: none; border-radius: 3px; box-shadow: 0 0 0 1px rgb(0 0 0 / 20%), 0 1px 3px rgb(0 0 0 / 25%); }
+
+/* Início · 2º turno: cada coluna (bandeira, título e candidatos) centralizada */
+.painel-pres2 .pres2-col { text-align: center; }
+.painel-pres2 .pres2-col h4 { justify-content: center; flex-wrap: wrap; }
+.painel-pres2 .pres2-col .painel-lista li { flex-direction: column; justify-content: center; text-align: center; gap: 6px; cursor: default; }
+.painel-pres2 .pres2-col .pos { width: auto; }
+.painel-pres2 .pres2-col .painel-info { width: 100%; justify-items: center; flex: none; }
+.painel-pres2 .pres2-col .painel-num { text-align: center; }
+.painel-pres2 .pres2-col .painel-info > div:first-child { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; }
+.painel-pres2 .pres2-col .barra { width: 100%; max-width: 240px; }
