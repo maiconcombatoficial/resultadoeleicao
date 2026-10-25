@@ -1289,18 +1289,30 @@ async function carregarPainel(ctrl) {
     if (aba?.cargo) grupos.set(`${f.aba}|${f.abr}`, { aba, abr: f.abr })
   }
   const res = await Promise.allSettled([...grupos.entries()].map(async ([k, g]) => [k, await buscar(g.aba, g.abr, TURNO, ctrl.signal)]))
-  // 2º turno para Presidente (Brasil e SC), em qualquer visão do Início de 2026
+  // 2º turno para Presidente (Brasil, SC e exterior a cada atualização; os outros estados a cada 2 min, para
+  // não sobrecarregar o TSE). Se o TSE falhar, fica com os últimos dados bons (também guardados no navegador)
   const abaPres = ABAS.find((a) => a.id === 'presidente')
-  const pres2 = {}
-  await Promise.all(['br', 'zz', ...ESTADOS.map(([uf]) => uf)].map(async (abr) => {
+  const ant = estado.pres2 || (DEMO ? null : lerJSON(CHAVE_PRES2, null)?.dados) || {}
+  const pres2 = { ...ant }
+  const comUFs = !estado.pres2UfsEm || Date.now() - estado.pres2UfsEm > 120_000
+  const abrs = ['br', 'zz', UF, ...(comUFs ? ESTADOS.map(([uf]) => uf).filter((uf) => uf !== UF) : [])]
+  let falhas = 0
+  await Promise.all(abrs.map(async (abr) => {
     try {
       pres2[abr] = await buscar(abaPres, abr, 2, ctrl.signal)
     } catch (e) {
-      pres2[abr] = e instanceof NaoDivulgado ? null : false // null = ainda não divulgado · false = erro
+      if (e instanceof NaoDivulgado) pres2[abr] = ant[abr] || null // null = ainda não divulgado
+      else if (e?.name !== 'AbortError') (falhas++, (pres2[abr] = ant[abr] || false)) // false = erro, sem dado anterior
     }
   }))
   if (ctrl.signal.aborted) return
+  if (comUFs && falhas < abrs.length) estado.pres2UfsEm = Date.now()
   estado.pres2 = pres2
+  estado.pres2Falha = falhas >= 3 ? new Date() : null // o TSE não respondeu: o painel avisa que mostra os últimos dados
+  if (!DEMO && falhas < abrs.length) {
+    const bons = Object.fromEntries(Object.entries(pres2).filter(([, d]) => d))
+    if (Object.keys(bons).length) gravarLocal(CHAVE_PRES2, JSON.stringify({ em: Date.now(), dados: bons }))
+  }
   await Promise.all([carregarExterior(ctrl.signal).catch(() => {}), carregarBoletins().catch(() => {})])
   if (ctrl.signal.aborted) return
   estado.favDados = new Map()
@@ -1322,6 +1334,8 @@ async function carregarPainel(ctrl) {
   statusEl.className = erros && ehAoVivo() ? 'status erro' : 'status ok'
   if (estado.controlador === ctrl && !estado.dados.final && ehAoVivo()) agendar()
 }
+
+const CHAVE_PRES2 = 'inicio:pres2' // últimos dados bons do 2º turno de Presidente (para quando o TSE não responde)
 
 // os 27 estados (sigla do TSE, nome, região), para acompanhar a apuração de Presidente em cada um
 const ESTADOS = [
@@ -1357,9 +1371,10 @@ async function carregarExterior(signal) {
 async function carregarBoletins() {
   try {
     const r = await fetch(`dados2026/pres2.json?t=${Math.floor(Date.now() / 60_000)}`)
-    estado.boletins = r.ok ? await r.json() : null
+    if (r.ok) estado.boletins = await r.json()
+    else if (r.status === 404) estado.boletins = null
   } catch {
-    estado.boletins = null
+    /* sem conexão: fica com os boletins já carregados */
   }
 }
 
@@ -1552,6 +1567,9 @@ function renderPainel2026() {
         <p class="nota">${P.br === false ? 'Não consegui consultar o TSE agora. Tentando de novo em instantes.' : 'O 2º turno é no domingo, 25 de outubro de 2026. A apuração aparece aqui assim que o TSE começar a divulgar (a partir das 17h de Brasília) e se atualiza sozinha.'}</p></section>`
     }
     const ref = br || sc || zz
+    const falha = estado.pres2Falha
+      ? `<p class="nota aviso-falha">⚠️ O TSE não respondeu agora (${estado.pres2Falha.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}). Mostrando os últimos dados recebidos; tentando de novo em instantes.</p>`
+      : ''
     // bandeiras do Brasil e de Santa Catarina e um globo para o exterior (SVG simples, sem arquivos externos)
     const BANDEIRAS = {
       Brasil: '<svg class="bandeira" viewBox="0 0 28 20" role="img" aria-label="Bandeira do Brasil"><rect width="28" height="20" rx="2" fill="#009c3b"/><path d="M14 2.2 25.2 10 14 17.8 2.8 10z" fill="#ffdf00"/><circle cx="14" cy="10" r="4.6" fill="#002776"/><path d="M9.6 9.1c3.1-.9 6.2-.5 8.9 1.5" stroke="#fff" stroke-width=".9" fill="none"/></svg>',
@@ -1578,7 +1596,7 @@ function renderPainel2026() {
         .join('')}</ol></div>`
     }
     return `<section class="cartao painel-pres2"><div class="resumo-titulo"><h2><a href="?turno=2#presidente" class="link-aba">🗳️ Presidente · 2º turno</a></h2><span class="selo ${ref.final ? 'final' : ''}">${ref.final ? 'Totalização final · TSE' : ref.secoes.totalizadas ? 'Em apuração' : 'Aguardando o TSE'}</span></div>
-      ${ref.secoes.totalizadas ? '' : '<p class="nota">A apuração começa a ser divulgada pelo TSE a partir das 17h de Brasília de domingo, 25/10, e se atualiza aqui sozinha.</p>'}
+      ${falha}${ref.secoes.totalizadas ? '' : '<p class="nota">A apuração começa a ser divulgada pelo TSE a partir das 17h de Brasília de domingo, 25/10, e se atualiza aqui sozinha.</p>'}
       <div class="progresso"><div class="progresso-barra" style="width:${Math.min(100, ref.secoes.percentual)}%"></div></div>
       <p class="progresso-texto"><strong>${fmtPct.format(ref.secoes.percentual)}%</strong> das seções do ${br ? 'Brasil' : 'estado'} totalizadas${ref.atualizadoEm ? ` <span class="mudo">· dados do TSE de ${esc(ref.atualizadoEm)}</span>` : ''}</p>
       <div class="pres2">${lista(br, 'Brasil')}${lista(sc, 'Santa Catarina')}${lista(zz, 'Exterior')}</div>${linhaBoletins()}</section>`
