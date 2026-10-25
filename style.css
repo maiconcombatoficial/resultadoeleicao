@@ -1539,3 +1539,21 @@ h1::before { content: "🗳️ "; }
 .mapa-leg li { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .mapa-leg i { width: 16px; height: 16px; border-radius: 4px; flex: none; }
 .mapa-leg .mapa-conta { color: var(--mudo); font-size: 0.9rem; }
+
+/* Mapa do 2º turno: estado escolhido por toque/clique e o quadro com os números dele */
+.mapa-br path { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.mapa-br path:focus { outline: none; }
+.mapa-br path.sel, .mapa-br path:focus-visible { stroke: var(--texto); stroke-width: 2.5; }
+.mapa-info { position: relative; background: var(--fundo); border: 1px solid var(--linha); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+.mapa-info h4 { margin: 0 28px 8px 0; font-size: 1.05rem; }
+.mapa-info-vazio { margin: 0; color: var(--mudo); font-size: 0.9rem; }
+.mapa-info-x { position: absolute; top: 6px; right: 6px; width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent; color: var(--mudo); font-size: 1.4rem; line-height: 1; cursor: pointer; }
+.mapa-info-cands { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.mapa-info-cands li { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; padding: 6px; border-radius: 10px; border: 1px solid transparent; }
+.mapa-info-cands li.lider { background: linear-gradient(160deg, var(--ouro-1), var(--ouro-2)); border-color: var(--ouro-borda); }
+.mapa-info-cands .foto { width: 40px; height: 40px; font-size: 0.8rem; }
+.mapa-info-cands .barra { margin-top: 4px; }
+.mapa-info-num { display: grid; text-align: right; }
+.mapa-info-num strong { font-size: 1.2rem; }
+.mapa-info-num small { color: var(--mudo); }
+.mapa-info .nota { margin: 8px 0 0; }

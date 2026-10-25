@@ -1402,15 +1402,45 @@ export function mapaPres2(P = estado.pres2 || {}) {
   const titulo = (e) => `${e.nome}: ${e.p ? ref.map((c, i) => `${c.nome} ${fmtPct.format(e.p[i])}%`).join(' × ') + ` · ${fmtPct.format(e.d.secoes.percentual)}% apurado` : 'sem votos apurados'}`
   const pequenos = new Set(['df', 'se', 'al', 'pb', 'rn', 'es', 'rj'])
   const svg = `<svg class="mapa-br" viewBox="${VIEWBOX_BR}" role="img" aria-label="Mapa do Brasil com o candidato à frente em cada estado">
-    ${estados.map((e) => `<path d="${CONTORNO_UF[e.uf]}" fill="${cor(e)}" data-uf="${e.uf}"><title>${esc(titulo(e))}</title></path>`).join('')}
+    ${estados.map((e) => `<path d="${CONTORNO_UF[e.uf]}" fill="${cor(e)}" data-mapa-uf="${e.uf}" class="${estado.mapaUF === e.uf ? 'sel' : ''}" tabindex="0" role="button" aria-label="${esc(titulo(e))}"><title>${esc(titulo(e))}</title></path>`).join('')}
     ${estados.map((e) => { const [x, y] = CENTRO_UF[e.uf]; return `<text x="${x}" y="${y}" class="${pequenos.has(e.uf) ? 'mapa-uf-p' : ''} ${e.lider && e.forca === 100 ? 'mapa-uf-claro' : ''}">${e.uf.toUpperCase()}</text>` }).join('')}
   </svg>`
   const leg = ref.map((c) => `<li style="${estiloCor(corPartido(c.partido))}"><i style="background:${corPartido(c.partido)}"></i><strong>${esc(c.nome)}</strong> ${pill(c.partido, corPartido(c.partido))} <span class="mapa-conta">à frente em <b>${conta.get(String(c.numero))}</b> ${conta.get(String(c.numero)) === 1 ? 'estado' : 'estados'}</span></li>`).join('')
   const sem = estados.filter((e) => !e.lider).length
-  return `<div class="mapa-pres2">${svg}<div class="mapa-leg"><ul>${leg}</ul>
+  return `<div class="mapa-pres2">${svg}<div class="mapa-leg"><div class="mapa-info" data-mapa-info aria-live="polite">${infoUF(estado.mapaUF, P)}</div><ul>${leg}</ul>
     ${sem ? `<p class="nota">${sem} ${sem === 1 ? 'estado' : 'estados'} em cinza: ainda sem votos apurados${estados.some((e) => e.p && !e.lider) ? ' ou empate' : ''}.</p>` : ''}
-    <p class="nota">Cor mais forte = vantagem maior (até 3 pontos, de 3 a 10, acima de 10). Toque ou passe o mouse num estado para ver os números.</p></div></div>`
+    <p class="nota">Cor mais forte = vantagem maior (até 3 pontos, de 3 a 10, acima de 10). Toque num estado para ver os números.</p></div></div>`
 }
+
+// quadro com os números do estado tocado no mapa (no celular não existe "passar o mouse")
+function infoUF(uf, P = estado.pres2 || {}) {
+  const nome = ESTADOS.find(([u]) => u === uf)?.[1]
+  if (!nome) return '<p class="mapa-info-vazio">👆 Toque num estado do mapa para ver os votos de cada candidato.</p>'
+  const d = P[uf]
+  const fechar = '<button type="button" class="mapa-info-x" data-mapa-fechar aria-label="Fechar">×</button>'
+  if (!d || !(d.secoes?.totalizadas > 0)) return `${fechar}<h4>${esc(nome)}</h4><p class="nota">Ainda sem votos apurados pelo TSE.</p>`
+  const cs = d.candidatos.filter((c) => c.valido).slice(0, 2).sort((a, b) => b.votos - a.votos)
+  const dif = cs.length > 1 ? cs[0].votos - cs[1].votos : 0
+  return `${fechar}<h4>${esc(nome)} <small class="mudo">· ${d.final ? 'totalização final' : `${fmtPct.format(d.secoes.percentual)}% apurado`}</small></h4>
+    <ul class="mapa-info-cands">${cs.map((c, i) => `<li style="${estiloCor(corPartido(c.partido))}" class="${i === 0 && dif > 0 ? 'lider' : ''}">${foto(c, corPartido(c.partido))}<div><strong>${esc(c.nome)}</strong> ${pill(c.partido, corPartido(c.partido))}<div class="barra fina"><span style="width:${c.percentual}%"></span></div></div><div class="mapa-info-num"><strong>${fmtPct.format(c.percentual)}%</strong><small>${fmt.format(c.votos)} votos</small></div></li>`).join('')}</ul>
+    ${dif > 0 ? `<p class="nota">${esc(cs[0].nome)} está ${fmt.format(dif)} votos à frente neste estado.</p>` : ''}`
+}
+function escolherUF(uf) {
+  estado.mapaUF = estado.mapaUF === uf ? null : uf
+  for (const box of document.querySelectorAll('[data-mapa-info]')) box.innerHTML = infoUF(estado.mapaUF)
+  for (const el of document.querySelectorAll('[data-mapa-uf]')) el.classList.toggle('sel', el.dataset.mapaUf === estado.mapaUF)
+  // no celular o quadro fica abaixo do mapa: rola até ele
+  if (estado.mapaUF && matchMedia('(max-width: 700px)').matches) document.querySelector('[data-mapa-info]')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+}
+document.addEventListener('click', (ev) => {
+  const uf = ev.target.closest?.('[data-mapa-uf]')
+  if (uf) return escolherUF(uf.dataset.mapaUf)
+  if (ev.target.closest?.('[data-mapa-fechar]')) escolherUF(estado.mapaUF)
+})
+document.addEventListener('keydown', (ev) => {
+  const uf = (ev.key === 'Enter' || ev.key === ' ') && ev.target.closest?.('[data-mapa-uf]')
+  if (uf) (ev.preventDefault(), escolherUF(uf.dataset.mapaUf))
+})
 
 // 2º turno no exterior: resultado de cada cidade (zona do exterior) no TSE, só depois que ele começa a divulgar
 const EXT = { cidades: new Map() } // código da cidade → dados normalizados | null
