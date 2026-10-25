@@ -1363,6 +1363,18 @@ async function carregarBoletins() {
   }
 }
 
+// parcial pelos boletins de urna (pres2.json) com os candidatos de um resultado do TSE: votos de cada número
+// em r.v; usada enquanto o TSE ainda não totalizou aquele lugar
+export function parcialBoletins(cands, r) {
+  const validos = Object.values(r?.v || {}).reduce((a, q) => a + q, 0)
+  return cands
+    .map((c) => {
+      const votos = r?.v?.[String(c.numero)] || 0
+      return { ...c, votos, percentual: validos ? (100 * votos) / validos : 0 }
+    })
+    .sort((a, b) => b.votos - a.votos)
+}
+
 // eleitos (TSE) ou, enquanto não definido, os eleitos pela projeção, agrupados por partido
 export function cadeirasPorPartido(d) {
   const eleitos = d.candidatos.filter((c) => c.eleito || (!d.tseDefinido && c.projecao))
@@ -1546,11 +1558,18 @@ function renderPainel2026() {
       'Santa Catarina': '<img class="bandeira" src="img/bandeira-sc.png" width="34" height="25" alt="Bandeira de Santa Catarina">',
       Exterior: '<svg class="bandeira bandeira-globo" viewBox="0 0 28 20" role="img" aria-label="Exterior"><rect width="28" height="20" rx="2" fill="#0a5ea8"/><circle cx="14" cy="10" r="7" fill="none" stroke="#fff" stroke-width="1.2"/><ellipse cx="14" cy="10" rx="3" ry="7" fill="none" stroke="#fff" stroke-width="1"/><path d="M7 10h14M8.2 6.6h11.6M8.2 13.4h11.6" stroke="#fff" stroke-width="1" fill="none"/></svg>',
     }
+    // exterior antes da totalização do TSE: parcial pelos boletins de urna já publicados
+    const buZZ = estado.boletins?.uf?.zz
     const lista = (d, rot) => {
       if (!d) return ''
-      const cs = d.candidatos.filter((c) => c.valido).slice(0, 2)
+      let cs = d.candidatos.filter((c) => c.valido).slice(0, 2)
+      const porBU = rot === 'Exterior' && !d.secoes.totalizadas && buZZ?.s?.[1] > 0
+      if (porBU) cs = parcialBoletins(cs, buZZ)
       const max = Math.max(1, ...cs.map((c) => c.percentual))
-      return `<div class="pres2-col pres2-${rot === 'Brasil' ? 'br' : rot === 'Exterior' ? 'ext' : 'sc'}"><h4>${BANDEIRAS[rot] || ''} ${rot} <span class="mudo">· ${fmtPct.format(d.secoes.percentual)}% apurado</span></h4><ol class="painel-lista">${cs
+      const andamento = porBU
+        ? `<span class="mudo">· 📄 parcial pelos boletins de urna: ${fmt.format(buZZ.s[1])} de ${fmt.format(buZZ.s[0])} seções (${fmtPct.format(pctDe(buZZ.s[1], buZZ.s[0]))}%)</span>`
+        : `<span class="mudo">· ${fmtPct.format(d.secoes.percentual)}% apurado</span>`
+      return `<div class="pres2-col pres2-${rot === 'Brasil' ? 'br' : rot === 'Exterior' ? 'ext' : 'sc'}"><h4>${BANDEIRAS[rot] || ''} ${rot} ${andamento}</h4><ol class="painel-lista">${cs
         .map((c, i) => {
           const cor = corPartido(c.partido)
           return `<li style="${estiloCor(cor)}"><span class="pos">${i + 1}º</span>${foto(c, cor)}<div class="painel-info"><div><strong>${esc(c.nome)}</strong> ${pill(c.partido, cor)} ${c.eleito ? '<span class="tag eleito-tse"><b>✔ Eleito</b></span>' : ''}</div>
@@ -1569,7 +1588,9 @@ function renderPainel2026() {
     const B = estado.boletins
     if (!B?.br?.s?.[1]) return ''
     const [tot, lidas] = B.br.s
-    return `<p class="nota">📄 Boletins de urna lidos: <strong>${fmt.format(lidas)}</strong> de ${fmt.format(tot)} seções (${fmtPct.format(pctDe(lidas, tot))}%) · Brasil e exterior · atualizado ${new Date(B.atualizado).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</p>`
+    const ufs = Object.keys(B.uf || {})
+    const onde = ufs.length === 1 && ufs[0] === 'zz' ? 'exterior (o TSE já publica os boletins das seções do exterior antes da totalização)' : 'Brasil e exterior'
+    return `<p class="nota">📄 Boletins de urna lidos: <strong>${fmt.format(lidas)}</strong> de ${fmt.format(tot)} seções (${fmtPct.format(pctDe(lidas, tot))}%) · ${onde} · atualizado ${new Date(B.atualizado).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</p>`
   }
   // apuração de Presidente em cada um dos 27 estados, agrupados por região
   const blocoEstados = () => {
@@ -1621,13 +1642,24 @@ function renderPainel2026() {
       const abre = Math.min(...g.tzs.map((tz) => instante(tz, 8, agora) ?? Infinity))
       const ds = g.cds.map((cd) => EXT.cidades.get(cd)).filter((d) => d && d.secoes.totalizadas > 0)
       const votos = new Map()
-      let tot = 0, tots = 0, ts = 0
+      let tot = 0, tots = 0, ts = 0, porBU = false
       for (const d of ds) {
         tots += d.secoes.totalizadas
-        for (const c of d.candidatos) if (c.valido) (votos.set(c.numero, (votos.get(c.numero) || 0) + c.votos), (tot += c.votos))
+        for (const c of d.candidatos) if (c.valido) (votos.set(String(c.numero), (votos.get(String(c.numero)) || 0) + c.votos), (tot += c.votos))
       }
       for (const cd of g.cds) ts += EXT.cidades.get(cd)?.secoes?.total || 0
-      return { ...g, fase, fecha, abre, votos, tot, tots, ts }
+      // sem totalização do TSE no país: soma os boletins de urna já publicados das cidades dele
+      const buMun = estado.boletins?.exterior?.mun || {}
+      if (!tot) {
+        ts = 0
+        for (const cd of g.cds) {
+          const m = buMun[String(cd)]
+          if (!m) continue
+          ts += m.s[0], tots += m.s[1], porBU = true
+          for (const [n, q] of Object.entries(m.v)) (votos.set(n, (votos.get(n) || 0) + q), (tot += q))
+        }
+      }
+      return { ...g, fase, fecha, abre, votos, tot, tots, ts, porBU }
     })
     const por = (f) => paises.filter((p) => p.fase === f)
     const votando = por('votando').sort((a, b) => a.fecha - b.fecha || a.nome.localeCompare(b.nome, 'pt-BR'))
@@ -1635,7 +1667,7 @@ function renderPainel2026() {
     const antes = por('antes').sort((a, b) => a.abre - b.abre || a.nome.localeCompare(b.nome, 'pt-BR'))
     const resultado = (p) => {
       if (!p.tot || !refCand.length) return p.fase === 'encerrada' ? '<span class="mudo">apuração aguardando o TSE</span>' : ''
-      return `<span class="ext-res">${refCand.map((c) => `<span style="${estiloCor(corPartido(c.partido))}"><i></i>${esc(c.nome.split(' ').slice(-1)[0])} <strong>${fmtPct.format(pctDe(p.votos.get(c.numero) || 0, p.tot))}%</strong></span>`).join(' ')} <small class="mudo">${fmt.format(p.tots)} de ${fmt.format(p.ts)} seções</small></span>`
+      return `<span class="ext-res">${refCand.map((c) => `<span style="${estiloCor(corPartido(c.partido))}"><i></i>${esc(c.nome.split(' ').slice(-1)[0])} <strong>${fmtPct.format(pctDe(p.votos.get(String(c.numero)) || 0, p.tot))}%</strong></span>`).join(' ')} <small class="mudo">${p.porBU ? '📄 boletins de urna · ' : ''}${fmt.format(p.tots)} ${p.porBU ? '' : `de ${fmt.format(p.ts)} `}seções</small></span>`
     }
     const linha = (p) => `<li class="ext-pais ext-${p.fase}"><span class="ext-ponto" aria-hidden="true"></span>
       <div class="ext-info"><strong>${esc(p.nome)}</strong> <small class="mudo">${p.cds.length} ${p.cds.length === 1 ? 'cidade' : 'cidades'}</small>

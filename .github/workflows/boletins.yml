@@ -18,6 +18,7 @@ on:
         required: true
         default: '2'
   schedule:
+    - cron: '*/15 17-19 25 10 *'  # 25/10, 14h às 17h de Brasília: só o exterior (o TSE já publica esses boletins)
     - cron: '*/20 20-23 25 10 *'  # 25/10, a cada 20 min a partir das 17h de Brasília (o TSE só divulga depois)
     - cron: '*/20 0-14 26 10 *'   # madrugada e manhã de 26/10 (até 11h de Brasília)
     - cron: '0 15,18,21 26 10 *'  # tarde e noite de 26/10, para fechar a totalização
@@ -97,7 +98,10 @@ jobs:
           key: boletins-brasil-${{ github.run_id }}
           restore-keys: boletins-brasil-
       - name: Boletins de Presidente de todo o Brasil e do exterior
-        run: python3 scripts/gerar_pres.py --turno "$TURNO" --workers 96 --max-min 100
+        # antes das 17h de Brasília (20h UTC) de 25/10 só o exterior tem boletins: lê só a ZZ, que é rápido
+        run: |
+          if [ "$(date -u +%d%H)" \< "2520" ] && [ "$(date -u +%m)" = "10" ]; then UFS="--ufs zz"; else UFS=""; fi
+          python3 scripts/gerar_pres.py --turno "$TURNO" --workers 96 --max-min 100 $UFS
       - name: Publicar
         run: |
           git config user.name "github-actions[bot]"
