@@ -3118,8 +3118,9 @@ function renderMajoritario(d) {
   // 2º turno: quem está na frente (com votos, sem empate) fica dourado e em primeiro (em cima no celular, à esquerda no computador)
   const liderLista = (i) => pres2T && i === 0 && lista[0]?.votos > 0 && lista[0].votos > (lista[1]?.votos || 0)
   if (pres2T) carregarSerie2T().then((novo) => novo && estado.aba.id === 'presidente' && renderizar())
+  // os cards dos candidatos vêm antes: o gráfico da evolução e o mapa ficam abaixo deles
   const mapa = pres2T ? `<section class="cartao"><h3>📈 Evolução dos votos · ${d.abrangencia === 'br' ? 'Brasil' : 'Santa Catarina'}</h3>${graficoSerie2T(d)}</section>${mapaAbaPres()}` : ''
-  return `${mapa}<section class="cartao">
+  return `<section class="cartao">
       <h3>Divisão dos votos válidos</h3>
       ${barraEmpilhada(fatias, { marco50: estado.aba.cargo !== 5 && turnoAtual() === 1, total: d.votos.validos })}
       ${nota}
@@ -3152,7 +3153,7 @@ function renderMajoritario(d) {
       </li>`
       })
       .join('')}
-  </ol></section>`
+  </ol></section>${mapa}`
 }
 
 // Soma por partido/federação; a cor do grupo é a do seu partido mais votado.
