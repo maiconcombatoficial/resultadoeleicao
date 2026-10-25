@@ -129,7 +129,8 @@ function normalizar(raw, aba, turno, abrPedida) {
     votos: {
       total: num(v.tv),
       validos,
-      pValidos: pct(v.pvv),
+      // o "pvv" do TSE é sobre os votos nominais (no 2º turno dá 100%): o % é calculado sobre o total de votos
+      pValidos: num(v.tv) ? (100 * validos) / num(v.tv) : pct(v.pvv),
       brancos: num(v.vb),
       pBrancos: pct(v.pvb),
       nulos: num(v.tvn),
@@ -1747,7 +1748,7 @@ function renderPainel2026() {
           const i = rank.indexOf(c)
           // quem está na frente (com votos e sem empate) ganha o fundo dourado
           const lider = i === 0 && c.votos > 0 && c.votos > (rank[1]?.votos || 0)
-          return `<li class="${lider ? 'pres2-lider' : ''}" style="${estiloCor(cor)}"><span class="pos">${lider ? '🏆 ' : ''}${i + 1}º</span>${anelFoto(c, cor)}<div class="painel-info"><div><strong>${esc(c.nome)}</strong> ${pill(c.partido, cor)} ${c.eleito ? '<span class="tag eleito-tse"><b>✔ Eleito</b></span>' : ''}</div>
+          return `<li class="${lider ? 'pres2-lider' : ''}" style="${estiloCor(cor)}"><span class="pos">${lider ? '🏆 ' : ''}${i + 1}º</span>${anelFoto(c, cor)}<div class="painel-info"><div><strong>${esc(c.nome)}</strong> ${pill(c.partido, cor)} ${c.eleito ? '<span class="tag eleito-tse"><b>✔ Eleito</b></span>' : porBU ? '' : seloChance2T(d, c)}</div>
             <div class="barra fina"><span style="width:${(100 * c.percentual) / max}%"></span></div></div><div class="painel-num"><strong>${fmtPct.format(c.percentual)}%</strong><small>${fmt.format(c.votos)} votos</small></div></li>`
         })
         .join('')}</ol>${porBU ? '' : linhaVitoria(d, rot)}</div>`
@@ -1766,6 +1767,13 @@ function renderPainel2026() {
       return `<div class="vit2t"><span class="tag chance ${CLASSES_VIT[v.nivel]}">${ROTULOS_VIT[v.nivel]}${rot === 'Brasil' || v.nivel !== 'matematica' ? '' : onde}</span><small>${det}</small></div>`
     }
     const cs0 = (d) => d.candidatos.some((c) => c.eleito) // o TSE já marcou o eleito: vale o selo oficial
+    // mesmo selo da aba Presidente (Vaga em risco, Reversão difícil…), calculado com 1 vaga (2º turno)
+    const seloChance2T = (d, c) => {
+      if (d.final || d.tseDefinido || !c.valido || !(d.secoes?.percentual >= 1)) return ''
+      const ch = chanceDe({ ...d, _chances: null }, c, 'maj', 1)
+      const n = ch && NIVEIS[ch.nivel]
+      return n ? `<span class="tag chance ${n.classe}" title="${ch.exato ? 'Certeza matemática' : 'Estimativa com as urnas que faltam'}">${n.icone} ${esc(n.rotulo)}${ch.exato && ch.nivel === 'fora' ? ' · matemático' : ''}</span>` : ''
+    }
     // anel em volta da foto que se completa com o % do candidato (como no site do TSE)
     const anelFoto = (c, cor) => `<span class="anel-foto" style="--p:${Math.min(100, Math.max(0, c.percentual || 0)).toFixed(2)};--cor-anel:${cor}" title="${fmtPct.format(c.percentual || 0)}% dos votos válidos">${foto(c, cor)}</span>`
     return `<section class="cartao painel-pres2"><div class="resumo-titulo"><h2><a href="?turno=2#presidente" class="link-aba">🗳️ Presidente · 2º turno</a></h2><span class="selo ${ref.final ? 'final' : ''}">${ref.final ? 'Totalização final · TSE' : ref.secoes.totalizadas ? 'Em apuração' : 'Aguardando o TSE'}</span></div>
