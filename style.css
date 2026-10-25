@@ -1557,3 +1557,19 @@ h1::before { content: "🗳️ "; }
 .mapa-info-num strong { font-size: 1.2rem; }
 .mapa-info-num small { color: var(--mudo); }
 .mapa-info .nota { margin: 8px 0 0; }
+
+/* Aba Presidente · 2º turno: evolução do % de cada candidato durante a apuração */
+.g2t { width: 100%; height: auto; display: block; }
+.g2t-grade { stroke: var(--linha); stroke-width: 1; }
+.g2t-50 { stroke: var(--mudo); stroke-width: 1.2; stroke-dasharray: 5 4; }
+.g2t-y { font-size: 13px; fill: var(--mudo); text-anchor: end; dominant-baseline: middle; }
+.g2t-x { font-size: 13px; fill: var(--mudo); }
+.g2t-x.fim { text-anchor: end; }
+.g2t-linha { fill: none; stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+.g2t .alvo { fill: transparent; cursor: pointer; }
+.g2t-leg { list-style: none; margin: 10px 0 4px; padding: 0; display: grid; gap: 6px; }
+.g2t-leg li { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.g2t-leg i { width: 14px; height: 4px; border-radius: 2px; }
+.g2t-leg .sobe { color: var(--eleito, #0b7a45); font-weight: 700; }
+.g2t-leg .desce { color: var(--erro, #c0392b); font-weight: 700; }
+.g2t-leg small { color: var(--mudo); }

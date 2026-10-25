@@ -237,7 +237,41 @@ export async function buscar(aba, abr, turno, signal, mun = null) {
   }
   if (DEMO && out.final && aba.tipo === 'maj' && aba.cargo === 1 && !mun) out.candidatos[0].eleito = true // demonstração: o TSE marca o eleito no fim
   marcarDefinicaoTSE(out)
+  if (aba.id === 'presidente' && turno === 2 && !mun && (abr === 'br' || abr === UF) && !DEMO) registrarSerie2T(abr, out)
   return out
+}
+
+// Evolução do 2º turno de Presidente (Brasil e SC): pontos [% apurado, horário, {número: votos}] vindos do
+// arquivo gravado durante a apuração (dados2026/serie2t.json) e das leituras deste navegador (guardadas nele)
+const CHAVE_SERIE2T = 'pres2:serie'
+const SERIE2T = { arquivo: null, em: 0, local: lerJSON(CHAVE_SERIE2T, {}) }
+function registrarSerie2T(abr, d) {
+  const pst = d.secoes?.percentual || 0
+  if (!pst) return
+  const pts = (SERIE2T.local[abr] ||= [])
+  const ult = pts[pts.length - 1]
+  if (ult && ult[0] >= pst) return
+  pts.push([pst, Date.now(), Object.fromEntries(d.candidatos.filter((c) => c.valido).map((c) => [String(c.numero), c.votos]))])
+  if (pts.length > 400) pts.splice(1, 1)
+  gravarLocal(CHAVE_SERIE2T, JSON.stringify(SERIE2T.local))
+}
+async function carregarSerie2T() {
+  if (Date.now() - SERIE2T.em < 60_000) return false
+  SERIE2T.em = Date.now()
+  try {
+    const r = await fetch(`dados2026/serie2t.json?t=${Math.floor(Date.now() / 60_000)}`)
+    if (!r.ok) return false
+    SERIE2T.arquivo = await r.json()
+    return true
+  } catch {
+    return false
+  }
+}
+function serie2T(abr) {
+  const A = SERIE2T.arquivo
+  const doArq = (A?.[abr] || []).map(([pst, ts, ...vs]) => [pst, ts, Object.fromEntries(A.n.map((n, i) => [n, vs[i]]))])
+  const todos = [...doArq, ...(SERIE2T.local[abr] || [])].sort((a, b) => a[0] - b[0])
+  return todos.filter((p, i) => !i || p[0] > todos[i - 1][0])
 }
 
 // O resultado está definido pelo TSE quando a totalização é final ou o TSE já marcou todos os eleitos.
@@ -2979,6 +3013,46 @@ function cardLista(d) {
   }
 }
 
+// Gráfico da evolução no 2º turno: % dos votos válidos de cada candidato (eixo y) × % das seções apuradas (x)
+function graficoSerie2T(d) {
+  const abr = d.abrangencia
+  const cs = d.candidatos.filter((c) => c.valido).slice(0, 2)
+  const pts = serie2T(abr).map(([pst, ts, v]) => {
+    const a = v[String(cs[0].numero)] || 0, b = v[String(cs[1].numero)] || 0
+    return { pst, ts, p: a + b ? [(100 * a) / (a + b), (100 * b) / (a + b)] : [50, 50], v: [a, b] }
+  })
+  if (pts.length < 2) return '<p class="nota">O gráfico aparece assim que houver duas leituras da apuração (a série é gravada durante a noite).</p>'
+  const W = 480, H = 240, ML = 58, MR = 12, MT = 12, MB = 30
+  const x0 = pts[0].pst, x1 = pts[pts.length - 1].pst
+  const todos = pts.flatMap((q) => q.p)
+  const dev = Math.max(2, ...todos.map((v) => Math.abs(v - 50)))
+  const y0 = 50 - Math.ceil(dev + 1), y1 = 50 + Math.ceil(dev + 1)
+  const X = (v) => ML + (x1 === x0 ? 0.5 : (v - x0) / (x1 - x0)) * (W - ML - MR)
+  const Y = (v) => MT + ((y1 - v) / (y1 - y0)) * (H - MT - MB)
+  const passo = (y1 - y0) / 4
+  const grade = Array.from({ length: 5 }, (_, i) => y0 + i * passo)
+    .map((v) => `<line x1="${ML}" x2="${W - MR}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" class="g2t-grade"></line><text x="${ML - 6}" y="${Y(v).toFixed(1)}" class="g2t-y">${fmtPct.format(Math.round(v * 10) / 10)}%</text>`)
+    .join('')
+  const linha = (i) => pts.map((q) => `${X(q.pst).toFixed(1)},${Y(q.p[i]).toFixed(1)}`).join(' ')
+  const ult = pts[pts.length - 1]
+  const alvos = pts
+    .map((q) => `<circle class="alvo" cx="${X(q.pst).toFixed(1)}" cy="${Y(q.p[0]).toFixed(1)}" r="9" data-dica="${esc(`<strong>${fmtPct.format(q.pst)}% apurado</strong> · ${new Date(q.ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}<br>${cs.map((c, i) => `${c.nome}: ${fmtPct.format(q.p[i])}% (${fmt.format(q.v[i])})`).join('<br>')}`)}"></circle>`)
+    .join('')
+  const virou = pts.some((q, i) => i && Math.sign(q.p[0] - q.p[1]) !== Math.sign(pts[i - 1].p[0] - pts[i - 1].p[1]) && q.p[0] !== q.p[1])
+  return `<svg class="g2t" viewBox="0 0 ${W} ${H}" role="img" aria-label="Evolução do percentual de cada candidato conforme a apuração">
+      ${grade}
+      <line x1="${ML}" x2="${W - MR}" y1="${Y(50).toFixed(1)}" y2="${Y(50).toFixed(1)}" class="g2t-50"></line>
+      ${cs.map((c, i) => `<polyline points="${linha(i)}" class="g2t-linha" style="stroke:${corPartido(c.partido)}"></polyline><circle cx="${X(ult.pst).toFixed(1)}" cy="${Y(ult.p[i]).toFixed(1)}" r="4.5" style="fill:${corPartido(c.partido)}"></circle>`).join('')}
+      ${alvos}
+      <text x="${ML}" y="${H - 8}" class="g2t-x">${fmtPct.format(x0)}% apurado</text><text x="${W - MR}" y="${H - 8}" class="g2t-x fim">${fmtPct.format(x1)}% apurado</text>
+    </svg>
+    <ul class="g2t-leg">${cs.map((c, i) => {
+      const ini = pts[0].p[i], agora = ult.p[i], dv = agora - ini
+      return `<li style="${estiloCor(corPartido(c.partido))}"><i style="background:${corPartido(c.partido)}"></i><strong>${esc(c.nome)}</strong> ${fmtPct.format(agora)}% <span class="${dv >= 0 ? 'sobe' : 'desce'}">${dv >= 0 ? '▲' : '▼'} ${fmtPct.format(Math.abs(dv))} ponto${Math.abs(dv) >= 1.995 ? 's' : ''}</span> <small>desde ${fmtPct.format(x0)}% apurado</small></li>`
+    }).join('')}</ul>
+    <p class="nota">Percentual de cada um entre os votos válidos, a cada leitura da apuração; a linha tracejada marca 50%.${virou ? ' <strong>Houve virada</strong> durante a apuração.' : ''} Toque num ponto para ver os números daquele momento.</p>`
+}
+
 // aba Presidente (2º turno): mapa por estado; os estados são buscados à parte (no máximo a cada 2 min)
 function mapaAbaPres() {
   if (!estado.mapaPres2Busca) {
@@ -3010,7 +3084,9 @@ function renderMajoritario(d) {
       : turnoAtual() === 2
         ? '<p class="nota">2º turno: vence quem tem mais votos válidos.</p>'
         : `<p class="nota">A linha tracejada marca 50% dos votos válidos: quem passar dela vence no 1º turno${estado.aba.cargo === 11 ? ' (nas cidades com 2º turno, acima de 200 mil eleitores)' : ''}.</p>`
-  const mapa = estado.aba.id === 'presidente' && turnoAtual() === 2 && ehAoVivo() ? mapaAbaPres() : ''
+  const pres2T = estado.aba.id === 'presidente' && turnoAtual() === 2 && ehAoVivo()
+  if (pres2T) carregarSerie2T().then((novo) => novo && estado.aba.id === 'presidente' && renderizar())
+  const mapa = pres2T ? `<section class="cartao"><h3>📈 Evolução dos votos · ${d.abrangencia === 'br' ? 'Brasil' : 'Santa Catarina'}</h3>${graficoSerie2T(d)}</section>${mapaAbaPres()}` : ''
   return `${mapa}<section class="cartao">
       <h3>Divisão dos votos válidos</h3>
       ${barraEmpilhada(fatias, { marco50: estado.aba.cargo !== 5 && turnoAtual() === 1, total: d.votos.validos })}
