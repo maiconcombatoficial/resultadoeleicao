@@ -1752,7 +1752,7 @@ function renderPainel2026() {
           return `<li class="${lider ? 'pres2-lider' : ''}" style="${estiloCor(cor)}"><span class="pos">${lider ? '🏆 ' : ''}${i + 1}º</span>${anelFoto(c, cor)}<div class="painel-info"><div><strong>${esc(c.nome)}</strong> ${pill(c.partido, cor)} ${c.eleito ? '<span class="tag eleito-tse"><b>✔ Eleito</b></span>' : porBU ? '' : seloChance2T(d, c)}</div>
             <div class="barra fina"><span style="width:${(100 * c.percentual) / max}%"></span></div></div><div class="painel-num"><strong>${fmtPct.format(c.percentual)}%</strong><small>${fmt.format(c.votos)} votos</small></div></li>`
         })
-        .join('')}</ol>${porBU ? '' : linhaVitoria(d, rot) + (cs0(d) ? '' : blocoPrevisao2T(d, { compacto: true }))}</div>`
+        .join('')}</ol>${porBU ? '' : `<div class="pres2-rodape">${linhaVitoria(d, rot)}${cs0(d) ? '' : blocoPrevisao2T(d, { compacto: true })}</div>`}</div>`
     }
     // vitória matemática (ou a chance de virada) de quem está na frente, em cada quadro
     const linhaVitoria = (d, rot) => {

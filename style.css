@@ -1621,3 +1621,4 @@ h1::before { content: "🗳️ "; }
 .prev-rot { font-weight: 700; }
 .prev-q small { color: var(--mudo); }
 .prev-comp { margin: 0 0 10px; font-size: 0.8rem; color: var(--mudo); }
+.pres2-rodape:empty { display: none; }
