@@ -1344,7 +1344,7 @@ async function carregarPainel(ctrl) {
   const res = await Promise.allSettled([...grupos.entries()].map(async ([k, g]) => [k, await buscar(g.aba, g.abr, TURNO, ctrl.signal)]))
   await atualizarPres2(ctrl.signal)
   if (ctrl.signal.aborted) return
-  await carregarBoletins().catch(() => {})
+  await Promise.all([carregarBoletins().catch(() => {}), carregarSerie2T()]) // a série (GitHub, não o TSE) dá o ritmo da previsão
   // as 186 cidades do exterior vêm em segundo plano (demoram): o Início aparece antes e é redesenhado no fim
   if (!EXT.buscando) {
     // sem o sinal da atualização: a próxima (30 s) não interrompe a rodada das cidades no meio
@@ -1752,7 +1752,7 @@ function renderPainel2026() {
           return `<li class="${lider ? 'pres2-lider' : ''}" style="${estiloCor(cor)}"><span class="pos">${lider ? '🏆 ' : ''}${i + 1}º</span>${anelFoto(c, cor)}<div class="painel-info"><div><strong>${esc(c.nome)}</strong> ${pill(c.partido, cor)} ${c.eleito ? '<span class="tag eleito-tse"><b>✔ Eleito</b></span>' : porBU ? '' : seloChance2T(d, c)}</div>
             <div class="barra fina"><span style="width:${(100 * c.percentual) / max}%"></span></div></div><div class="painel-num"><strong>${fmtPct.format(c.percentual)}%</strong><small>${fmt.format(c.votos)} votos</small></div></li>`
         })
-        .join('')}</ol>${porBU ? '' : linhaVitoria(d, rot)}</div>`
+        .join('')}</ol>${porBU ? '' : linhaVitoria(d, rot) + (cs0(d) ? '' : blocoPrevisao2T(d, { compacto: true }))}</div>`
     }
     // vitória matemática (ou a chance de virada) de quem está na frente, em cada quadro
     const linhaVitoria = (d, rot) => {
@@ -3052,6 +3052,56 @@ function cardLista(d) {
   }
 }
 
+// Previsão (2º turno): com que % apurado o líder passa a cada selo, se o ritmo atual continuar (mesma fatia dos
+// votos nas urnas que faltam). Com d = vantagem ÷ válidos, a razão vantagem ÷ votos que faltam no ponto q é
+// d·q/(1−q); cada selo vale quando ela passa de um limite k (chances.js), ou seja, q > k/(d+k):
+//   provável k = s2 − 0,8·s1 · segura k = s2 · garantido k = 1 · matemática: vantagem > eleitores das seções que faltam
+// O horário estimado usa o ritmo da apuração (pontos da série nos últimos 20 min).
+export function previsao2T(d) {
+  if (!d || d.final || d.tseDefinido || !(d.secoes?.percentual > 0) || d.secoes.percentual >= 100) return null
+  const [a, b] = d.candidatos.filter((c) => c.valido)
+  const V = (a?.votos || 0) + (b?.votos || 0)
+  if (!a || !b || !V || a.votos === b.votos) return null
+  const p = d.secoes.percentual / 100, s1 = a.votos / V, s2 = b.votos / V, dd = s1 - s2
+  const q = (k) => (k <= 0 ? 0 : k / (dd + k))
+  const E = d.eleitorado?.total || 0, L = a.votos - b.votos
+  const marcos = [
+    ['provavel', q(s2 - 0.8 * s1)],
+    ['segura', q(s2)],
+    ['garantido', q(1)],
+    ...(E ? [['matematica', E / (E + L / p)]] : []),
+  ]
+  const pts = serie2T(d.abrangencia).filter((x) => Date.now() - x[1] < 20 * 60_000)
+  const ritmo = pts.length >= 2 ? (pts[pts.length - 1][0] - pts[0][0]) / (pts[pts.length - 1][1] - pts[0][1]) : 0 // pontos de % por ms
+  return {
+    lider: a,
+    marcos: marcos.map(([nivel, alvo]) => {
+      const pct = Math.min(100, alvo * 100)
+      const ja = pct <= d.secoes.percentual
+      const eta = !ja && ritmo > 0 && pct < 100 ? Date.now() + (pct - d.secoes.percentual) / ritmo : null
+      return { nivel, pct, ja, eta, noFim: pct >= 99.995 }
+    }),
+  }
+}
+const ROT_PREV = { provavel: '👍 Vaga provável', segura: '🛡️ Vaga segura', garantido: '✅ Garantido (estimativa)', matematica: '✅ Certeza matemática' }
+export function blocoPrevisao2T(d, { compacto = false } = {}) {
+  const P = previsao2T(d)
+  if (!P) return ''
+  const hora = (ms) => new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  const linha = (m) => `<li class="${m.ja ? 'prev-ja' : ''}"><span class="prev-rot">${ROT_PREV[m.nivel]}</span><span class="prev-q">${
+    m.ja ? '✔ já alcançado' : m.noFim ? 'só no fim da apuração' : `com ~${fmtPct.format(m.pct)}% apurado${m.eta ? ` <small>(≈ ${hora(m.eta)})</small>` : ''}`
+  }</span></li>`
+  if (compacto) {
+    const prox = P.marcos.find((m) => !m.ja)
+    if (!prox) return ''
+    return `<p class="prev-comp">🔮 ${esc(P.lider.nome)}: ${ROT_PREV[prox.nivel].replace(/^\S+ /, '')} ${prox.noFim ? 'só no fim da apuração' : `com ~${fmtPct.format(prox.pct)}% apurado${prox.eta ? ` (≈ ${hora(prox.eta)})` : ''}`}, se o ritmo continuar</p>`
+  }
+  return `<section class="cartao prev2t"><h3>🔮 Previsão: quando ${esc(P.lider.nome)} chega a cada selo</h3>
+    <ul class="prev-lista">${P.marcos.map(linha).join('')}</ul>
+    <p class="nota">Supondo que, nas urnas que faltam, cada candidato tenha a mesma fatia dos votos que tem até agora (hoje ${fmtPct.format(P.lider.percentual)}% para ${esc(P.lider.nome)}). O horário é uma estimativa pelo ritmo da apuração nos últimos 20 minutos, que costuma ficar mais lento perto do fim. A <strong>certeza matemática</strong> considera que todos os eleitores das seções que faltam votassem no adversário. Se as urnas que faltam forem de regiões diferentes das já apuradas, a previsão muda.</p>
+  </section>`
+}
+
 // O que significa cada selo de chance (critérios do chances.js), para o 2º turno de Presidente
 function explicaSelos() {
   const sel = (k) => `<span class="tag chance ${NIVEIS[k].classe}">${NIVEIS[k].icone} ${esc(NIVEIS[k].rotulo)}</span>`
@@ -3189,7 +3239,7 @@ function renderMajoritario(d) {
       .join('')}
   </ol></section>`
   // 2º turno: os cards dos candidatos vêm primeiro, antes da divisão dos votos, do gráfico e do mapa
-  return pres2T ? cards + explicaSelos() + divisao + mapa : divisao + cards
+  return pres2T ? cards + blocoPrevisao2T(d) + explicaSelos() + divisao + mapa : divisao + cards
 }
 
 // Soma por partido/federação; a cor do grupo é a do seu partido mais votado.

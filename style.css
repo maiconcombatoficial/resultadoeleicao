@@ -1613,3 +1613,11 @@ h1::before { content: "🗳️ "; }
 .selos-lista li .tag.chance { justify-self: start; font-size: 0.78rem; }
 .selos-lista li p { margin: 0; font-size: 0.92rem; }
 @media (max-width: 560px) { .selos-lista li { grid-template-columns: 1fr; gap: 4px; } }
+
+/* 2º turno: previsão de quando o líder chega a cada selo */
+.prev-lista { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 6px; }
+.prev-lista li { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 8px 10px; border-radius: 10px; background: var(--fundo); border: 1px solid var(--linha); }
+.prev-lista li.prev-ja { opacity: 0.65; }
+.prev-rot { font-weight: 700; }
+.prev-q small { color: var(--mudo); }
+.prev-comp { margin: 0 0 10px; font-size: 0.8rem; color: var(--mudo); }
